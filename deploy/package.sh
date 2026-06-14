@@ -11,6 +11,7 @@
 #   - litellm/ — minus the local Python venv + pycache + personal config.yaml
 #     (gets replaced with config.template.yaml so no secrets leak)
 #   - scripts/ — including uninstall.sh
+#   - third_party/clawkeeper/ — pinned host-security scanner fallback
 #   - deploy/install-prod.sh — the Linux/Caddy production layer
 #   - setup.sh, package.json, package-lock.json, tsconfig.json,
 #     next.config.mjs, tailwind.config.ts, postcss.config.mjs, .gitignore,
@@ -134,6 +135,14 @@ fi
 if [ -d "$INSTALL_DIR/scripts" ]; then
     rsync -a --exclude='.DS_Store' "$INSTALL_DIR/scripts/" "$BUNDLE_DIR/scripts/"
     echo -e "  ${GREEN}✓${NC} scripts/"
+fi
+
+if [ -d "$INSTALL_DIR/third_party" ]; then
+    rsync -a \
+        --exclude='.DS_Store' \
+        "$INSTALL_DIR/third_party/" "$BUNDLE_DIR/third_party/"
+    chmod +x "$BUNDLE_DIR/third_party/clawkeeper/clawkeeper.sh" 2>/dev/null || true
+    echo -e "  ${GREEN}✓${NC} third_party/ (host security scanner)"
 fi
 
 # Platform service layers — stay in deploy/ inside the tarball. install.sh

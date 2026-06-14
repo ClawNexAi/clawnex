@@ -4002,9 +4002,9 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
     try {
       const res = await fetch("/api/config/updates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "clawkeeper" }) });
       const data = await res.json();
-      if (data.status === "updated") { setUpdateMessage(`Clawkeeper updated to ${data.newVersion}`); checkForUpdates(); }
-      else { setUpdateMessage(data.error || "Update failed"); }
-    } catch { setUpdateMessage("Update failed"); }
+      if (data.status === "updated") { setUpdateMessage(`Host security scanner ready (${data.newVersion})`); checkForUpdates(); }
+      else { setUpdateMessage(data.error || "Scanner check failed"); }
+    } catch { setUpdateMessage("Scanner check failed"); }
     setUpdatingClawkeeper(false);
   }, [checkForUpdates]);
 
@@ -4027,7 +4027,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
 
   const updatesCard = (
       <CollapsibleCard title="UPDATES" accent={C.brand} defaultOpen={false} focusKey="updates" focusedCard={focusCard}>
-        <div style={{ fontSize: 13, color: C.txS, marginBottom: 12 }}>Check for updates to DefenseClaw shield rules and Clawkeeper security scanner.</div>
+        <div style={{ fontSize: 13, color: C.txS, marginBottom: 12 }}>Check DefenseClaw shield rules, bundled host security scanner, OpenClaw, and model pricing.</div>
 
         {/* DefenseClaw Rules */}
         <div style={{ padding: "12px 14px", marginBottom: 8, background: C.glassSurfTrans, borderRadius: 8, border: `1px solid ${C.glassBorderSubtle}`, borderLeft: `3px solid ${C.cyan}` }}>
@@ -4051,12 +4051,12 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
           </div>
         </div>
 
-        {/* Clawkeeper */}
+        {/* Host Security Scanner */}
         <div style={{ padding: "12px 14px", marginBottom: 8, background: C.glassSurfTrans, borderRadius: 8, border: `1px solid ${C.glassBorderSubtle}`, borderLeft: `3px solid ${C.purp}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <Tooltip placement="right" variant="detail" content={<span><strong>Clawkeeper</strong> — the host-hardening security scanner. Audits prerequisites, installation hygiene, host hardening, network posture, and compliance checks, then assigns an A–F grade you&apos;ll see on the <strong>Security Posture</strong> tab. Optional but strongly recommended — without it, the Security Posture grade can&apos;t be computed. Install or update via the button on the right.</span>}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: C.tx, borderBottom: `1px dotted ${C.txT}`, cursor: "help" }}>Clawkeeper</span>
+              <Tooltip placement="right" variant="detail" content={<span><strong>Host Security Scanner</strong> — the bundled host-hardening scanner. Audits prerequisites, installation hygiene, host hardening, network posture, and compliance checks, then assigns an A–F grade you&apos;ll see on the <strong>Security Posture</strong> tab. Optional but strongly recommended — without it, the Security Posture grade can&apos;t be computed.</span>}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: C.tx, borderBottom: `1px dotted ${C.txT}`, cursor: "help" }}>Host Security Scanner</span>
               </Tooltip>
               {updateStatus && (
                 <span style={{ fontSize: 12, color: C.txT, fontFamily: F.mono }}>
@@ -4069,7 +4069,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               {updateStatus?.clawkeeper.installedVersion === "not installed" ? (
-                <Tooltip placement="left" variant="detail" content={<span>Install Clawkeeper on this host. Runs in the background — the <strong>Security Posture</strong> grade appears once it&apos;s done. Usually takes 1–2 minutes.</span>}>
+                <Tooltip placement="left" variant="detail" content={<span>Verify that the bundled scanner is available on this host. The <strong>Security Posture</strong> grade appears after the first scan runs.</span>}>
                   <button onClick={async () => {
                     try {
                       const res = await fetch("/api/system/install-clawkeeper", { method: "POST" });
@@ -4078,19 +4078,19 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
                   }} style={{
                     padding: "4px 12px", background: C.green, color: C.bg, border: "none", borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: "pointer",
                   }}>
-                    Install
+                    Verify
                   </button>
                 </Tooltip>
               ) : updateStatus?.clawkeeper.updateAvailable ? (
-                <Tooltip placement="left" variant="compact" content="Pull the latest Clawkeeper release and reinstall. No service restart needed.">
+                <Tooltip placement="left" variant="compact" content="Refresh the bundled scanner state. No service restart needed.">
                   <button onClick={triggerClawkeeperUpdate} disabled={updatingClawkeeper} style={{
                     padding: "4px 12px", background: C.brand, color: C.bg, border: "none", borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: updatingClawkeeper ? "wait" : "pointer",
                   }}>
-                    {updatingClawkeeper ? "Updating..." : "Update"}
+                    {updatingClawkeeper ? "Checking..." : "Refresh"}
                   </button>
                 </Tooltip>
               ) : (
-                <Badge label="Up to date" color={C.txT} />
+                <Badge label="Ready" color={C.txT} />
               )}
             </div>
           </div>
@@ -4133,7 +4133,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
             Last checked: {updateStatus?.lastChecked ? timeAgo(updateStatus.lastChecked) : "never"}
           </span>
           {updateMessage && <span style={{ fontSize: 12, color: updateMessage.includes("failed") || updateMessage.includes("Failed") ? C.danger : C.brand, fontFamily: F.mono }}>{updateMessage}</span>}
-          <Tooltip placement="left" variant="detail" content={<span>Re-poll GitHub for fresh DefenseClaw, Clawkeeper, OpenClaw, and Model Pricing versions. Bypasses the local cache so you always see the latest tags. Result populates the rows above.</span>}>
+          <Tooltip placement="left" variant="detail" content={<span>Re-poll GitHub for fresh DefenseClaw, OpenClaw, and Model Pricing versions; host scanner availability is checked locally. Bypasses the local cache so you always see the latest tags. Result populates the rows above.</span>}>
             <button onClick={checkForUpdates} disabled={checkingUpdates} style={{
               padding: "5px 14px", background: checkingUpdates ? C.glassSurfTrans : `${C.brand}18`, border: `1px solid ${C.brand}44`, borderRadius: 6,
               color: C.brand, fontSize: 12, fontWeight: 600, cursor: checkingUpdates ? "wait" : "pointer", fontFamily: F.sans,

@@ -13,11 +13,9 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import fs from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { run, queryAll, queryOne } from '../db/index';
+import { findHostSecurityScanner, missingHostSecurityScannerMessage } from './host-security/scanner-path';
 
 const execFileAsync = promisify(execFile);
 
@@ -55,14 +53,6 @@ export interface ClawkeeperScanResult {
 
 // Track whether a scan is currently running
 let activeScan: Promise<ClawkeeperScanResult> | null = null;
-
-// ---------------------------------------------------------------------------
-// Binary path
-// ---------------------------------------------------------------------------
-
-function getClawkeeperBin(): string {
-  return process.env.CLAWKEEPER_BINARY || path.join(os.homedir(), '.local', 'bin', 'clawkeeper.sh');
-}
 
 // ---------------------------------------------------------------------------
 // ANSI Stripping
@@ -386,16 +376,16 @@ export async function runScan(): Promise<ClawkeeperScanResult> {
   if (activeScan) return activeScan;
 
   const scanPromise = (async () => {
-    const bin = getClawkeeperBin();
-    if (!fs.existsSync(bin)) {
-      throw new Error(`Clawkeeper not installed. Install with: curl -sSL https://get.clawkeeper.io | bash\nExpected at: ${bin}`);
+    const scanner = findHostSecurityScanner();
+    if (!scanner) {
+      throw new Error(missingHostSecurityScannerMessage());
     }
     const scanId = randomUUID();
     const scannedAt = new Date().toISOString();
 
     let rawOutput: string;
     try {
-      const { stdout, stderr } = await execFileAsync('bash', [bin, 'scan', '--non-interactive'], {
+      const { stdout, stderr } = await execFileAsync('bash', [scanner.path, 'scan', '--non-interactive'], {
         timeout: 120_000, // 2 minute timeout
         maxBuffer: 10 * 1024 * 1024,
         env: { ...process.env, TERM: 'dumb' },

@@ -71,10 +71,11 @@ export const config = {
     path: process.env.DATABASE_PATH || './clawnex.db',
   },
 
-  // Clawkeeper
+  // Host security scanner. CLAWKEEPER_BINARY remains as an override for
+  // compatibility, but ClawNex ships a bundled scanner fallback.
   clawkeeper: {
     scanIntervalMs: parseInt(process.env.CLAWKEEPER_SCAN_INTERVAL_MS || '3600000', 10),
-    binary: process.env.CLAWKEEPER_BINARY || path.join(os.homedir(), '.local', 'bin', 'clawkeeper.sh'),
+    binary: process.env.CLAWKEEPER_BINARY || path.join(process.cwd(), 'third_party', 'clawkeeper', 'clawkeeper.sh'),
   },
 
   // Agent Workspace

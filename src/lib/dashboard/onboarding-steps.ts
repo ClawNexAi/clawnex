@@ -40,8 +40,8 @@ export const ONBOARDING_STEPS: ReadonlyArray<OnboardingStep> = Object.freeze([
   },
   {
     id: 'install-clawkeeper',
-    label: 'Install Clawkeeper',
-    description: 'Install the Clawkeeper hardening scanner so the Security Posture panel and Hardening signal can populate.',
+    label: 'Enable host security',
+    description: 'Verify the bundled host-hardening scanner so the Security Posture panel and Hardening signal can populate.',
   },
   {
     id: 'sync-cve',

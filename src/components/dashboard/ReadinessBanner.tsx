@@ -186,7 +186,7 @@ async function fetchPostureRow(f: Fetchers): Promise<ReadinessRow> {
     value: "unknown",
     action: { label: "Open Posture", onClick: () => f.onNavigate("securityPosture") },
     tooltip:
-      "Latest Clawkeeper hardening score. Same scan as the Fleet row's " +
+      "Latest host-security hardening score. Same scan as the Fleet row's " +
       "Hardening column and the Security Posture panel. Distinct from the " +
       "dynamic Threat Pressure score (alerts + shield + infra) — that's a " +
       "different concept and surfaces separately.",

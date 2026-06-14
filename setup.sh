@@ -1066,48 +1066,11 @@ else
     echo -e "  ${CYAN}•${NC} Daily backup: skipped (can enable later from Configuration)"
 fi
 
-# Clawkeeper
-# The remote install script is `curl | bash` — wrap it in `timeout` so a
-# stalled remote (network blip, hung redirect, slow CDN) cannot freeze the
-# entire setup forever. Output goes to a log file rather than `| tail -2`
-# because the pipeline form blocks setup.sh waiting for EOF when the
-# upstream hangs (real incident on Crucible 2026-04-25 — 19-min hang).
-_tty_read "  Install Clawkeeper security scanner? (yes/no) [yes]: " INSTALL_CLAWKEEPER
-INSTALL_CLAWKEEPER=${INSTALL_CLAWKEEPER:-yes}
-if is_yes "$INSTALL_CLAWKEEPER"; then
-    if [ -f "$HOME/.local/bin/clawkeeper.sh" ]; then
-        echo -e "  ${GREEN}✓${NC} Clawkeeper already installed"
-    else
-        # Clawkeeper install: download is fast (~1s on a fast link), but
-        # clawkeeper.dev's install.sh tries to LAUNCH clawkeeper interactively
-        # after the download, which would hang on stdin. The `</dev/null`
-        # closes stdin so the launch fails fast — we only want the download
-        # portion. 120s upper bound is generous for slower links / TLS hiccups.
-        # Two silent attempts before reporting anything bad.
-        echo "  Installing Clawkeeper..."
-        CK_LOG=$(mktemp)
-        CK_MAX_ATTEMPTS=2
-        CK_INSTALLED=0
-        for CK_ATTEMPT in $(seq 1 $CK_MAX_ATTEMPTS); do
-            timeout 120 bash -c 'curl -fsSL --connect-timeout 30 --max-time 100 https://clawkeeper.dev/install.sh | bash' </dev/null > "$CK_LOG" 2>&1 || true
-            # The binary's existence is the source of truth — timeout exit 124
-            # is normal here (interactive launch blocked) and doesn't indicate
-            # a real problem.
-            if [ -f "$HOME/.local/bin/clawkeeper.sh" ]; then
-                echo -e "  ${GREEN}✓${NC} Clawkeeper installed"
-                CK_INSTALLED=1
-                break
-            fi
-            [ "$CK_ATTEMPT" -lt "$CK_MAX_ATTEMPTS" ] && sleep 2
-        done
-        if [ "$CK_INSTALLED" = "0" ]; then
-            echo -e "  ${YELLOW}⚠${NC} Couldn't reach clawkeeper.dev right now — continuing without it"
-            echo -e "    Install later from Configuration → Updates, or run:"
-            echo -e "    ${CYAN}curl -fsSL https://clawkeeper.dev/install.sh | bash${NC}"
-        fi
-    fi
+# Host security scanner
+if [ -x "$INSTALL_DIR/third_party/clawkeeper/clawkeeper.sh" ]; then
+    echo -e "  ${GREEN}✓${NC} Host security scanner bundled with ClawNex"
 else
-    echo -e "  ${CYAN}•${NC} Clawkeeper: skipped (install later from Configuration → Updates)"
+    echo -e "  ${YELLOW}!${NC} Bundled host security scanner missing — Security Posture scans will be unavailable"
 fi
 
 # CVE sync

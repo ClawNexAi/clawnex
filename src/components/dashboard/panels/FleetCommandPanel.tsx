@@ -905,10 +905,10 @@ function WelcomeWizard({ onNavigate, onReload, allComplete, onAllCompleteChange 
         await refreshStatus();
         onReload?.();
       } else {
-        setInstallError(data.error || "Install failed. Try opening Configuration \u2192 Updates.");
+        setInstallError(data.error || "Scanner check failed. Try opening Configuration \u2192 Updates.");
       }
     } catch (e) {
-      setInstallError(e instanceof Error ? e.message : "Install failed");
+      setInstallError(e instanceof Error ? e.message : "Scanner check failed");
     } finally {
       setInstallingClawkeeper(false);
     }
@@ -976,12 +976,12 @@ function WelcomeWizard({ onNavigate, onReload, allComplete, onAllCompleteChange 
     },
     {
       key: "clawkeeper",
-      label: "Install Clawkeeper",
-      description: "Clawkeeper runs host-level security audits and powers the Security Posture panel.",
+      label: "Enable Host Security",
+      description: "ClawNex Host Security runs host-level audits from the bundled scanner and powers the Security Posture panel.",
       realDone: clawkeeperInstalled,
       isSkipped: skipped.clawkeeper,
       skippable: true,
-      action: { label: installingClawkeeper ? "Installing..." : "Install Now", run: installClawkeeper },
+      action: { label: installingClawkeeper ? "Checking..." : "Verify Now", run: installClawkeeper },
       secondary: { label: "Open Updates panel", run: () => onNavigate("configuration", "updates") },
     },
     {

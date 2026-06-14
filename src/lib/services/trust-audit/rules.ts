@@ -559,7 +559,7 @@ const crossAgentDelegation: AuditRule = {
 const browserAuthReachability: AuditRule = {
   id: 'browser-auth-reachability',
   name: 'Browser & Auth-State Reachability',
-  description: 'Checks if agents with browser tools can reach authenticated sessions, and verifies host-level security posture from Clawkeeper.',
+  description: 'Checks if agents with browser tools can reach authenticated sessions, and verifies host-level security posture from the bundled scanner.',
   category: 'blast-radius',
   severityBase: 'high',
   evaluate(ctx: AuditContext): Finding[] {
@@ -596,8 +596,8 @@ const browserAuthReachability: AuditRule = {
        ORDER BY s.scanned_at DESC LIMIT 50`
     );
 
-    const failedHostChecks = latestScan.filter(c => c.status === 'fail' && c.category === 'Host Hardening');
-    const failedNetworkChecks = latestScan.filter(c => c.status === 'fail' && c.category === 'Network');
+    const failedHostChecks = latestScan.filter(c => c.status.toUpperCase() === 'FAIL' && c.category === 'Host Hardening');
+    const failedNetworkChecks = latestScan.filter(c => c.status.toUpperCase() === 'FAIL' && c.category === 'Network');
 
     if (failedHostChecks.length > 0) {
       findings.push({
@@ -608,7 +608,7 @@ const browserAuthReachability: AuditRule = {
         capabilityPath: ['host-hardening'],
         containmentState: 'unknown',
         assetHints: [],
-        whyItMatters: 'Failed host hardening checks (from Clawkeeper) indicate the underlying system is not fully secured. This widens the blast radius if an agent or the dashboard itself is compromised.',
+        whyItMatters: 'Failed host hardening checks from the bundled scanner indicate the underlying system is not fully secured. This widens the blast radius if an agent or the dashboard itself is compromised.',
         blastRadius: 'Host-level vulnerabilities can be exploited to escalate from application-level compromise to system-level access.',
         recommendedFix: 'Review failed checks in Security Posture panel and apply the recommended remediations.',
         evidence: [

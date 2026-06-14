@@ -11,7 +11,7 @@
  * v1 sources (already polled by /api/config/updates):
  *   - OpenClaw      (semver-based; live GitHub release tag)
  *   - DefenseClaw   (commit-date-based; rule pack ships bundled with ClawNex)
- *   - Clawkeeper    (semver-based; live GitHub release tag)
+ *   - Host scanner  (local bundled scanner availability)
  *
  * ClawNex itself isn't tracked yet — there's no published release source
  * to poll against pre-OSS-launch. Once the OSS repo ships and a release
@@ -133,12 +133,12 @@ export function UpdateBadge({ navigate }: Props) {
   // Sources are split by whether the operator can actually act on them
   // from inside ClawNex:
   //
-  //   actionable: there's a working in-app update flow (today: just
-  //               Clawkeeper). Counted in the badge number, since the
-  //               operator can clear it by clicking Update.
+  //   actionable: there's a working in-app update flow. Counted in the
+  //               badge number, since the operator can clear it in-app.
   //   informational: there's no in-app update path. Shown in the dropdown
   //                  for awareness but NOT counted in the badge — would
   //                  otherwise produce numbers operators can't act on.
+  //                    - The host scanner is bundled with ClawNex.
   //                    - OpenClaw upgrades happen outside ClawNex (the
   //                      "never touch OpenClaw" rule).
   //                    - DefenseClaw rules ship bundled with ClawNex
@@ -149,7 +149,7 @@ export function UpdateBadge({ navigate }: Props) {
     label: string;
     kind: "actionable" | "info";
   }> = [
-    { key: "clawnex-clawkeeper", src: data.clawkeeper,  label: "Clawkeeper",          kind: "actionable" },
+    { key: "clawnex-clawkeeper", src: data.clawkeeper,  label: "Host Security Scanner", kind: "info" },
     { key: "clawnex-openclaw",   src: data.openclaw,    label: "OpenClaw",            kind: "info" },
     { key: "clawnex-defenseclaw", src: data.defenseclaw, label: "DefenseClaw rules",  kind: "info" },
   ];

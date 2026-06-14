@@ -65,6 +65,25 @@ assert_grep scripts/uninstall.sh '\.local/bin/clawnex' "uninstall removes clawne
 
 echo "[5] shipping manifest"
 assert_grep deploy/package.sh 'lib-macos\.sh' "tarball ships lib-macos.sh"
+assert_grep deploy/package.sh 'third_party/' "tarball ships bundled third-party scanner files"
+
+echo "[5b] bundled host security scanner"
+assert_grep setup.sh 'Host security scanner bundled with ClawNex' "setup uses bundled host security scanner"
+assert_nogrep setup.sh 'clawkeeper\.dev/install\.sh|raw\.githubusercontent\.com/rad-security/clawkeeper' "setup does not download Clawkeeper at runtime"
+assert_grep src/lib/services/host-security/scanner-path.ts 'third_party.*clawkeeper.*clawkeeper\.sh' "scanner helper points at bundled scanner"
+assert_grep src/lib/services/clawkeeper-runner.ts 'findHostSecurityScanner' "runner uses shared scanner discovery"
+assert_grep src/app/api/system/install-clawkeeper/route.ts 'no network install is required' "compat install endpoint is local-only"
+assert_nogrep src/app/api/system/install-clawkeeper/route.ts 'raw\.githubusercontent\.com/rad-security/clawkeeper|execSync|execFile|curl -fsSL' "compat install endpoint does not download or execute installer"
+assert_nogrep src/app/api/config/updates/route.ts 'rad-security/clawkeeper|CLAWKEEPER_PINNED_SHA|CLAWKEEPER_SHA256|execFile' "updates endpoint does not fetch Clawkeeper releases or scripts"
+if [ -x third_party/clawkeeper/clawkeeper.sh ]; then
+    pass "vendored scanner is executable"
+    _scanner_sha="$(shasum -a 256 third_party/clawkeeper/clawkeeper.sh 2>/dev/null | awk '{print $1}')"
+    [ "$_scanner_sha" = "e288603da69f71c6c0c922e6efdae14b652a13e7b850bacfd99aa3af55c32418" ] \
+        && pass "vendored scanner checksum matches pinned upstream copy" \
+        || fail "vendored scanner checksum matches pinned upstream copy"
+else
+    fail "vendored scanner is executable"
+fi
 
 echo "[6] stale installers retired"
 [ ! -f scripts/install.sh ] && pass "scripts/install.sh deleted" || fail "scripts/install.sh still present (offers Docker)"
