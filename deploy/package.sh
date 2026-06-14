@@ -133,7 +133,10 @@ if [ -d "$INSTALL_DIR/litellm" ]; then
 fi
 
 if [ -d "$INSTALL_DIR/scripts" ]; then
-    rsync -a --exclude='.DS_Store' "$INSTALL_DIR/scripts/" "$BUNDLE_DIR/scripts/"
+    rsync -a \
+        --exclude='.DS_Store' \
+        --exclude='verify-accepted-residuals-doc.sh' \
+        "$INSTALL_DIR/scripts/" "$BUNDLE_DIR/scripts/"
     echo -e "  ${GREEN}✓${NC} scripts/"
 fi
 
