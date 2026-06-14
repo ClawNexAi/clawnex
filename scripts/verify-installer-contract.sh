@@ -74,8 +74,13 @@ assert_grep scripts/uninstall.sh 'io\.clawnex\.litellm\.plist' "uninstall remove
 assert_grep scripts/uninstall.sh '\.local/bin/clawnex' "uninstall removes clawnex CLI symlink"
 
 echo "[5] shipping manifest"
-assert_grep deploy/package.sh 'lib-macos\.sh' "tarball ships lib-macos.sh"
-assert_grep deploy/package.sh 'third_party/' "tarball ships bundled third-party scanner files"
+if [ -f deploy/package.sh ]; then
+    assert_grep deploy/package.sh 'lib-macos\.sh' "tarball ships lib-macos.sh"
+    assert_grep deploy/package.sh 'third_party/' "tarball ships bundled third-party scanner files"
+else
+    [ -f deploy/lib-macos.sh ] && pass "packaged runtime includes lib-macos.sh" || fail "packaged runtime includes lib-macos.sh"
+    [ -d third_party/clawkeeper ] && pass "packaged runtime includes bundled third-party scanner files" || fail "packaged runtime includes bundled third-party scanner files"
+fi
 
 echo "[5b] bundled host security scanner"
 assert_grep setup.sh 'Host security scanner bundled with ClawNex' "setup uses bundled host security scanner"
@@ -100,9 +105,14 @@ echo "[6] stale installers retired"
 [ ! -f deploy/deploy.sh ]   && pass "deploy/deploy.sh deleted"   || fail "deploy/deploy.sh still present (legacy)"
 
 echo "[7] bash syntax"
-for f in install.sh setup.sh deploy/lib-macos.sh deploy/install-prod.sh scripts/uninstall.sh deploy/package.sh; do
+for f in install.sh setup.sh deploy/lib-macos.sh deploy/install-prod.sh scripts/uninstall.sh; do
     [ -f "$f" ] || { fail "$f missing"; continue; }
     bash -n "$f" && pass "bash -n $f" || fail "bash -n $f"
 done
+if [ -f deploy/package.sh ]; then
+    bash -n deploy/package.sh && pass "bash -n deploy/package.sh" || fail "bash -n deploy/package.sh"
+else
+    pass "deploy/package.sh intentionally absent in packaged runtime"
+fi
 
 if [ "$FAIL" = "0" ]; then echo "ALL CONTRACT CHECKS PASS"; exit 0; else echo "CONTRACT FAILURES ABOVE"; exit 1; fi
