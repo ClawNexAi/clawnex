@@ -348,16 +348,48 @@ rm -rf "$BUNDLE_DIR/logs" "$BUNDLE_DIR/backups" "$BUNDLE_DIR/.next" 2>/dev/null
 # Catch nested deploy tarballs (would happen if package.sh was run earlier and
 # we accidentally included its output)
 find "$BUNDLE_DIR/deploy" -name 'clawnex-*.tar.gz' -delete 2>/dev/null
+# macOS stamps files with provenance xattrs that GNU tar on Linux prints as
+# "Ignoring unknown extended header keyword 'LIBARCHIVE.xattr...'" during
+# extraction. `xattr -cr` cannot remove com.apple.provenance on current macOS,
+# so archive creation must explicitly disable xattr capture. The final Python
+# verifier below fails the package if any xattr PAX headers still get through.
+if command -v xattr >/dev/null 2>&1; then
+    xattr -cr "$STAGING_DIR" 2>/dev/null || true
+fi
 echo -e "  ${GREEN}✓${NC} Secret-scrub pass complete"
 
 # Tarball it. -czf so we get a single .tar.gz; -C to root the archive at
 # the bundle name so extraction creates `clawnex-vX.Y.Z-deploy/` rather
 # than dumping files into the current directory.
 mkdir -p "$INSTALL_DIR/deploy"
-if tar --help 2>&1 | grep -q -- '--no-xattrs'; then
-    COPYFILE_DISABLE=1 tar --no-xattrs -czf "$OUTPUT_TARBALL" -C "$STAGING_DIR" "$PACKAGE_NAME"
-else
-    COPYFILE_DISABLE=1 tar -czf "$OUTPUT_TARBALL" -C "$STAGING_DIR" "$PACKAGE_NAME"
+if ! COPYFILE_DISABLE=1 tar --no-xattrs -czf "$OUTPUT_TARBALL" -C "$STAGING_DIR" "$PACKAGE_NAME" 2>/tmp/clawnex-package-tar.err; then
+    rm -f "$OUTPUT_TARBALL"
+    COPYFILE_DISABLE=1 tar --format ustar -czf "$OUTPUT_TARBALL" -C "$STAGING_DIR" "$PACKAGE_NAME" \
+        || { cat /tmp/clawnex-package-tar.err >&2; exit 1; }
+fi
+rm -f /tmp/clawnex-package-tar.err
+
+if command -v python3 >/dev/null 2>&1; then
+    python3 - "$OUTPUT_TARBALL" <<'PY'
+import sys
+import tarfile
+
+tarball = sys.argv[1]
+bad = []
+with tarfile.open(tarball, "r:gz") as archive:
+    for member in archive:
+        headers = member.pax_headers or {}
+        if any("xattr" in key.lower() for key in headers):
+            bad.append(member.name)
+            if len(bad) >= 10:
+                break
+
+if bad:
+    print("x package contains xattr PAX headers that will warn on Linux extraction:", file=sys.stderr)
+    for name in bad:
+        print(f"  - {name}", file=sys.stderr)
+    sys.exit(1)
+PY
 fi
 TARBALL_SIZE=$(du -h "$OUTPUT_TARBALL" | awk '{print $1}')
 TARBALL_BYTES=$(stat -f %z "$OUTPUT_TARBALL" 2>/dev/null || stat -c %s "$OUTPUT_TARBALL" 2>/dev/null)
