@@ -1,0 +1,77 @@
+{
+  "name": "clawnex",
+  "version": "0.15.0-alpha",
+  "private": true,
+  "description": "AI Agent Fleet Security Operations Center \u2014 inline Prompt Shield, fleet-wide visibility, immutable audit, RBAC, and scheduled compliance reporting for AI agent fleets.",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/clawnexai/clawnex#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clawnexai/clawnex.git"
+  },
+  "bugs": {
+    "url": "https://github.com/clawnexai/clawnex/issues"
+  },
+  "author": "ClawNex Maintainers <security@clawnexai.com>",
+  "keywords": [
+    "ai-security",
+    "soc",
+    "llm-security",
+    "prompt-injection",
+    "prompt-shield",
+    "ai-agents",
+    "agent-monitoring",
+    "agent-fleet",
+    "openclaw",
+    "litellm",
+    "audit-trail",
+    "rbac"
+  ],
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "postbuild": "(cp -r public .next/standalone/ 2>/dev/null || true) && (cp -r .next/static .next/standalone/.next/ 2>/dev/null || true)",
+    "start": "next start -H 127.0.0.1",
+    "start:prod": "node .next/standalone/server.js",
+    "lint": "next lint",
+    "sbom": "npm sbom --sbom-format=cyclonedx --omit=dev > sbom.json"
+  },
+  "dependencies": {
+    "@heygen/liveavatar-web-sdk": "0.0.12",
+    "@simplewebauthn/browser": "13.3.0",
+    "@simplewebauthn/server": "13.3.0",
+    "bcryptjs": "2.4.3",
+    "better-sqlite3": "12.8.0",
+    "bufferutil": "4.1.0",
+    "next": "16.2.6",
+    "nodemailer": "8.0.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "resend": "4.1.2",
+    "safe-regex2": "5.1.1",
+    "utf-8-validate": "6.0.6",
+    "uuid": "13.0.2",
+    "ws": "8.20.0",
+    "yaml": "2.8.3",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "2.4.6",
+    "@types/better-sqlite3": "7.6.13",
+    "@types/node": "20",
+    "@types/nodemailer": "6.4.17",
+    "@types/react": "18",
+    "@types/react-dom": "18",
+    "@types/uuid": "10.0.0",
+    "@types/ws": "8.18.1",
+    "postcss": "8.4.31",
+    "tailwindcss": "3.4.1",
+    "tsx": "4.21.0",
+    "typescript": "5"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.4.31"
+    }
+  }
+}

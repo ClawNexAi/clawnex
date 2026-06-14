@@ -1,0 +1,179 @@
+ClawNex
+Copyright 2026 ClawNex maintainers.
+This product is licensed under the Apache License, Version 2.0 (the "License");
+see the LICENSE file at the repo root for the full text. You may obtain a copy
+of the License at http://www.apache.org/licenses/LICENSE-2.0.
+
+================================================================================
+THIRD-PARTY SOFTWARE NOTICES AND ATTRIBUTIONS
+================================================================================
+
+This product bundles or depends on the following third-party software. Each
+dependency is listed with its name, version (where pinned), and SPDX license
+identifier. Full license texts are reproduced in the upstream packages
+distributed under `node_modules/<package>/LICENSE` (Node) and the corresponding
+`site-packages/<package>*.dist-info/LICENSE*` (Python) and are retained by
+reference here per Apache 2.0 §4(d).
+
+The dependency inventory was generated 2026-05-15 against
+`v0.14.5-alpha` (commit `944216e`). See `docs/qa/oss-license-audit-2026-05-15.md`
+for the full audit methodology, per-license breakdown, and the live verifier
+that re-runs this analysis. SBOM artifact: `sbom.json` (CycloneDX, prod only).
+
+--------------------------------------------------------------------------------
+RUNTIME — Node.js / JavaScript dependencies (npm production tree)
+--------------------------------------------------------------------------------
+
+The dashboard's production runtime depends on 169 npm packages (direct + transitive).
+License distribution:
+
+  122  MIT
+   18  ISC
+    9  Apache-2.0
+    4  BSD-2-Clause
+    4  BlueOak-1.0.0
+    3  BSD-3-Clause
+    2  0BSD
+    1  MIT-0
+    1  CC-BY-4.0
+    1  Apache-2.0 AND BSD-3-Clause      (combined attribution required)
+    1  MIT OR WTFPL                      (using MIT)
+    1  BSD-2-Clause OR MIT OR Apache-2.0 (using MIT)
+    2  (license field absent in package.json, MIT confirmed by LICENSE file:
+       busboy@1.6.0, streamsearch@1.1.0)
+
+All 169 packages are Apache-2.0-compatible. No GPL, AGPL, SSPL, Commons Clause,
+or proprietary licenses are present in the runtime tree.
+
+Direct production dependencies (from `package.json`):
+
+  @heygen/liveavatar-web-sdk@0.0.12     MIT
+  @simplewebauthn/browser@13.3.0         MIT
+  @simplewebauthn/server@13.3.0          MIT
+  bcryptjs@2.4.3                          MIT
+  better-sqlite3@12.8.0                   MIT
+  bufferutil@4.1.0                        MIT
+  next@14.2.35                            MIT
+  nodemailer@8.0.5                        MIT-0
+  react@18.3.1                            MIT
+  react-dom@18.3.1                        MIT
+  resend@4.1.2                            MIT
+  safe-regex2@5.1.1                       MIT
+  utf-8-validate@6.0.6                    MIT
+  uuid@13.0.0                             MIT
+  ws@8.20.0                               MIT
+  yaml@2.8.3                              ISC
+  zod@4.3.6                               MIT
+
+Notable transitive dependencies under Apache-2.0 (require explicit attribution):
+
+  @opentelemetry/api@*                    Apache-2.0
+  caniuse-lite@*                           CC-BY-4.0  (per CSS-feature data
+                                          attribution requirement)
+  Other Apache-2.0 packages are listed in `sbom.json`.
+
+The full per-package inventory with versions is regenerated on every release via:
+
+  npm run sbom    # writes sbom.json (CycloneDX)
+
+--------------------------------------------------------------------------------
+RUNTIME — Python dependencies (LiteLLM proxy venv)
+--------------------------------------------------------------------------------
+
+The LiteLLM proxy bundled with ClawNex uses an isolated Python venv installed
+on the host at install time. The deploy script (`deploy/install-prod.sh`)
+creates the venv and runs:
+
+  pip install "litellm[proxy]==1.83.0"
+  pip install "httpx==0.28.1"
+
+The resulting transitive Python dep tree resolves to permissive licenses:
+
+  23  MIT
+   9  BSD-3-Clause
+   6  MIT License           (canonical MIT)
+   3  Apache-2.0
+   3  BSD License           (typically BSD-3-Clause)
+   2  Apache Software License (Apache-2.0)
+   2  BSD-2-Clause
+   1  Apache-2.0 OR BSD-3-Clause
+   1  Apache-2.0 OR BSD-2-Clause
+   1  MPL-2.0 AND (Apache-2.0 OR MIT)
+   1  Apache-2.0 AND CNRI-Python
+   1  PSF-2.0
+   1  Unlicense
+
+Key direct Python deps:
+
+  litellm[proxy]==1.83.0                  MIT  (BerriAI / litellm)
+  httpx==0.28.1                            BSD-3-Clause
+
+Notable transitive Python packages requiring attribution (Apache-2.0 or MPL):
+
+  cryptography                             Apache-2.0 AND BSD-3-Clause
+  azure-core, azure-identity,              MIT
+   azure-storage-blob
+  boto3, botocore, s3transfer              Apache-2.0
+  fastapi, starlette, uvicorn              MIT / BSD-3-Clause
+  litellm-proxy-extras                     MIT (core) — see §EXCLUSIONS
+  tokenizers                               Apache-2.0
+  prisma                                   Apache-2.0
+
+All Python packages installed on the production target are Apache-2.0-compatible.
+No GPL, AGPL, SSPL, or proprietary licenses are present in the production
+Python tree.
+
+--------------------------------------------------------------------------------
+EXCLUSIONS — packages deliberately NOT bundled into the OSS distribution
+--------------------------------------------------------------------------------
+
+`litellm-enterprise` (BerriAI Enterprise License — commercial):
+  Status: NOT installed by the production deploy script.
+  Why noted: this package may appear in a developer's local venv if pip
+   resolved an older path; ClawNex's production install path (`pip install
+   litellm[proxy]==1.83.0`) does not pull it because none of `litellm`,
+   `litellm[proxy]`, or `httpx` declare it as a dependency. Operators who
+   independently `pip install litellm-enterprise` are agreeing to BerriAI's
+   commercial Enterprise Terms separately.
+  Action: do not import or call into `litellm_enterprise.*` from anywhere
+   in ClawNex source. Verified empty: `grep -r "litellm_enterprise" src/
+   litellm/ scripts/` returns no matches.
+
+`litellm-proxy-extras` (dual-licensed — MIT for the core, BerriAI Enterprise
+for any `enterprise/` subdirectory):
+  Status: installed in the production venv as a litellm-proxy transitive.
+  Scope of use: ClawNex consumes only the migration.sql files which live
+   in the MIT-licensed portion. No code is imported from any `enterprise/`
+   subdirectory of this package.
+
+--------------------------------------------------------------------------------
+SUPPORTING DATA
+--------------------------------------------------------------------------------
+
+  Repo license file:                        LICENSE
+  Full audit methodology:                   docs/qa/oss-license-audit-2026-05-15.md
+  Machine-readable inventory (Node):        sbom.json (CycloneDX, regenerated
+                                            via `npm run sbom`)
+  Machine-readable inventory (Python):      regenerable via
+                                            `pip list --format=json` against
+                                            the LiteLLM venv on the target host
+
+If you identify a dependency that should be attributed here and is not, or a
+license classification that requires correction, please open an issue at the
+ClawNex repository or email security@clawnexai.com.
+
+--------------------------------------------------------------------------------
+APACHE 2.0 NOTICE REQUIREMENT
+--------------------------------------------------------------------------------
+
+In addition to the attributions above, the Apache 2.0 License requires that any
+"NOTICE" text files distributed by Apache-2.0-licensed dependencies be preserved
+in derivative works. ClawNex's contribution to those notices is this file. Each
+Apache-2.0 dependency listed above carries its own NOTICE file (where present)
+under `node_modules/<package>/NOTICE` or `site-packages/<package>*.dist-info/`;
+those upstream notices are not reproduced inline here but are retained by
+reference in the package distribution itself.
+
+================================================================================
+END OF NOTICE
+================================================================================

@@ -1,0 +1,6 @@
+Contact: mailto:security@clawnex.io
+Contact: https://github.com/clawnexai/clawnex/security/advisories/new
+Expires: 2027-05-16T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://clawnex.io/.well-known/security.txt
+Policy: https://github.com/clawnexai/clawnex/blob/main/SECURITY.md

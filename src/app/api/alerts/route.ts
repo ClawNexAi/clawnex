@@ -1,0 +1,215 @@
+/**
+ * Alerts API
+ * GET  /api/alerts — list alerts with optional ?status=open&severity=CRITICAL&source=shield&limit=50 filters
+ * POST /api/alerts — create alert manually
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/guard';
+import { requireLocalhost } from "@/lib/middleware/localhost-guard";
+import { listAlerts, createAlert } from '@/lib/services/alert-manager';
+import { logEvent } from '@/lib/services/audit-logger';
+import { isAlertScope } from '@/lib/dashboard/metric-semantics';
+import { queryOne } from '@/lib/db/index';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: NextRequest) {
+  if (isRbacEnabled()) {
+    const auth = requireSession(request);
+    if (auth instanceof NextResponse) return auth;
+    const perm = requirePermission(auth.operator, 'alerts:read');
+    if (perm) return perm;
+  } else {
+    const guard = requireLocalhost(request);
+    if (guard) return guard;
+  }
+
+  try {
+    const { searchParams } = new URL(request.url);
+
+    const filters: Record<string, unknown> = {};
+    const status = searchParams.get('status');
+    const scopeParam = searchParams.get('scope');
+    const severity = searchParams.get('severity');
+    const source = searchParams.get('source');
+    const since = searchParams.get('since');
+    const limitParam = searchParams.get('limit');
+    const instance = searchParams.get('instance');
+
+    if (status) {
+      // Explicit single-status filter still wins for backward compat
+      // (e.g. existing dashboard header passing `status=open`).
+      filters.status = status;
+    } else if (scopeParam) {
+      // Canonical v0.9.3+ scope parameter.
+      if (!isAlertScope(scopeParam)) {
+        return NextResponse.json(
+          { error: `Invalid scope. Must be one of: active, terminal, all` },
+          { status: 400 },
+        );
+      }
+      filters.scope = scopeParam;
+    }
+    // If neither status nor scope is provided we let alert-manager apply its
+    // legacy default (everything except suppressed) so older callers stay
+    // unbroken. The dashboard surfaces have all been migrated to pass scope
+    // explicitly. See metric-semantics.ts for the contract.
+    if (severity) filters.severity = severity;
+    if (source) filters.source = source;
+    if (since) filters.since = since;
+    if (limitParam) filters.limit = Math.min(Math.max(parseInt(limitParam, 10) || 100, 1), 500);
+    // v0.8.0+: opt in to seeing suppressed (risk-acceptance-suppressed) alerts.
+    if (searchParams.get('include_suppressed') === 'true') filters.include_suppressed = true;
+    // v0.9.3+ (internal reviewer M-01 follow-up 2026-04-30): opt in to filtering out
+    // non-production origins (shield-test/demo/qa/simulation). Used by the
+    // dashboard header CRITICAL pill and any other surface that wants to
+    // count only production-grade alerts. Mirrors `?includeTestGenerated=true`
+    // on /api/shield/stats but inverted (here the default is permissive,
+    // opt-in is restrictive). Mode B simulation rows that tag origin='production'
+    // ARE included by design — they're the visible-in-default-counters mode
+    // and the operator opted in via the second-gate phrase.
+    if (searchParams.get('productionOnly') === 'true') filters.productionOnly = true;
+
+    let alerts = listAlerts(filters as { status?: string; scope?: 'active' | 'terminal' | 'all'; severity?: string; source?: string; since?: string; limit?: number; include_suppressed?: boolean; productionOnly?: boolean });
+
+    // Instance-level filtering: hermes-local shows only hermes-watcher alerts,
+    // openclaw / other instances exclude hermes-watcher alerts.
+    if (instance === 'hermes-local') {
+      alerts = alerts.filter(a => a.source === 'hermes-watcher');
+    } else if (instance && instance !== 'all') {
+      alerts = alerts.filter(a => a.source !== 'hermes-watcher');
+    }
+
+    // internal reviewer metric-corroboration #3 (2026-04-29): surface the *effective*
+    // scope the route actually applied, so any UI that derives totals or
+    // severity counts from this response can tell whether it's looking at
+    // the active set, a status-filtered set, or the legacy default. The
+    // raw `scope` param is echoed alongside for parity; `effectiveScope`
+    // is what the alert-manager logic resolved to. See
+    // src/lib/dashboard/metric-semantics.ts for the canonical contract.
+    const effectiveScope: 'status' | 'active' | 'terminal' | 'all' | 'legacy-default' =
+      status ? 'status' :
+      scopeParam === 'active' || scopeParam === 'terminal' || scopeParam === 'all' ? scopeParam :
+      filters.include_suppressed ? 'all' :
+      'legacy-default';
+
+    // Item #3 (Mission Control Incident Hygiene): two new aggregate fields.
+    //
+    // oldest_open_age_ms: age (ms) of the oldest open alert from now.
+    // Zero when no open alerts exist so callers can treat 0 as "no open alerts".
+    let oldestOpenAgeMs = 0;
+    try {
+      const oldest = queryOne<{ min_created_at: string | null }>(
+        `SELECT MIN(created_at) AS min_created_at FROM alerts WHERE status = 'open'`,
+      );
+      if (oldest?.min_created_at) {
+        const ts = Date.parse(oldest.min_created_at);
+        if (Number.isFinite(ts)) oldestOpenAgeMs = Math.max(0, Date.now() - ts);
+      }
+    } catch {
+      // Non-fatal — leave at zero; operator can see it from the alert list.
+    }
+
+    // ack_but_not_resolved_count: alerts that have been acknowledged but are
+    // still unresolved after a threshold, indicating stale ack hygiene.
+    //
+    // Ideal: acknowledged_at column + 2h threshold.
+    // Actual schema (confirmed in src/lib/db/schema.ts): the alerts table has
+    // `acknowledged_by TEXT` and `updated_at TEXT` but NO `acknowledged_at`
+    // column. Fallback heuristic: count acknowledged alerts whose updated_at
+    // (proxy for when status last changed to 'acknowledged') is > 4h ago AND
+    // resolved_at IS NULL. The 4h threshold (vs 2h in the ideal case) accounts
+    // for the wider window of when `updated_at` could have been set.
+    // INLINE FALLBACK DOCUMENTED: acknowledged_at column absent → using
+    // updated_at + 4h threshold as the ack-staleness proxy.
+    let ackButNotResolvedCount = 0;
+    const ACK_STALE_THRESHOLD_H = 4;
+    try {
+      const cutoff = new Date(Date.now() - ACK_STALE_THRESHOLD_H * 3_600_000).toISOString();
+      const ackRow = queryOne<{ cnt: number }>(
+        `SELECT COUNT(*) AS cnt FROM alerts
+         WHERE status = 'acknowledged'
+           AND resolved_at IS NULL
+           AND updated_at <= ?`,
+        [cutoff],
+      );
+      ackButNotResolvedCount = ackRow?.cnt ?? 0;
+    } catch {
+      // Non-fatal — leave at zero.
+    }
+
+    return NextResponse.json({
+      alerts,
+      total: alerts.length,
+      filters: { status, severity, source, since },
+      scope: scopeParam ?? null,
+      effectiveScope,
+      include_suppressed: Boolean(filters.include_suppressed),
+      productionOnly: Boolean(filters.productionOnly),
+      // Mission Control Incident Hygiene fields (Item #3).
+      oldest_open_age_ms: oldestOpenAgeMs,
+      ack_but_not_resolved_count: ackButNotResolvedCount,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[API/alerts] GET Error:', err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Unknown error' },
+      { status: 500 },
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  if (isRbacEnabled()) {
+    const auth = requireSession(request);
+    if (auth instanceof NextResponse) return auth;
+    const perm = requirePermission(auth.operator, 'alerts:manage');
+    if (perm) return perm;
+  } else {
+    const guard = requireLocalhost(request);
+    if (guard) return guard;
+  }
+
+  try {
+    const body = await request.json();
+    const { title, description, severity, source } = body as {
+      title?: string;
+      description?: string;
+      severity?: string;
+      source?: string;
+    };
+
+    if (!title || typeof title !== 'string') {
+      return NextResponse.json({ error: "Missing or invalid 'title' field" }, { status: 400 });
+    }
+
+    const validSeverities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
+    const sev = (severity || 'MEDIUM').toUpperCase();
+    if (!validSeverities.includes(sev)) {
+      return NextResponse.json(
+        { error: `Invalid severity. Must be one of: ${validSeverities.join(', ')}` },
+        { status: 400 },
+      );
+    }
+
+    const alert = createAlert(
+      title,
+      description || '',
+      sev as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO',
+      source || 'manual',
+    );
+
+    logEvent('api', 'alert_created', 'alert', alert.id, `Manual alert: ${title}`, 'api');
+
+    return NextResponse.json({ alert, timestamp: new Date().toISOString() }, { status: 201 });
+  } catch (err) {
+    console.error('[API/alerts] POST Error:', err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Unknown error' },
+      { status: 500 },
+    );
+  }
+}

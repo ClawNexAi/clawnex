@@ -1,0 +1,99 @@
+name: 🐞 Bug report
+description: Something is broken or behaving incorrectly.
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Before continuing, please:
+
+          1. **Search existing issues** to make sure this hasn't been reported.
+          2. **Confirm this is a bug** — for "how do I…" questions, use
+             [Discussions](https://github.com/clawnexai/clawnex/discussions).
+          3. **Security issues**: do NOT report here. Use the
+             [private security advisory flow](https://github.com/clawnexai/clawnex/security/advisories/new)
+             instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: ClawNex version
+      description: The `version` field from `package.json`, or paste the output of `curl -s http://localhost:5001/api/health | jq .version`.
+      placeholder: e.g. 0.9.2-alpha
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS + arch + Node version. `uname -a && node -v`.
+      placeholder: e.g. Ubuntu 24.04 x86_64 / Node v22.22.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment mode
+      description: How is ClawNex running?
+      options:
+        - "Local dev (npm run dev)"
+        - "Bare-metal / VPS (setup.sh + install-prod.sh + Caddy)"
+        - "Docker / docker-compose"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the actual behavior. Include exact error messages and stack traces.
+      placeholder: |
+        e.g. "Clicked Run Audit on Trust Audit panel, got HTTP 500 in browser
+        console. Server log shows: TypeError: Cannot read property 'foo' of undefined"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: One-liner describing the correct behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: |
+        Numbered steps a maintainer can follow to reproduce. The more specific the better.
+      placeholder: |
+        1. Fresh install via setup.sh on Ubuntu 24.04
+        2. Open dashboard, navigate to Trust Audit
+        3. Click "Run Audit"
+        4. Observe HTTP 500
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Relevant log excerpts. For server: `tail -100 logs/dashboard.log`.
+        For browser: console + network tab. **Redact secrets.**
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for duplicates
+          required: true
+        - label: I redacted any secrets / API keys / personal data from the logs above
+          required: true

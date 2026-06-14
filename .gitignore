@@ -1,0 +1,99 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+Thumbs.db
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# runtime logs (clawnex.jsonl, dashboard.log, litellm.log, watchdog.log)
+# the dogfood QA console logs under docs/qa/.../*.log are intentionally
+# tracked — those are forensic artifacts, not runtime output.
+/logs/*.log
+/logs/*.jsonl
+
+# external tooling state (gstack browse daemon, etc.) — session-scoped
+# config from other workflows, not part of the ClawNex repo.
+/.gstack/
+
+# local env files
+.env*.local
+.env
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# database
+*.db
+*.db-wal
+*.db-shm
+*.db.bak
+*.db.bak-*
+
+# logs
+/logs/
+
+# LiteLLM operator config (contains API keys)
+litellm/config.yaml
+
+# LiteLLM Python virtual environment
+litellm/venv/
+__pycache__/
+*.pyc
+
+# backups and deploy artifacts
+/backups/
+deploy/*.tar.gz
+
+# SBOM artifacts (generated on demand via `npm run sbom` or scripts/generate-sbom.sh)
+sbom.json
+sbom-python.txt
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Superpowers brainstorming session artifacts (local only, per-session)
+/.superpowers/
+
+# Internal-only docs (handoffs, outlines, pitch material, hermes plans).
+# Stays on the maintainer's working tree; doesn't ship in the public release.
+docs/internal/
+
+# Hermes-Agent runtime data (state.db, profiles, plans). Local to each
+# operator's install — must not ship.
+.hermes/
+
+# Training-video prototype workspace (~400MB of HTML/CSS/JS + thumbnails
+# + audio assets). Was tracked accidentally; doesn't belong in the OSS
+# release. Untracked at the index level on 2026-04-26 — note the file
+# blobs still live in git history, so clones will still pull the bloat
+# until the history is rewritten. Consider `git filter-repo --path
+# training-video-prototype --invert-paths` BEFORE the first public push
+# to actually shrink the repo for OSS users.
+training-video-prototype/

@@ -1,0 +1,78 @@
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  output: 'standalone',
+  // DAST 2026-05-15 #N2: drop the `X-Powered-By: Next.js` header from
+  // HTML responses. API responses already strip it via headers() above,
+  // but the SSR HTML route adds it back by default. Fingerprinting
+  // reduction; not a load-bearing control.
+  poweredByHeader: false,
+  // Expose env vars to Edge Runtime (middleware.ts needs RBAC_ENABLED)
+  env: {
+    RBAC_ENABLED: process.env.RBAC_ENABLED || '',
+  },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          { key: 'X-DNS-Prefetch-Control', value: 'off' },
+          // M1 (DAST 2026-05-14): preload added so Next-side HSTS matches
+          // Caddy's. Even with the install-prod.sh Caddyfile dropping its
+          // duplicate header block, Anvil (no Caddy) still needs a
+          // preload-eligible HSTS for parity. preload submission is
+          // separately gated by hstspreload.org, so this is safe to keep
+          // regardless of submission state.
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' },
+          // Content-Security-Policy is now set dynamically per-request by
+          // src/middleware.ts so it can include a fresh nonce on every
+          // response (CRIT #3 — nonce-based CSP, drop 'unsafe-inline').
+        ],
+      },
+      {
+        // M6 (DAST 2026-05-14): API JSON responses must not be cacheable.
+        // Without no-store, intermediate proxies (browser cache, CDN,
+        // corporate proxy) could keep responses with operator-scoped
+        // data and replay them across sessions/users.
+        source: '/api/(.*)',
+        headers: [
+          { key: 'Cache-Control', value: 'no-store, no-cache, must-revalidate, private' },
+          { key: 'Pragma', value: 'no-cache' },
+        ],
+      },
+    ];
+  },
+  serverExternalPackages: ['better-sqlite3', 'ws', 'bufferutil', 'utf-8-validate'],
+  // DAST 2026-05-15 H3: Next.js standalone output traces every file
+  // reachable from the project root and copies them into
+  // .next/standalone/. The dev/test SQLite DB (clawnex.db + its
+  // -wal/-shm journals — and the legacy sentinel.db filename kept
+  // around for pre-v0.9 installs) was getting bundled with the
+  // build, leaking operator data via the deploy tarball. Exclude
+  // the whole DB triple from output tracing so the bundle is
+  // database-free; the runtime creates a fresh DB at the install
+  // location on first launch.
+  outputFileTracingExcludes: {
+    '*': [
+      '**/clawnex.db',
+      '**/clawnex.db-wal',
+      '**/clawnex.db-shm',
+      '**/sentinel.db',
+      '**/sentinel.db-wal',
+      '**/sentinel.db-shm',
+    ],
+  },
+  webpack: (config) => {
+    config.externals.push({
+      'better-sqlite3': 'commonjs better-sqlite3',
+      'bufferutil': 'commonjs bufferutil',
+      'utf-8-validate': 'commonjs utf-8-validate',
+    });
+    return config;
+  },
+};
+
+export default nextConfig;

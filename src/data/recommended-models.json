@@ -1,0 +1,34 @@
+{
+  "_comment": "Recommended local-AI models for ClawNex's Quick Setup Card. Updated as the small-model landscape evolves; ship with the codebase so the dashboard can render current recommendations without a network call. The 'recommended' entry is what the QSC suggests by default; 'alternatives' are shown as 'larger / smaller' options.",
+  "recommended": {
+    "name": "Llama 3.2 3B",
+    "ollamaTag": "llama3.2:3b",
+    "lmstudioId": "llama-3.2-3b-instruct",
+    "approxSize": "2 GB",
+    "ramHint": "runs comfortably on 8 GB+ machines",
+    "rationale": "Good balance of capability and speed. ClawNex tests its AI features against this model."
+  },
+  "alternatives": [
+    {
+      "name": "Llama 3.2 1B",
+      "ollamaTag": "llama3.2:1b",
+      "approxSize": "0.8 GB",
+      "ramHint": "runs on anything modern, including a Raspberry Pi 5",
+      "rationale": "Smallest viable option. Less capable on multi-step reasoning."
+    },
+    {
+      "name": "Phi-3 Mini",
+      "ollamaTag": "phi3:mini",
+      "approxSize": "2.3 GB",
+      "ramHint": "8 GB+",
+      "rationale": "Microsoft's small-but-capable model. Strong on instruction following."
+    },
+    {
+      "name": "Llama 3.1 8B",
+      "ollamaTag": "llama3.1:8b",
+      "approxSize": "4.7 GB",
+      "ramHint": "16 GB+ recommended",
+      "rationale": "Significantly more capable for complex security-analysis prompts. Larger memory footprint."
+    }
+  ]
+}

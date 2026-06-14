@@ -1,0 +1,60 @@
+name: 💡 Feature request
+description: Propose a new feature or enhancement.
+title: "[feat] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a feature. Before continuing:
+
+          1. **Check the [roadmap](https://github.com/clawnexai/clawnex/blob/main/docs/20-product-roadmap.md)** — your idea may already be planned.
+          2. For **questions or design discussions**, prefer
+             [Discussions](https://github.com/clawnexai/clawnex/discussions).
+          3. ClawNex is opinionated about scope (it's a security SOC for AI
+             agent fleets, not a general AIOps platform). Features outside
+             that scope are likely to be politely declined — that's not
+             rejection, it's focus.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: |
+        Describe the operator pain point this addresses. Concrete scenarios beat abstract benefits.
+      placeholder: |
+        e.g. "When I have 50 agents and 200 alerts per day, I can't easily
+        find which agents are responsible for the most CRITICAL alerts. I
+        end up exporting the audit log and grepping by hand."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How would you like ClawNex to behave? Include UI sketches if relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you think about? Why are they worse?
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope check
+      description: |
+        How does this fit ClawNex's mission of "AI Agent Fleet Security Operations Center"?
+        Is it a security feature, an observability feature, or something else?
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I checked the roadmap and existing feature requests for duplicates
+          required: true

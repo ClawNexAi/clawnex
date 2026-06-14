@@ -1,0 +1,19 @@
+# Issue template chooser — keeps the new-issue page tidy and points
+# urgent / non-bug requests at the right place.
+blank_issues_enabled: false
+
+contact_links:
+  - name: 🛡 Security vulnerability
+    url: https://github.com/clawnexai/clawnex/security/advisories/new
+    about: |
+      Found a security issue? Please DO NOT open a public issue. File a
+      private security advisory via the link above. See SECURITY.md for
+      our response timeline and scope.
+
+  - name: 💬 Question / discussion
+    url: https://github.com/clawnexai/clawnex/discussions
+    about: |
+      Not sure if it's a bug? Want to talk through architecture, ask
+      "how would I…", or share what you're building? Open a discussion
+      instead — issues are reserved for actionable bug reports and
+      feature proposals.

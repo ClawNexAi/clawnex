@@ -1,0 +1,15 @@
+# ClawNex CODEOWNERS
+#
+# This file tells GitHub who to request review from on every PR. GitHub
+# uses the LAST matching pattern for a file, so list more-specific rules
+# below the default. Lines starting with `#` are comments.
+#
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-security/customizing-your-repository/about-code-owners
+
+# Default owner — every file not matched by a more-specific rule below
+# falls under this rule. At OSS launch ClawNex has a single maintainer,
+# so one owner on every PR is the honest model. Expand to per-area
+# ownership later when co-maintainers join (e.g. separate auth reviewer,
+# docs reviewer, ops reviewer) — leave the default line as the floor so
+# no path is ever ownerless.
+*  @clawnexai/maintainers

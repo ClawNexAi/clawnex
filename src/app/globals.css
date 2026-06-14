@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #04070e;
+  --foreground: #e5eaf3;
+  /* Brand-warn token, sourced from src/components/dashboard/constants.ts
+     DARK_THEME.warn. Used by the SignalsCard keyboard focus ring (H2
+     2026-05-14 migration — formerly an inline <style> tag, now lives in
+     this static CSS file so the CSP can drop style-src 'unsafe-inline'). */
+  --clawnex-warn: #fbbf24;
+}
+
+/* Light theme override — keep parity with src/components/dashboard/constants.ts
+   LIGHT_THEME.warn. Theme switching applies a `light` class to <html>. */
+.light {
+  --clawnex-warn: #d97706;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Minimal scrollbar — blends with dark SOC theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1c2e52 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #1c2e52;
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #2a4070;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Mission Control KPI card — keyboard focus ring (Fix I4).
+   style jsx is not used in this codebase so the rule lives here.
+   :focus-visible targets keyboard navigation only; mouse clicks are unaffected. */
+.mc-kpi-card:focus-visible {
+  outline: 2px solid #4c8bf5;
+  outline-offset: 2px;
+}
+
+/* Mission Control KPI grid — spec §4.1 responsive breakpoints.
+   The default 6-column layout is set via inline style on the div.
+   !important is the standard escape hatch when overriding inline styles
+   via CSS media queries — same pattern as the focus-visible fix above. */
+.mc-kpi-row {
+  /* Default: 6 columns (set via inline style). The breakpoints below override the inline grid-template-columns. */
+}
+@media (max-width: 1239px) {
+  .mc-kpi-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+@media (max-width: 759px) {
+  .mc-kpi-row {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Mission Control middle row — collapse 2→1 at <1024px so Posture and Aging stack on narrower viewports. */
+@media (max-width: 1023px) {
+  .mc-middle-row {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Mission Control bottom row — collapse 2→1 at <1024px (matches mc-middle-row). */
+@media (max-width: 1023px) {
+  .mc-bottom-row {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Mission Control clickable rows — keyboard focus ring for accessibility.
+   Matches the brand hex used on mc-kpi-card above so focus rings are visually
+   consistent across all interactive elements in the Mission Control panel. */
+.mc-row-clickable:focus-visible {
+  outline: 2px solid #4c8bf5;
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+/* SignalsCard row button — keyboard focus ring (H2 2026-05-14 migration).
+   Was an inline <style> tag inside SignalsCard.tsx; moved here so the CSP
+   can drop style-src 'unsafe-inline' for <style> elements. Scoped by class
+   so it doesn't leak to other buttons. :focus-visible targets keyboard
+   navigation only; mouse clicks are unaffected. */
+.signals-row-button:focus {
+  outline: none;
+}
+.signals-row-button:focus-visible {
+  outline: 2px solid var(--clawnex-warn);
+  outline-offset: -2px;
+}
+
+/* CorrelationsPanel disclosure caret — chevron rotation (H2 2026-05-14
+   migration). Was an inline <style> tag inside CorrelationsPanel.tsx; the
+   rules are static so they migrate cleanly into the extracted CSS file.
+   `<details>` strips its native marker via listStyle:none for visual
+   consistency, so the .cn-caret span carries the chevron glyph and CSS
+   rotates it 90° when the disclosure opens. */
+.cn-disclosure > summary .cn-caret {
+  display: inline-block;
+  transition: transform 0.2s ease;
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0.7;
+}
+.cn-disclosure[open] > summary .cn-caret {
+  transform: rotate(90deg);
+}

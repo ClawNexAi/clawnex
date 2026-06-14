@@ -1,0 +1,58 @@
+# ClawNex LiteLLM Proxy Configuration — TEMPLATE
+# Version: litellm==1.83.0 (PINNED — do not upgrade without ClawNex team verification)
+# Port: 4001
+#
+# This is a template for fresh installations.
+# Edit this file to add your model providers and API keys.
+
+model_list:
+  # ─── OpenRouter (cloud API) ───
+  # Uncomment and add your API key to use OpenRouter models
+  # - model_name: "openrouter/auto"
+  #   litellm_params:
+  #     model: "openrouter/auto"
+  #     api_key: "your-openrouter-api-key"
+  #
+  # - model_name: "openrouter/*"
+  #   litellm_params:
+  #     model: "openrouter/*"
+  #     api_key: "your-openrouter-api-key"
+
+  # ─── LM Studio (local) ───
+  # Uncomment and set your LM Studio URL
+  # - model_name: "local-model"
+  #   litellm_params:
+  #     model: "openai/your-model-name"
+  #     api_base: "http://localhost:1234/v1"
+  #     api_key: "lmstudio-local"
+
+  # ─── Anthropic (Claude) ───
+  # Uncomment and add your API key
+  # - model_name: "claude-*"
+  #   litellm_params:
+  #     model: "claude-*"
+  #     api_key: "your-anthropic-api-key"
+
+  # ─── OpenAI (GPT) ───
+  # Uncomment and add your API key
+  # - model_name: "gpt-*"
+  #   litellm_params:
+  #     model: "gpt-*"
+  #     api_key: "your-openai-api-key"
+
+  # No model providers configured yet. This placeholder satisfies LiteLLM's
+  # "at least one model required" rule but is filtered from health checks
+  # by ClawNex's infrastructure widget. Add a real provider via
+  # Configuration → Model Providers — that triggers an auto-sync that
+  # rewrites this file with a real model_list and restarts LiteLLM.
+  - model_name: "no-provider-configured"
+    litellm_params:
+      model: "openai/no-provider-configured"
+      api_key: "placeholder-no-key"
+
+# ClawNex Shield Logger — scans all traffic
+litellm_settings:
+  callbacks: ["clawnex_logger.ClawNexLogger"]
+
+general_settings:
+  master_key: null
