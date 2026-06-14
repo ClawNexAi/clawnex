@@ -30,6 +30,7 @@ NC='\033[0m'
 # exist for a reason. Documented in --help so the bypass mechanism is at
 # least visible rather than hidden.
 FORCE_CLEAN=false
+ARCHIVE_DB=""
 POSITIONAL=""
 for arg in "$@"; do
     case "$arg" in
@@ -45,6 +46,7 @@ Usage:
                                           #   wipe everything (no preserved
                                           #   backups or docs). For automation
                                           #   only — be sure of the path.
+  bash uninstall.sh --no-archive /path    # skip the pre-uninstall DB archive
 
 Refuses to proceed if the resolved directory doesn't look like a ClawNex
 install (must contain package.json with name "clawnex" or a recognizable
@@ -54,6 +56,12 @@ USAGE
             ;;
         --force-clean)
             FORCE_CLEAN=true
+            ;;
+        --archive)
+            ARCHIVE_DB="yes"
+            ;;
+        --no-archive)
+            ARCHIVE_DB="no"
             ;;
         *)
             POSITIONAL="$arg"
@@ -203,15 +211,42 @@ echo -e "${YELLOW}Starting uninstall...${NC}"
 echo ""
 
 # Step 1: Archive database
-echo "[1/7] Archiving database..."
-BACKUP_DIR="${INSTALL_DIR}/backups"
-mkdir -p "$BACKUP_DIR"
-TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
-if [ -f "${INSTALL_DIR}/sentinel.db" ]; then
-    cp "${INSTALL_DIR}/sentinel.db" "${BACKUP_DIR}/sentinel-pre-uninstall-${TIMESTAMP}.db"
-    echo -e "  ${GREEN}✓${NC} Database archived to backups/"
-else
+echo "[1/8] Database archive..."
+DB_ARCHIVE_CANDIDATES=()
+for db in sentinel.db clawnex.db; do
+    [ -f "${INSTALL_DIR}/${db}" ] && DB_ARCHIVE_CANDIDATES+=("${INSTALL_DIR}/${db}")
+done
+if [ "${#DB_ARCHIVE_CANDIDATES[@]}" -eq 0 ]; then
     echo "  - No database found"
+else
+    if [ -z "$ARCHIVE_DB" ]; then
+        if [ "$FORCE_CLEAN" = "true" ]; then
+            ARCHIVE_DB="no"
+        else
+            read -p "  Archive database before uninstall? (yes/no) [yes]: " ARCHIVE_DB
+            ARCHIVE_DB=${ARCHIVE_DB:-yes}
+        fi
+    fi
+    case "$ARCHIVE_DB" in
+        yes|y|Y|YES)
+            BACKUP_DIR="${INSTALL_DIR}/backups"
+            mkdir -p "$BACKUP_DIR"
+            TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
+            for dbpath in "${DB_ARCHIVE_CANDIDATES[@]}"; do
+                db="$(basename "$dbpath")"
+                cp "$dbpath" "${BACKUP_DIR}/${db%.db}-pre-uninstall-${TIMESTAMP}.db"
+                chmod 600 "${BACKUP_DIR}/${db%.db}-pre-uninstall-${TIMESTAMP}.db" 2>/dev/null || true
+            done
+            echo -e "  ${GREEN}✓${NC} Database archived to backups/"
+            ;;
+        no|n|N|NO)
+            echo "  - Database archive skipped"
+            ;;
+        *)
+            echo -e "  ${RED}✗${NC} Invalid archive choice: $ARCHIVE_DB"
+            exit 1
+            ;;
+    esac
 fi
 
 # Step 2: Restore OpenClaw routing

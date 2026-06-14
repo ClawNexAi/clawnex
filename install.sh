@@ -12,11 +12,12 @@
 #   bash install.sh --mode vps|mac-local|mac-server --domain X \
 #        --provider openrouter|anthropic|openai|nvidia|skip \
 #        [--provider-url URL] [--provider-model MODEL] [--provider-key-env VAR] \
-#        [--local-auth rbac|off] [--clean] [--yes]
+#        [--local-auth rbac|off] [--archive-db yes|no] [--clean] [--yes]
 #
 # Phase 0 detects prior ClawNex artifacts and — only with consent
-# (interactive y, or --clean) — removes them via scripts/uninstall.sh,
-# archiving any database to ~/clawnex-pre-install-backup-* first.
+# (interactive y, or --clean) — removes them via scripts/uninstall.sh.
+# When an existing database is found, interactive runs ask whether to archive
+# it to ~/clawnex-pre-install-backup-* before removal.
 # =============================================================================
 
 set -euo pipefail
@@ -169,7 +170,7 @@ INSTALL_DIR="$(pwd)"
 ENGINE_BASH="${BASH:-bash}"
 
 # ---- Flags -------------------------------------------------------------------
-FLAG_MODE=""; FLAG_DOMAIN=""; FLAG_PROVIDER=""; FLAG_PROVIDER_URL=""; FLAG_PROVIDER_MODEL=""; FLAG_KEY_ENV=""; FLAG_LOCAL_AUTH=""
+FLAG_MODE=""; FLAG_DOMAIN=""; FLAG_PROVIDER=""; FLAG_PROVIDER_URL=""; FLAG_PROVIDER_MODEL=""; FLAG_KEY_ENV=""; FLAG_LOCAL_AUTH=""; FLAG_ARCHIVE_DB=""
 FLAG_CLEAN=0; FLAG_YES=0
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -180,13 +181,19 @@ while [ $# -gt 0 ]; do
         --provider-model)   FLAG_PROVIDER_MODEL="${2:-}"; shift 2 ;;
         --provider-key-env) FLAG_KEY_ENV="${2:-}"; shift 2 ;;
         --local-auth)       FLAG_LOCAL_AUTH="${2:-}"; shift 2 ;;
+        --archive-db)       FLAG_ARCHIVE_DB="${2:-}"; shift 2 ;;
+        --no-archive-db)    FLAG_ARCHIVE_DB="no"; shift ;;
         --clean)            FLAG_CLEAN=1; shift ;;
         --yes|-y)           FLAG_YES=1; shift ;;
         -h|--help)
-            sed -n '3,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+            sed -n '3,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) die "Unknown flag: $1 (see --help)" ;;
     esac
 done
+case "$FLAG_ARCHIVE_DB" in
+    ""|yes|YES|y|Y|no|NO|n|N) ;;
+    *) die "--archive-db must be yes or no" ;;
+esac
 
 # ---- Phase 0: clean-slate preflight -------------------------------------------
 # Rule: if ClawNex installed it, remove it; if ClawNex did not, leave it
@@ -336,25 +343,63 @@ else
         *) die "Aborted — host not clean and no consent to remove. Nothing was changed." ;;
     esac
 
-    # Archive any DB OUTSIDE the install tree (uninstall --force-clean nukes
-    # the in-tree backups/ dir, so an in-tree archive would die with it).
-    TS="$(date +%Y-%m-%d_%H-%M-%S)"
+    # Archive any DB OUTSIDE the install tree only when the operator chooses
+    # to keep one. The uninstall path is invoked with --no-archive below so
+    # Phase 0 is the single source of truth for this decision and the output
+    # never shows a second temporary in-tree backup.
+    P0_DB_ARCHIVE_CANDIDATES=()
     for dbdir in "$P0_EXISTING_DIR" "$INSTALL_DIR"; do
         [ -n "$dbdir" ] || continue
         [ -d "$dbdir" ] || continue
         for db in sentinel.db clawnex.db; do
-            if [ -f "$dbdir/$db" ]; then
-                cp "$dbdir/$db" "$HOME/clawnex-pre-install-backup-${TS}-${db}"
-                chmod 600 "$HOME/clawnex-pre-install-backup-${TS}-${db}"
-                ok "DB archived → ~/clawnex-pre-install-backup-${TS}-${db}"
-            fi
+            dbpath="$dbdir/$db"
+            [ -f "$dbpath" ] || continue
+            duplicate=0
+            for seen_dbpath in "${P0_DB_ARCHIVE_CANDIDATES[@]}"; do
+                [ "$seen_dbpath" = "$dbpath" ] && duplicate=1 && break
+            done
+            [ "$duplicate" = "1" ] && continue
+            P0_DB_ARCHIVE_CANDIDATES+=("$dbpath")
         done
     done
 
+    P0_ARCHIVE_DB="no"
+    if [ "${#P0_DB_ARCHIVE_CANDIDATES[@]}" -gt 0 ]; then
+        case "$FLAG_ARCHIVE_DB" in
+            yes|YES|y|Y) P0_ARCHIVE_DB="yes" ;;
+            no|NO|n|N) P0_ARCHIVE_DB="no" ;;
+            *)
+                if [ "$FLAG_YES" != "1" ] && _can_prompt; then
+                    P0_ARCHIVE_PICK=""
+                    _tty_read "  Archive existing database before removal? (Y/n): " P0_ARCHIVE_PICK
+                    case "${P0_ARCHIVE_PICK:-Y}" in
+                        y|Y|yes|YES) P0_ARCHIVE_DB="yes" ;;
+                        n|N|no|NO) P0_ARCHIVE_DB="no" ;;
+                        *) die "Invalid archive choice: $P0_ARCHIVE_PICK. Enter Y or n." ;;
+                    esac
+                else
+                    P0_ARCHIVE_DB="yes"
+                    info "DB archive: yes (default for automation; use --archive-db no to skip)"
+                fi
+                ;;
+        esac
+    fi
+    if [ "$P0_ARCHIVE_DB" = "yes" ]; then
+        TS="$(date +%Y-%m-%d_%H-%M-%S)"
+        for dbpath in "${P0_DB_ARCHIVE_CANDIDATES[@]}"; do
+            db="$(basename "$dbpath")"
+            cp "$dbpath" "$HOME/clawnex-pre-install-backup-${TS}-${db}"
+            chmod 600 "$HOME/clawnex-pre-install-backup-${TS}-${db}"
+            ok "DB archived → ~/clawnex-pre-install-backup-${TS}-${db}"
+        done
+    elif [ "${#P0_DB_ARCHIVE_CANDIDATES[@]}" -gt 0 ]; then
+        info "DB archive skipped by operator"
+    fi
+
     if [ "$IN_PLACE" = "1" ] && { [ -z "$P0_EXISTING_DIR" ] || [ "$P0_EXISTING_DIR" = "$INSTALL_DIR" ]; }; then
         # Installing over the same extracted tree: do NOT uninstall (it would
-        # delete the very files we're installing from). Stop services, archive
-        # any DB above, then remove runtime artifacts so failed installs cannot
+        # delete the very files we're installing from). Stop services, then
+        # remove runtime artifacts so failed installs cannot
         # poison the next run. Source dirs/scripts stay intact.
         if [ "$OS" = "linux" ] && command -v systemctl >/dev/null 2>&1; then
             sudo systemctl stop clawnex-dashboard clawnex-litellm 2>/dev/null || true
@@ -379,7 +424,7 @@ else
         # nonzero exit — older artifact mixes can fail individual steps;
         # Phase 0 success is decided by the re-scan below, not this rc.
         info "Removing prior install via uninstall.sh (--force-clean)..."
-        "$ENGINE_BASH" "$INSTALL_DIR/scripts/uninstall.sh" --force-clean "$P0_EXISTING_DIR" \
+        "$ENGINE_BASH" "$INSTALL_DIR/scripts/uninstall.sh" --force-clean --no-archive "$P0_EXISTING_DIR" \
             || warn "uninstall exited nonzero — privileged sweep + re-scan validate the end state"
     fi
 
