@@ -11,17 +11,17 @@
 #   curl -fsSL \
 #     -H "Authorization: Bearer $CLAWNEX_GITHUB_TOKEN" \
 #     -H "Accept: application/vnd.github.raw" \
-#     "https://api.github.com/repos/ClawNexAi/clawnex/contents/deploy/bootstrap-install.sh?ref=v0.15.0-alpha.3" \
+#     "https://api.github.com/repos/ClawNexAi/clawnex/contents/deploy/bootstrap-install.sh?ref=v0.15.0-alpha.4" \
 #     | bash -s -- --mode vps --domain qa.example.com --provider skip --clean --yes
 # =============================================================================
 
 set -euo pipefail
 
 REPO="${CLAWNEX_REPO:-ClawNexAi/clawnex}"
-TAG="${CLAWNEX_RELEASE_TAG:-v0.15.0-alpha.3}"
+TAG="${CLAWNEX_RELEASE_TAG:-v0.15.0-alpha.4}"
 PACKAGE_DIR="${CLAWNEX_PACKAGE_DIR:-clawnex-v0.15.0-alpha-deploy}"
-TARBALL="${CLAWNEX_TARBALL:-clawnex-v0.15.0-alpha-deploy-7ea12c2-7b5ffd84.tar.gz}"
-TARBALL_SHA256="${CLAWNEX_TARBALL_SHA256:-7b5ffd8440b57c3e8bf8e5bccdfd9f1f6d225b6bbd0d0227f5f4459b1240a0d8}"
+TARBALL="${CLAWNEX_TARBALL:-clawnex-v0.15.0-alpha-deploy-d001209-1bd7dc90.tar.gz}"
+TARBALL_SHA256="${CLAWNEX_TARBALL_SHA256:-1bd7dc90f254db27908dc369c65a074f3488010769700ea176772016285bbcf0}"
 API="${GITHUB_API_URL:-https://api.github.com}"
 INSTALL_PARENT="${CLAWNEX_INSTALL_PARENT:-$HOME}"
 TOKEN="${CLAWNEX_GITHUB_TOKEN:-${GITHUB_TOKEN:-}}"
