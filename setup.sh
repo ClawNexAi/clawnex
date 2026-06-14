@@ -669,7 +669,7 @@ echo -e "${BOLD}[6/10] Configure model provider...${NC}"
 echo ""
 echo "  How will your agents access AI models?"
 echo ""
-echo "    [1] LM Studio (local)    — local models via LM Studio"
+echo "    [1] Local model          — LM Studio or Ollama"
 echo "    [2] OpenRouter (cloud)   — pay-per-use, multiple models"
 echo "    [3] Anthropic (Claude)   — Claude models via Anthropic API"
 echo "    [4] OpenAI (GPT)         — GPT models via OpenAI API"
@@ -691,26 +691,57 @@ PROVIDER_REG_NAME=""
 PROVIDER_REG_TYPE=""
 PROVIDER_REG_BASE_URL=""
 PROVIDER_REG_API_KEY=""
+PROVIDER_REG_MODEL_ID=""
 
 case "$PROVIDER_SELECT" in
     1)
-        _tty_read "  LM Studio URL [http://localhost:1234/v1]: " LM_STUDIO_URL
-        LM_STUDIO_URL=${LM_STUDIO_URL:-http://localhost:1234/v1}
-        PROVIDER_REG_NAME="LM Studio"
-        PROVIDER_REG_TYPE="lmstudio"
-        PROVIDER_REG_BASE_URL="$LM_STUDIO_URL"
-        PROVIDER_REG_API_KEY="lm-studio"
+        echo ""
+        echo "  Local model server:"
+        echo "    [1] LM Studio — http://localhost:1234/v1"
+        echo "    [2] Ollama    — http://localhost:11434/v1"
+        _tty_read "  Select local provider (1/2) [1]: " LOCAL_PROVIDER_SELECT
+        LOCAL_PROVIDER_SELECT=${LOCAL_PROVIDER_SELECT:-1}
+        case "$LOCAL_PROVIDER_SELECT" in
+            1)
+                LOCAL_PROVIDER_NAME="LM Studio"
+                LOCAL_PROVIDER_TYPE="lmstudio"
+                LOCAL_PROVIDER_DEFAULT_URL="http://localhost:1234/v1"
+                LOCAL_PROVIDER_KEY="lm-studio"
+                ;;
+            2)
+                LOCAL_PROVIDER_NAME="Ollama"
+                LOCAL_PROVIDER_TYPE="ollama"
+                LOCAL_PROVIDER_DEFAULT_URL="http://localhost:11434/v1"
+                LOCAL_PROVIDER_KEY="ollama-local"
+                ;;
+            *)
+                echo -e "  ${YELLOW}⚠${NC} Invalid local provider — defaulting to LM Studio"
+                LOCAL_PROVIDER_NAME="LM Studio"
+                LOCAL_PROVIDER_TYPE="lmstudio"
+                LOCAL_PROVIDER_DEFAULT_URL="http://localhost:1234/v1"
+                LOCAL_PROVIDER_KEY="lm-studio"
+                ;;
+        esac
+        _tty_read "  ${LOCAL_PROVIDER_NAME} URL [${LOCAL_PROVIDER_DEFAULT_URL}]: " LOCAL_PROVIDER_URL
+        LOCAL_PROVIDER_URL=${LOCAL_PROVIDER_URL:-$LOCAL_PROVIDER_DEFAULT_URL}
+        _tty_read "  Local model name [local-model]: " LOCAL_MODEL_NAME
+        LOCAL_MODEL_NAME=${LOCAL_MODEL_NAME:-local-model}
+        PROVIDER_REG_NAME="$LOCAL_PROVIDER_NAME"
+        PROVIDER_REG_TYPE="$LOCAL_PROVIDER_TYPE"
+        PROVIDER_REG_BASE_URL="$LOCAL_PROVIDER_URL"
+        PROVIDER_REG_API_KEY="$LOCAL_PROVIDER_KEY"
+        PROVIDER_REG_MODEL_ID="$LOCAL_MODEL_NAME"
         cat > "$LITELLM_CONFIG_FILE" << EOF
 # ClawNex v${CLAWNEX_VERSION} — LiteLLM Configuration
-# Provider: LM Studio (local)
+# Provider: ${LOCAL_PROVIDER_NAME} (local)
 # Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 model_list:
-  - model_name: "local-model"
+  - model_name: "${LOCAL_MODEL_NAME}"
     litellm_params:
-      model: "openai/local-model"
-      api_base: "${LM_STUDIO_URL}"
-      api_key: "lm-studio"
+      model: "openai/${LOCAL_MODEL_NAME}"
+      api_base: "${LOCAL_PROVIDER_URL}"
+      api_key: "${LOCAL_PROVIDER_KEY}"
 
 litellm_settings:
   callbacks: ["clawnex_logger.ClawNexLogger"]
@@ -718,7 +749,7 @@ litellm_settings:
   request_timeout: 120
 EOF
         chmod 600 "$LITELLM_CONFIG_FILE" 2>/dev/null || true
-        echo -e "  ${GREEN}✓${NC} LiteLLM configured for LM Studio at ${LM_STUDIO_URL}"
+        echo -e "  ${GREEN}✓${NC} LiteLLM configured for ${LOCAL_PROVIDER_NAME} at ${LOCAL_PROVIDER_URL}"
         LITELLM_HAS_VALID_CONFIG=true
         ;;
     2)
@@ -1506,6 +1537,7 @@ if [ -n "$PROVIDER_REG_NAME" ] && [ -f "$INSTALL_DIR/clawnex.db" -o -f "$INSTALL
         PROVIDER_TYPE="$PROVIDER_REG_TYPE" \
         PROVIDER_BASE_URL="$PROVIDER_REG_BASE_URL" \
         PROVIDER_API_KEY="$PROVIDER_REG_API_KEY" \
+        PROVIDER_MODEL_ID="$PROVIDER_REG_MODEL_ID" \
         node "$INSTALL_DIR/scripts/register-provider.cjs" || \
             echo -e "  ${YELLOW}⚠${NC} Provider registration failed — add manually via Configuration → Model Providers"
     fi

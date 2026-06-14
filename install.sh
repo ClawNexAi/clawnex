@@ -10,7 +10,8 @@
 # Interactive: bash install.sh
 # Non-interactive (QA/CI):
 #   bash install.sh --mode vps|mac-local|mac-server --domain X \
-#        --provider openrouter|openai|anthropic|skip [--provider-key-env VAR] \
+#        --provider lmstudio|ollama|openrouter|anthropic|openai|skip \
+#        [--provider-url URL] [--provider-model MODEL] [--provider-key-env VAR] \
 #        [--local-auth rbac|off] [--clean] [--yes]
 #
 # Phase 0 detects prior ClawNex artifacts and — only with consent
@@ -168,13 +169,15 @@ INSTALL_DIR="$(pwd)"
 ENGINE_BASH="${BASH:-bash}"
 
 # ---- Flags -------------------------------------------------------------------
-FLAG_MODE=""; FLAG_DOMAIN=""; FLAG_PROVIDER=""; FLAG_KEY_ENV=""; FLAG_LOCAL_AUTH=""
+FLAG_MODE=""; FLAG_DOMAIN=""; FLAG_PROVIDER=""; FLAG_PROVIDER_URL=""; FLAG_PROVIDER_MODEL=""; FLAG_KEY_ENV=""; FLAG_LOCAL_AUTH=""
 FLAG_CLEAN=0; FLAG_YES=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --mode)             FLAG_MODE="${2:-}"; shift 2 ;;
         --domain)           FLAG_DOMAIN="${2:-}"; shift 2 ;;
         --provider)         FLAG_PROVIDER="${2:-}"; shift 2 ;;
+        --provider-url)     FLAG_PROVIDER_URL="${2:-}"; shift 2 ;;
+        --provider-model)   FLAG_PROVIDER_MODEL="${2:-}"; shift 2 ;;
         --provider-key-env) FLAG_KEY_ENV="${2:-}"; shift 2 ;;
         --local-auth)       FLAG_LOCAL_AUTH="${2:-}"; shift 2 ;;
         --clean)            FLAG_CLEAN=1; shift ;;
@@ -516,15 +519,43 @@ fi
 [ -n "$DOMAIN" ] || die "Domain is required"
 ok "Domain: $DOMAIN"
 
-PROVIDER_SELECT=4; PROVIDER_KEY=""
+PROVIDER_SELECT=5
+PROVIDER_KEY=""
+LOCAL_PROVIDER_SELECT=""
+LOCAL_PROVIDER_LABEL=""
+LOCAL_PROVIDER_TYPE=""
+LOCAL_PROVIDER_URL=""
+LOCAL_PROVIDER_MODEL=""
+LOCAL_PROVIDER_KEY=""
 if [ -n "$FLAG_PROVIDER" ]; then
     case "$FLAG_PROVIDER" in
-        openrouter) PROVIDER_SELECT=1 ;;
-        openai)     PROVIDER_SELECT=2 ;;
+        lmstudio|lm-studio|local)
+            PROVIDER_SELECT=1
+            LOCAL_PROVIDER_SELECT=1
+            LOCAL_PROVIDER_LABEL="LM Studio"
+            LOCAL_PROVIDER_TYPE="lmstudio"
+            LOCAL_PROVIDER_URL="${FLAG_PROVIDER_URL:-http://localhost:1234/v1}"
+            LOCAL_PROVIDER_MODEL="${FLAG_PROVIDER_MODEL:-local-model}"
+            LOCAL_PROVIDER_KEY="lm-studio"
+            ;;
+        ollama)
+            PROVIDER_SELECT=1
+            LOCAL_PROVIDER_SELECT=2
+            LOCAL_PROVIDER_LABEL="Ollama"
+            LOCAL_PROVIDER_TYPE="ollama"
+            LOCAL_PROVIDER_URL="${FLAG_PROVIDER_URL:-http://localhost:11434/v1}"
+            LOCAL_PROVIDER_MODEL="${FLAG_PROVIDER_MODEL:-local-model}"
+            LOCAL_PROVIDER_KEY="ollama-local"
+            ;;
+        openrouter) PROVIDER_SELECT=2 ;;
         anthropic)  PROVIDER_SELECT=3 ;;
-        skip)       PROVIDER_SELECT=4 ;;
-        *) die "--provider must be openrouter|openai|anthropic|skip" ;;
+        openai)     PROVIDER_SELECT=4 ;;
+        skip)       PROVIDER_SELECT=5 ;;
+        *) die "--provider must be lmstudio|ollama|openrouter|anthropic|openai|skip" ;;
     esac
+    if [ -n "$FLAG_KEY_ENV" ] && [ "$PROVIDER_SELECT" = "1" ]; then
+        die "--provider-key-env only applies to cloud providers"
+    fi
     if [ -n "$FLAG_KEY_ENV" ]; then
         # Indirect expansion only after validating the name — never eval
         # operator-supplied strings (same class as the CX-G6 domain guard).
@@ -537,20 +568,54 @@ if [ -n "$FLAG_PROVIDER" ]; then
 else
     echo ""
     echo "  AI Provider (changeable later via the dashboard):"
-    echo "    [1] OpenRouter  [2] OpenAI  [3] Anthropic  [4] Skip"
-    _tty_read "  Select (1/2/3/4) [4]: " PROVIDER_SELECT
-    PROVIDER_SELECT="${PROVIDER_SELECT:-4}"
+    echo "    [1] Local model (LM Studio/Ollama)"
+    echo "    [2] OpenRouter"
+    echo "    [3] Anthropic (Claude)"
+    echo "    [4] OpenAI (GPT)"
+    echo "    [5] Skip"
+    _tty_read "  Select (1/2/3/4/5) [5]: " PROVIDER_SELECT
+    PROVIDER_SELECT="${PROVIDER_SELECT:-5}"
     case "$PROVIDER_SELECT" in
-        1) _tty_read "  OpenRouter API key (sk-or-v1-...): " PROVIDER_KEY ;;
-        2) _tty_read "  OpenAI API key (sk-...): " PROVIDER_KEY ;;
+        1)
+            echo ""
+            echo "  Local model server:"
+            echo "    [1] LM Studio — http://localhost:1234/v1"
+            echo "    [2] Ollama    — http://localhost:11434/v1"
+            _tty_read "  Select local provider (1/2) [1]: " LOCAL_PROVIDER_SELECT
+            LOCAL_PROVIDER_SELECT="${LOCAL_PROVIDER_SELECT:-1}"
+            case "$LOCAL_PROVIDER_SELECT" in
+                1)
+                    LOCAL_PROVIDER_LABEL="LM Studio"
+                    LOCAL_PROVIDER_TYPE="lmstudio"
+                    LOCAL_PROVIDER_URL="${FLAG_PROVIDER_URL:-http://localhost:1234/v1}"
+                    LOCAL_PROVIDER_KEY="lm-studio"
+                    ;;
+                2)
+                    LOCAL_PROVIDER_LABEL="Ollama"
+                    LOCAL_PROVIDER_TYPE="ollama"
+                    LOCAL_PROVIDER_URL="${FLAG_PROVIDER_URL:-http://localhost:11434/v1}"
+                    LOCAL_PROVIDER_KEY="ollama-local"
+                    ;;
+                *) die "Invalid local provider: $LOCAL_PROVIDER_SELECT. Enter 1 or 2." ;;
+            esac
+            LOCAL_URL_IN="$LOCAL_PROVIDER_URL"
+            _tty_read "  ${LOCAL_PROVIDER_LABEL} URL [${LOCAL_PROVIDER_URL}]: " LOCAL_URL_IN
+            LOCAL_PROVIDER_URL="${LOCAL_URL_IN:-$LOCAL_PROVIDER_URL}"
+            LOCAL_MODEL_IN="${FLAG_PROVIDER_MODEL:-local-model}"
+            _tty_read "  Local model name [${LOCAL_MODEL_IN}]: " LOCAL_MODEL_IN
+            LOCAL_PROVIDER_MODEL="${LOCAL_MODEL_IN:-local-model}"
+            ;;
+        2) _tty_read "  OpenRouter API key (sk-or-v1-...): " PROVIDER_KEY ;;
         3) _tty_read "  Anthropic API key (sk-ant-...): " PROVIDER_KEY ;;
-        *) PROVIDER_SELECT=4; PROVIDER_KEY="" ;;
+        4) _tty_read "  OpenAI API key (sk-...): " PROVIDER_KEY ;;
+        *) PROVIDER_SELECT=5; PROVIDER_KEY="" ;;
     esac
 fi
 case "$PROVIDER_SELECT" in
-    1) PROVIDER_LABEL="OpenRouter" ;;
-    2) PROVIDER_LABEL="OpenAI" ;;
+    1) PROVIDER_LABEL="${LOCAL_PROVIDER_LABEL:-Local model}" ;;
+    2) PROVIDER_LABEL="OpenRouter" ;;
     3) PROVIDER_LABEL="Anthropic" ;;
+    4) PROVIDER_LABEL="OpenAI" ;;
     *) PROVIDER_LABEL="Skipped" ;;
 esac
 ok "Provider: $PROVIDER_LABEL"
@@ -568,20 +633,18 @@ fi
 echo ""
 echo -e "${BOLD}[3/5] Engine (setup.sh)${NC}"
 
-# install.sh menu → setup.sh provider menu mapping
-# (setup: 1 LM Studio · 2 OpenRouter · 3 Anthropic · 4 OpenAI · 5 Skip)
-case "$PROVIDER_SELECT" in
-    1) SETUP_PROVIDER=2 ;;
-    2) SETUP_PROVIDER=4 ;;
-    3) SETUP_PROVIDER=3 ;;
-    *) SETUP_PROVIDER=5 ;;
-esac
+# install.sh and setup.sh intentionally use the same provider numbering:
+# 1 Local model · 2 OpenRouter · 3 Anthropic · 4 OpenAI · 5 Skip.
+SETUP_PROVIDER="$PROVIDER_SELECT"
 
 export CLAWNEX_PRESEEDED=1 CLAWNEX_NO_START=1
 export CLAWNEX_ANSWER_CONFIRM_OC="yes"
 export CLAWNEX_ANSWER_MODE_SELECT="2"
 export CLAWNEX_ANSWER_PROVIDER_SELECT="$SETUP_PROVIDER"
 export CLAWNEX_ANSWER_API_KEY="$PROVIDER_KEY"
+export CLAWNEX_ANSWER_LOCAL_PROVIDER_SELECT="$LOCAL_PROVIDER_SELECT"
+export CLAWNEX_ANSWER_LOCAL_PROVIDER_URL="$LOCAL_PROVIDER_URL"
+export CLAWNEX_ANSWER_LOCAL_MODEL_NAME="$LOCAL_PROVIDER_MODEL"
 export CLAWNEX_ANSWER_ROUTE_OPENCLAW="yes"
 export CLAWNEX_ANSWER_ENABLE_WATCHER="yes"
 export CLAWNEX_ANSWER_ENABLE_WATCHDOG="no"     # systemd/launchd own restarts
@@ -658,12 +721,27 @@ fi
 
 # Deferred engine steps that need a RUNNING dashboard (setup.sh skipped them
 # under --no-start): provider DB registration + CVE sync.
-if [ "$PROVIDER_SELECT" != "4" ] && [ -n "$PROVIDER_KEY" ] && [ -f scripts/register-provider.cjs ]; then
+if [ "$PROVIDER_SELECT" != "5" ] && [ -f scripts/register-provider.cjs ]; then
+    REG_NAME=""
+    REG_TYPE=""
+    REG_BASE=""
+    REG_KEY="$PROVIDER_KEY"
+    REG_MODEL=""
     case "$PROVIDER_SELECT" in
-        1) REG_NAME="OpenRouter"; REG_TYPE="openrouter"; REG_BASE="https://openrouter.ai/api/v1" ;;
-        2) REG_NAME="OpenAI";     REG_TYPE="openai";     REG_BASE="https://api.openai.com/v1" ;;
+        1)
+            REG_NAME="${LOCAL_PROVIDER_LABEL:-Local model}"
+            REG_TYPE="${LOCAL_PROVIDER_TYPE:-lmstudio}"
+            REG_BASE="${LOCAL_PROVIDER_URL:-http://localhost:1234/v1}"
+            REG_KEY="${LOCAL_PROVIDER_KEY:-local-model}"
+            REG_MODEL="${LOCAL_PROVIDER_MODEL:-local-model}"
+            ;;
+        2) REG_NAME="OpenRouter"; REG_TYPE="openrouter"; REG_BASE="https://openrouter.ai/api/v1" ;;
         3) REG_NAME="Anthropic";  REG_TYPE="anthropic";  REG_BASE="https://api.anthropic.com" ;;
+        4) REG_NAME="OpenAI";     REG_TYPE="openai";     REG_BASE="https://api.openai.com/v1" ;;
     esac
+    if [ "$PROVIDER_SELECT" != "1" ] && [ -z "$REG_KEY" ]; then
+        warn "Provider registration skipped — no API key captured"
+    else
     # /api/health doesn't touch the DB; poke a DB-backed route so the lazy
     # schema initializes, then retry registration (first Crucible pass hit
     # "database not found" because nothing had opened the DB yet).
@@ -673,7 +751,8 @@ if [ "$PROVIDER_SELECT" != "4" ] && [ -n "$PROVIDER_KEY" ] && [ -f scripts/regis
     for i in 1 2 3 4 5; do
         if DATABASE_PATH="$INSTALL_DIR/clawnex.db" \
            PROVIDER_NAME="$REG_NAME" PROVIDER_TYPE="$REG_TYPE" \
-           PROVIDER_BASE_URL="$REG_BASE" PROVIDER_API_KEY="$PROVIDER_KEY" \
+           PROVIDER_BASE_URL="$REG_BASE" PROVIDER_API_KEY="$REG_KEY" \
+           PROVIDER_MODEL_ID="$REG_MODEL" \
            node scripts/register-provider.cjs 2>/dev/null; then
             REG_DONE=1; ok "${REG_NAME} registered"; break
         fi
@@ -681,6 +760,7 @@ if [ "$PROVIDER_SELECT" != "4" ] && [ -n "$PROVIDER_KEY" ] && [ -f scripts/regis
         curl -s -m 8 "http://127.0.0.1:5001/api/fleet" >/dev/null 2>&1 || true
     done
     [ "$REG_DONE" = "1" ] || warn "Provider registration failed — add manually via Configuration → Model Providers"
+    fi
 fi
 info "Syncing CVE database (best-effort)..."
 CVE_RESULT="$(curl -s -m 30 -X POST "http://127.0.0.1:5001/api/cve/sync" 2>/dev/null || true)"

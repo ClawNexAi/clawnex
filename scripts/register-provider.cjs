@@ -14,6 +14,7 @@
  *   PROVIDER_TYPE=openrouter \
  *   PROVIDER_BASE_URL=https://openrouter.ai/api/v1 \
  *   PROVIDER_API_KEY=sk-or-... \
+ *   PROVIDER_MODEL_ID=openrouter/auto \
  *   node scripts/register-provider.cjs
  *
  * Mirrors src/lib/services/config-service.ts addProvider():
@@ -41,6 +42,7 @@ const name = process.env.PROVIDER_NAME;
 const type = process.env.PROVIDER_TYPE;
 const baseUrl = process.env.PROVIDER_BASE_URL;
 const apiKey = process.env.PROVIDER_API_KEY || "";
+const modelId = (process.env.PROVIDER_MODEL_ID || "").trim();
 
 if (!name || !type || !baseUrl) {
     console.error("register-provider: missing required env (PROVIDER_NAME, PROVIDER_TYPE, PROVIDER_BASE_URL)");
@@ -115,6 +117,12 @@ try {
                 /* ignore individual seed failures */
             }
         }
+    }
+    if (modelId) {
+        db.prepare(
+            `INSERT OR IGNORE INTO config_models (id, provider_id, model_id, name, is_default, context_window)
+             VALUES (?, ?, ?, ?, 1, 128000)`,
+        ).run(`${id}::${modelId}`, id, modelId, modelId);
     }
 
     console.log(`  ✓ Registered ${name} (${type}) — id ${id}`);
