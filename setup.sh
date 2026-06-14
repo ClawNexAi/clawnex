@@ -669,10 +669,10 @@ echo -e "${BOLD}[6/10] Configure model provider...${NC}"
 echo ""
 echo "  How will your agents access AI models?"
 echo ""
-echo "    [1] Local model          — LM Studio or Ollama"
-echo "    [2] OpenRouter (cloud)   — pay-per-use, multiple models"
-echo "    [3] Anthropic (Claude)   — Claude models via Anthropic API"
-echo "    [4] OpenAI (GPT)         — GPT models via OpenAI API"
+echo "    [1] OpenRouter (cloud)   — pay-per-use, multiple models"
+echo "    [2] Anthropic (Claude)   — Claude models via Anthropic API"
+echo "    [3] OpenAI (GPT)         — GPT models via OpenAI API"
+echo "    [4] NVIDIA NIM           — NVIDIA-hosted models via NIM API"
 echo "    [5] Skip                 — configure later via dashboard"
 echo ""
 _tty_read "  Select (1/2/3/4/5) [5]: " PROVIDER_SELECT
@@ -692,67 +692,11 @@ PROVIDER_REG_TYPE=""
 PROVIDER_REG_BASE_URL=""
 PROVIDER_REG_API_KEY=""
 PROVIDER_REG_MODEL_ID=""
+NVIDIA_DEFAULT_MODEL="nvidia/llama-3.3-nemotron-super-49b-v1"
+NVIDIA_DEFAULT_BASE_URL="https://integrate.api.nvidia.com/v1"
 
 case "$PROVIDER_SELECT" in
     1)
-        echo ""
-        echo "  Local model server:"
-        echo "    [1] LM Studio — http://localhost:1234/v1"
-        echo "    [2] Ollama    — http://localhost:11434/v1"
-        _tty_read "  Select local provider (1/2) [1]: " LOCAL_PROVIDER_SELECT
-        LOCAL_PROVIDER_SELECT=${LOCAL_PROVIDER_SELECT:-1}
-        case "$LOCAL_PROVIDER_SELECT" in
-            1)
-                LOCAL_PROVIDER_NAME="LM Studio"
-                LOCAL_PROVIDER_TYPE="lmstudio"
-                LOCAL_PROVIDER_DEFAULT_URL="http://localhost:1234/v1"
-                LOCAL_PROVIDER_KEY="lm-studio"
-                ;;
-            2)
-                LOCAL_PROVIDER_NAME="Ollama"
-                LOCAL_PROVIDER_TYPE="ollama"
-                LOCAL_PROVIDER_DEFAULT_URL="http://localhost:11434/v1"
-                LOCAL_PROVIDER_KEY="ollama-local"
-                ;;
-            *)
-                echo -e "  ${YELLOW}⚠${NC} Invalid local provider — defaulting to LM Studio"
-                LOCAL_PROVIDER_NAME="LM Studio"
-                LOCAL_PROVIDER_TYPE="lmstudio"
-                LOCAL_PROVIDER_DEFAULT_URL="http://localhost:1234/v1"
-                LOCAL_PROVIDER_KEY="lm-studio"
-                ;;
-        esac
-        _tty_read "  ${LOCAL_PROVIDER_NAME} URL [${LOCAL_PROVIDER_DEFAULT_URL}]: " LOCAL_PROVIDER_URL
-        LOCAL_PROVIDER_URL=${LOCAL_PROVIDER_URL:-$LOCAL_PROVIDER_DEFAULT_URL}
-        _tty_read "  Local model name [local-model]: " LOCAL_MODEL_NAME
-        LOCAL_MODEL_NAME=${LOCAL_MODEL_NAME:-local-model}
-        PROVIDER_REG_NAME="$LOCAL_PROVIDER_NAME"
-        PROVIDER_REG_TYPE="$LOCAL_PROVIDER_TYPE"
-        PROVIDER_REG_BASE_URL="$LOCAL_PROVIDER_URL"
-        PROVIDER_REG_API_KEY="$LOCAL_PROVIDER_KEY"
-        PROVIDER_REG_MODEL_ID="$LOCAL_MODEL_NAME"
-        cat > "$LITELLM_CONFIG_FILE" << EOF
-# ClawNex v${CLAWNEX_VERSION} — LiteLLM Configuration
-# Provider: ${LOCAL_PROVIDER_NAME} (local)
-# Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-model_list:
-  - model_name: "${LOCAL_MODEL_NAME}"
-    litellm_params:
-      model: "openai/${LOCAL_MODEL_NAME}"
-      api_base: "${LOCAL_PROVIDER_URL}"
-      api_key: "${LOCAL_PROVIDER_KEY}"
-
-litellm_settings:
-  callbacks: ["clawnex_logger.ClawNexLogger"]
-  drop_params: true
-  request_timeout: 120
-EOF
-        chmod 600 "$LITELLM_CONFIG_FILE" 2>/dev/null || true
-        echo -e "  ${GREEN}✓${NC} LiteLLM configured for ${LOCAL_PROVIDER_NAME} at ${LOCAL_PROVIDER_URL}"
-        LITELLM_HAS_VALID_CONFIG=true
-        ;;
-    2)
         read_api_key OPENROUTER_KEY "OpenRouter" || true
         if [ -n "$OPENROUTER_KEY" ]; then
             PROVIDER_REG_NAME="OpenRouter"
@@ -782,7 +726,7 @@ EOF
             echo -e "  ${YELLOW}⚠${NC} No API key provided — skipping LiteLLM configuration"
         fi
         ;;
-    3)
+    2)
         read_api_key ANTHROPIC_KEY "Anthropic" || true
         if [ -n "$ANTHROPIC_KEY" ]; then
             PROVIDER_REG_NAME="Anthropic"
@@ -812,7 +756,7 @@ EOF
             echo -e "  ${YELLOW}⚠${NC} No API key provided — skipping LiteLLM configuration"
         fi
         ;;
-    4)
+    3)
         read_api_key OPENAI_KEY "OpenAI" || true
         if [ -n "$OPENAI_KEY" ]; then
             PROVIDER_REG_NAME="OpenAI"
@@ -837,6 +781,44 @@ litellm_settings:
 EOF
             chmod 600 "$LITELLM_CONFIG_FILE" 2>/dev/null || true
             echo -e "  ${GREEN}✓${NC} LiteLLM configured for OpenAI (GPT)"
+            LITELLM_HAS_VALID_CONFIG=true
+        else
+            echo -e "  ${YELLOW}⚠${NC} No API key provided — skipping LiteLLM configuration"
+        fi
+        ;;
+    4)
+        echo ""
+        echo "  Get an NVIDIA API key: https://build.nvidia.com/models"
+        read_api_key NVIDIA_KEY "NVIDIA NIM" || true
+        if [ -n "$NVIDIA_KEY" ]; then
+            _tty_read "  NVIDIA model [${NVIDIA_DEFAULT_MODEL}]: " NVIDIA_MODEL
+            NVIDIA_MODEL=${NVIDIA_MODEL:-$NVIDIA_DEFAULT_MODEL}
+            _tty_read "  NVIDIA API base [${NVIDIA_DEFAULT_BASE_URL}]: " NVIDIA_BASE_URL
+            NVIDIA_BASE_URL=${NVIDIA_BASE_URL:-$NVIDIA_DEFAULT_BASE_URL}
+            PROVIDER_REG_NAME="NVIDIA NIM"
+            PROVIDER_REG_TYPE="nvidia-nim"
+            PROVIDER_REG_BASE_URL="$NVIDIA_BASE_URL"
+            PROVIDER_REG_API_KEY="$NVIDIA_KEY"
+            PROVIDER_REG_MODEL_ID="$NVIDIA_MODEL"
+            cat > "$LITELLM_CONFIG_FILE" << EOF
+# ClawNex v${CLAWNEX_VERSION} — LiteLLM Configuration
+# Provider: NVIDIA NIM
+# Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+model_list:
+  - model_name: "${NVIDIA_MODEL}"
+    litellm_params:
+      model: "nvidia_nim/${NVIDIA_MODEL}"
+      api_base: "${NVIDIA_BASE_URL}"
+      api_key: "${NVIDIA_KEY}"
+
+litellm_settings:
+  callbacks: ["clawnex_logger.ClawNexLogger"]
+  drop_params: true
+  request_timeout: 120
+EOF
+            chmod 600 "$LITELLM_CONFIG_FILE" 2>/dev/null || true
+            echo -e "  ${GREEN}✓${NC} LiteLLM configured for NVIDIA NIM (${NVIDIA_MODEL})"
             LITELLM_HAS_VALID_CONFIG=true
         else
             echo -e "  ${YELLOW}⚠${NC} No API key provided — skipping LiteLLM configuration"

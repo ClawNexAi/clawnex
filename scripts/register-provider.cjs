@@ -19,7 +19,7 @@
  *
  * Mirrors src/lib/services/config-service.ts addProvider():
  *   - same INSERT shape (id, name, type, base_url, api_key, is_default=0, is_active=1)
- *   - same SEED_MODELS for openrouter/anthropic/openai
+ *   - same SEED_MODELS for openrouter/anthropic/openai/nvidia-nim
  * If the provider already exists (by type+name), this is a no-op so the
  * script is idempotent across re-runs.
  */
@@ -77,6 +77,9 @@ const SEED_MODELS = {
         { model_id: "gpt-4o", name: "GPT-4o" },
         { model_id: "gpt-4o-mini", name: "GPT-4o Mini" },
         { model_id: "o3-mini", name: "o3-mini" },
+    ],
+    "nvidia-nim": [
+        { model_id: "nvidia/llama-3.3-nemotron-super-49b-v1", name: "Llama 3.3 Nemotron Super 49B" },
     ],
 };
 

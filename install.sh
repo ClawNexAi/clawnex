@@ -10,7 +10,7 @@
 # Interactive: bash install.sh
 # Non-interactive (QA/CI):
 #   bash install.sh --mode vps|mac-local|mac-server --domain X \
-#        --provider lmstudio|ollama|openrouter|anthropic|openai|skip \
+#        --provider openrouter|anthropic|openai|nvidia|skip \
 #        [--provider-url URL] [--provider-model MODEL] [--provider-key-env VAR] \
 #        [--local-auth rbac|off] [--clean] [--yes]
 #
@@ -521,40 +521,24 @@ ok "Domain: $DOMAIN"
 
 PROVIDER_SELECT=5
 PROVIDER_KEY=""
-LOCAL_PROVIDER_SELECT=""
-LOCAL_PROVIDER_LABEL=""
-LOCAL_PROVIDER_TYPE=""
-LOCAL_PROVIDER_URL=""
-LOCAL_PROVIDER_MODEL=""
-LOCAL_PROVIDER_KEY=""
+NVIDIA_DEFAULT_MODEL="nvidia/llama-3.3-nemotron-super-49b-v1"
+NVIDIA_DEFAULT_BASE_URL="https://integrate.api.nvidia.com/v1"
+NVIDIA_MODEL="${FLAG_PROVIDER_MODEL:-$NVIDIA_DEFAULT_MODEL}"
+NVIDIA_BASE_URL="${FLAG_PROVIDER_URL:-$NVIDIA_DEFAULT_BASE_URL}"
 if [ -n "$FLAG_PROVIDER" ]; then
     case "$FLAG_PROVIDER" in
-        lmstudio|lm-studio|local)
-            PROVIDER_SELECT=1
-            LOCAL_PROVIDER_SELECT=1
-            LOCAL_PROVIDER_LABEL="LM Studio"
-            LOCAL_PROVIDER_TYPE="lmstudio"
-            LOCAL_PROVIDER_URL="${FLAG_PROVIDER_URL:-http://localhost:1234/v1}"
-            LOCAL_PROVIDER_MODEL="${FLAG_PROVIDER_MODEL:-local-model}"
-            LOCAL_PROVIDER_KEY="lm-studio"
-            ;;
-        ollama)
-            PROVIDER_SELECT=1
-            LOCAL_PROVIDER_SELECT=2
-            LOCAL_PROVIDER_LABEL="Ollama"
-            LOCAL_PROVIDER_TYPE="ollama"
-            LOCAL_PROVIDER_URL="${FLAG_PROVIDER_URL:-http://localhost:11434/v1}"
-            LOCAL_PROVIDER_MODEL="${FLAG_PROVIDER_MODEL:-local-model}"
-            LOCAL_PROVIDER_KEY="ollama-local"
-            ;;
-        openrouter) PROVIDER_SELECT=2 ;;
-        anthropic)  PROVIDER_SELECT=3 ;;
-        openai)     PROVIDER_SELECT=4 ;;
+        openrouter)          PROVIDER_SELECT=1 ;;
+        anthropic)           PROVIDER_SELECT=2 ;;
+        openai)              PROVIDER_SELECT=3 ;;
+        nvidia|nvidia-nim|nim) PROVIDER_SELECT=4 ;;
         skip)       PROVIDER_SELECT=5 ;;
-        *) die "--provider must be lmstudio|ollama|openrouter|anthropic|openai|skip" ;;
+        *) die "--provider must be openrouter|anthropic|openai|nvidia|skip" ;;
     esac
-    if [ -n "$FLAG_KEY_ENV" ] && [ "$PROVIDER_SELECT" = "1" ]; then
-        die "--provider-key-env only applies to cloud providers"
+    if [ -n "$FLAG_PROVIDER_URL" ] && [ "$PROVIDER_SELECT" != "4" ]; then
+        die "--provider-url currently applies only to --provider nvidia"
+    fi
+    if [ -n "$FLAG_PROVIDER_MODEL" ] && [ "$PROVIDER_SELECT" != "4" ]; then
+        die "--provider-model currently applies only to --provider nvidia"
     fi
     if [ -n "$FLAG_KEY_ENV" ]; then
         # Indirect expansion only after validating the name — never eval
@@ -568,54 +552,34 @@ if [ -n "$FLAG_PROVIDER" ]; then
 else
     echo ""
     echo "  AI Provider (changeable later via the dashboard):"
-    echo "    [1] Local model (LM Studio/Ollama)"
-    echo "    [2] OpenRouter"
-    echo "    [3] Anthropic (Claude)"
-    echo "    [4] OpenAI (GPT)"
+    echo "    [1] OpenRouter"
+    echo "    [2] Anthropic (Claude)"
+    echo "    [3] OpenAI (GPT)"
+    echo "    [4] NVIDIA NIM"
     echo "    [5] Skip"
     _tty_read "  Select (1/2/3/4/5) [5]: " PROVIDER_SELECT
     PROVIDER_SELECT="${PROVIDER_SELECT:-5}"
     case "$PROVIDER_SELECT" in
-        1)
+        1) _tty_read "  OpenRouter API key (sk-or-v1-...): " PROVIDER_KEY ;;
+        2) _tty_read "  Anthropic API key (sk-ant-...): " PROVIDER_KEY ;;
+        3) _tty_read "  OpenAI API key (sk-...): " PROVIDER_KEY ;;
+        4)
             echo ""
-            echo "  Local model server:"
-            echo "    [1] LM Studio — http://localhost:1234/v1"
-            echo "    [2] Ollama    — http://localhost:11434/v1"
-            _tty_read "  Select local provider (1/2) [1]: " LOCAL_PROVIDER_SELECT
-            LOCAL_PROVIDER_SELECT="${LOCAL_PROVIDER_SELECT:-1}"
-            case "$LOCAL_PROVIDER_SELECT" in
-                1)
-                    LOCAL_PROVIDER_LABEL="LM Studio"
-                    LOCAL_PROVIDER_TYPE="lmstudio"
-                    LOCAL_PROVIDER_URL="${FLAG_PROVIDER_URL:-http://localhost:1234/v1}"
-                    LOCAL_PROVIDER_KEY="lm-studio"
-                    ;;
-                2)
-                    LOCAL_PROVIDER_LABEL="Ollama"
-                    LOCAL_PROVIDER_TYPE="ollama"
-                    LOCAL_PROVIDER_URL="${FLAG_PROVIDER_URL:-http://localhost:11434/v1}"
-                    LOCAL_PROVIDER_KEY="ollama-local"
-                    ;;
-                *) die "Invalid local provider: $LOCAL_PROVIDER_SELECT. Enter 1 or 2." ;;
-            esac
-            LOCAL_URL_IN="$LOCAL_PROVIDER_URL"
-            _tty_read "  ${LOCAL_PROVIDER_LABEL} URL [${LOCAL_PROVIDER_URL}]: " LOCAL_URL_IN
-            LOCAL_PROVIDER_URL="${LOCAL_URL_IN:-$LOCAL_PROVIDER_URL}"
-            LOCAL_MODEL_IN="${FLAG_PROVIDER_MODEL:-local-model}"
-            _tty_read "  Local model name [${LOCAL_MODEL_IN}]: " LOCAL_MODEL_IN
-            LOCAL_PROVIDER_MODEL="${LOCAL_MODEL_IN:-local-model}"
+            echo "  Get an NVIDIA API key: https://build.nvidia.com/models"
+            _tty_read "  NVIDIA API key: " PROVIDER_KEY
+            _tty_read "  NVIDIA model [${NVIDIA_MODEL}]: " NVIDIA_MODEL_IN
+            NVIDIA_MODEL="${NVIDIA_MODEL_IN:-$NVIDIA_MODEL}"
+            _tty_read "  NVIDIA API base [${NVIDIA_BASE_URL}]: " NVIDIA_BASE_URL_IN
+            NVIDIA_BASE_URL="${NVIDIA_BASE_URL_IN:-$NVIDIA_BASE_URL}"
             ;;
-        2) _tty_read "  OpenRouter API key (sk-or-v1-...): " PROVIDER_KEY ;;
-        3) _tty_read "  Anthropic API key (sk-ant-...): " PROVIDER_KEY ;;
-        4) _tty_read "  OpenAI API key (sk-...): " PROVIDER_KEY ;;
         *) PROVIDER_SELECT=5; PROVIDER_KEY="" ;;
     esac
 fi
 case "$PROVIDER_SELECT" in
-    1) PROVIDER_LABEL="${LOCAL_PROVIDER_LABEL:-Local model}" ;;
-    2) PROVIDER_LABEL="OpenRouter" ;;
-    3) PROVIDER_LABEL="Anthropic" ;;
-    4) PROVIDER_LABEL="OpenAI" ;;
+    1) PROVIDER_LABEL="OpenRouter" ;;
+    2) PROVIDER_LABEL="Anthropic" ;;
+    3) PROVIDER_LABEL="OpenAI" ;;
+    4) PROVIDER_LABEL="NVIDIA NIM" ;;
     *) PROVIDER_LABEL="Skipped" ;;
 esac
 ok "Provider: $PROVIDER_LABEL"
@@ -634,7 +598,7 @@ echo ""
 echo -e "${BOLD}[3/5] Engine (setup.sh)${NC}"
 
 # install.sh and setup.sh intentionally use the same provider numbering:
-# 1 Local model · 2 OpenRouter · 3 Anthropic · 4 OpenAI · 5 Skip.
+# 1 OpenRouter · 2 Anthropic · 3 OpenAI · 4 NVIDIA NIM · 5 Skip.
 SETUP_PROVIDER="$PROVIDER_SELECT"
 
 export CLAWNEX_PRESEEDED=1 CLAWNEX_NO_START=1
@@ -642,9 +606,8 @@ export CLAWNEX_ANSWER_CONFIRM_OC="yes"
 export CLAWNEX_ANSWER_MODE_SELECT="2"
 export CLAWNEX_ANSWER_PROVIDER_SELECT="$SETUP_PROVIDER"
 export CLAWNEX_ANSWER_API_KEY="$PROVIDER_KEY"
-export CLAWNEX_ANSWER_LOCAL_PROVIDER_SELECT="$LOCAL_PROVIDER_SELECT"
-export CLAWNEX_ANSWER_LOCAL_PROVIDER_URL="$LOCAL_PROVIDER_URL"
-export CLAWNEX_ANSWER_LOCAL_MODEL_NAME="$LOCAL_PROVIDER_MODEL"
+export CLAWNEX_ANSWER_NVIDIA_MODEL="$NVIDIA_MODEL"
+export CLAWNEX_ANSWER_NVIDIA_BASE_URL="$NVIDIA_BASE_URL"
 export CLAWNEX_ANSWER_ROUTE_OPENCLAW="yes"
 export CLAWNEX_ANSWER_ENABLE_WATCHER="yes"
 export CLAWNEX_ANSWER_ENABLE_WATCHDOG="no"     # systemd/launchd own restarts
@@ -728,18 +691,12 @@ if [ "$PROVIDER_SELECT" != "5" ] && [ -f scripts/register-provider.cjs ]; then
     REG_KEY="$PROVIDER_KEY"
     REG_MODEL=""
     case "$PROVIDER_SELECT" in
-        1)
-            REG_NAME="${LOCAL_PROVIDER_LABEL:-Local model}"
-            REG_TYPE="${LOCAL_PROVIDER_TYPE:-lmstudio}"
-            REG_BASE="${LOCAL_PROVIDER_URL:-http://localhost:1234/v1}"
-            REG_KEY="${LOCAL_PROVIDER_KEY:-local-model}"
-            REG_MODEL="${LOCAL_PROVIDER_MODEL:-local-model}"
-            ;;
-        2) REG_NAME="OpenRouter"; REG_TYPE="openrouter"; REG_BASE="https://openrouter.ai/api/v1" ;;
-        3) REG_NAME="Anthropic";  REG_TYPE="anthropic";  REG_BASE="https://api.anthropic.com" ;;
-        4) REG_NAME="OpenAI";     REG_TYPE="openai";     REG_BASE="https://api.openai.com/v1" ;;
+        1) REG_NAME="OpenRouter"; REG_TYPE="openrouter"; REG_BASE="https://openrouter.ai/api/v1" ;;
+        2) REG_NAME="Anthropic";  REG_TYPE="anthropic";  REG_BASE="https://api.anthropic.com" ;;
+        3) REG_NAME="OpenAI";     REG_TYPE="openai";     REG_BASE="https://api.openai.com/v1" ;;
+        4) REG_NAME="NVIDIA NIM"; REG_TYPE="nvidia-nim"; REG_BASE="$NVIDIA_BASE_URL"; REG_MODEL="$NVIDIA_MODEL" ;;
     esac
-    if [ "$PROVIDER_SELECT" != "1" ] && [ -z "$REG_KEY" ]; then
+    if [ -z "$REG_KEY" ]; then
         warn "Provider registration skipped — no API key captured"
     else
     # /api/health doesn't touch the DB; poke a DB-backed route so the lazy

@@ -80,6 +80,22 @@ function assertSafeYamlValue(s: unknown, field: string): string {
   return s;
 }
 
+function modelPrefixForProviderType(providerType: string): string {
+  const t = providerType.toLowerCase();
+  if (t.includes("openrouter")) return "openrouter";
+  if (t.includes("anthropic") || t.includes("claude")) return "anthropic";
+  if (t.includes("nvidia") || t === "nim") return "nvidia_nim";
+  if (t.includes("openai") || t.includes("gpt")) return "openai";
+  if (t.includes("lmstudio") || t.includes("lm-studio") || t.includes("ollama") || t.includes("local")) return "openai";
+  return "openai";
+}
+
+function litellmModelForConfiguredModel(providerType: string, modelId: string): string {
+  const prefix = modelPrefixForProviderType(providerType);
+  if (modelId.startsWith(`${prefix}/`)) return modelId;
+  return `${prefix}/${modelId}`;
+}
+
 /**
  * Render the labeled "no provider configured" placeholder block. Matches
  * litellm/config.template.yaml verbatim so the file shape is identical
@@ -132,11 +148,7 @@ export function syncProvidersToYaml(opts: SyncOptions): SyncResult {
       continue;
     }
 
-    let modelPrefix = "openai";
-    if (t.includes("openrouter")) modelPrefix = "openrouter";
-    else if (t.includes("anthropic") || t.includes("claude")) modelPrefix = "anthropic";
-    else if (t.includes("openai") || t.includes("gpt")) modelPrefix = "openai";
-    else if (t.includes("lmstudio") || t.includes("lm-studio") || t.includes("local")) modelPrefix = "openai";
+    const modelPrefix = modelPrefixForProviderType(t);
 
     const safeName = p.name.toLowerCase().replace(/[^a-z0-9_/-]/g, "-");
     const modelName = t.includes("openrouter") ? "openrouter/auto" : safeName;
@@ -202,7 +214,7 @@ export function syncProvidersToYaml(opts: SyncOptions): SyncResult {
     const entry = [
       `  - model_name: "${m.model_id}"`,
       `    litellm_params:`,
-      `      model: "openai/${m.model_id}"`,
+      `      model: "${litellmModelForConfiguredModel(t, m.model_id)}"`,
     ];
     if (provider.base_url) entry.push(`      api_base: "${provider.base_url}"`);
     if (provider.api_key) entry.push(`      api_key: "${provider.api_key}"`);

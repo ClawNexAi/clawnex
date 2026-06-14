@@ -18,15 +18,13 @@ model_list:
   #     model: "openrouter/*"
   #     api_key: "your-openrouter-api-key"
 
-  # ─── Local OpenAI-compatible servers (LM Studio / Ollama) ───
-  # Uncomment and set your local server URL.
-  # LM Studio default: http://localhost:1234/v1
-  # Ollama default:    http://localhost:11434/v1
-  # - model_name: "local-model"
+  # ─── NVIDIA NIM ───
+  # Get an NVIDIA API key: https://build.nvidia.com/models
+  # - model_name: "nvidia/llama-3.3-nemotron-super-49b-v1"
   #   litellm_params:
-  #     model: "openai/your-model-name"
-  #     api_base: "http://localhost:1234/v1"
-  #     api_key: "local-model-server"
+  #     model: "nvidia_nim/nvidia/llama-3.3-nemotron-super-49b-v1"
+  #     api_base: "https://integrate.api.nvidia.com/v1"
+  #     api_key: "your-nvidia-api-key"
 
   # ─── Anthropic (Claude) ───
   # Uncomment and add your API key

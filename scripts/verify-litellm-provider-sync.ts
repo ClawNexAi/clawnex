@@ -108,6 +108,7 @@ const { syncProvidersToYaml, PLACEHOLDER_MODEL_NAME } = litellmLib as {
 // ---------------------------------------------------------------------------
 const FAKE_OPENROUTER_KEY = "verifier-fake-openrouter-key-do-not-leak-XYZ";
 const FAKE_OPENAI_KEY = "verifier-fake-openai-key-do-not-leak-ABC";
+const FAKE_NVIDIA_KEY = "verifier-fake-nvidia-key-do-not-leak-NV";
 
 // ---------------------------------------------------------------------------
 // Test 1: Shipped template — no localhost:1234, no active openai/auto
@@ -236,9 +237,41 @@ console.log("[4] syncProvidersToYaml with mixed providers + configured model");
 }
 
 // ---------------------------------------------------------------------------
-// Test 5: assertSafeYamlValue still gates user-supplied values
+// Test 5: NVIDIA NIM provider + configured model → native model_name,
+// nvidia_nim LiteLLM route, official API base
 // ---------------------------------------------------------------------------
-console.log("[5] assertSafeYamlValue still rejects YAML-injection payloads");
+console.log("[5] syncProvidersToYaml with NVIDIA NIM provider");
+{
+  mockProviders = [
+    {
+      id: "p-nvidia",
+      name: "NVIDIA NIM",
+      type: "nvidia-nim",
+      base_url: "https://integrate.api.nvidia.com/v1",
+      api_key: FAKE_NVIDIA_KEY,
+      is_active: 1,
+    },
+  ];
+  mockModels = [
+    { model_id: "nvidia/llama-3.3-nemotron-super-49b-v1", provider_id: "p-nvidia" },
+  ];
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "verify-litellm-"));
+  const cfg = path.join(tmp, "config.yaml");
+  syncProvidersToYaml({ db: makeStubDb(), configPath: cfg });
+  const out = fs.readFileSync(cfg, "utf-8");
+
+  assert(out.includes('model_name: "nvidia/llama-3.3-nemotron-super-49b-v1"'), "configured NVIDIA model keeps native model_name");
+  assert(out.includes('model: "nvidia_nim/nvidia/llama-3.3-nemotron-super-49b-v1"'), "configured NVIDIA model uses nvidia_nim LiteLLM route");
+  assert(out.includes('api_base: "https://integrate.api.nvidia.com/v1"'), "NVIDIA official API base is written");
+  assert(!out.includes(PLACEHOLDER_MODEL_NAME), "placeholder NOT written when NVIDIA provider exists");
+  assert(out.includes(FAKE_NVIDIA_KEY), "nvidia fake api_key present in YAML (file content, not stdout)");
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+// ---------------------------------------------------------------------------
+// Test 6: assertSafeYamlValue still gates user-supplied values
+// ---------------------------------------------------------------------------
+console.log("[6] assertSafeYamlValue still rejects YAML-injection payloads");
 {
   // We can't call assertSafeYamlValue directly (it's not exported), so we
   // exercise it via a malicious provider row. The route's per-provider
@@ -270,13 +303,13 @@ console.log("[5] assertSafeYamlValue still rejects YAML-injection payloads");
 }
 
 // ---------------------------------------------------------------------------
-// Test 6: Dashboard checkLiteLLM source contains the placeholder filter
+// Test 7: Dashboard checkLiteLLM source contains the placeholder filter
 // 2026-05-09: extracted from infrastructure/route.ts into
 // src/lib/health/litellm-check.ts per the reviewer's launch-final architecture.
 // The assertions look in the new module location. The infrastructure
 // route now imports + delegates to checkLiteLLMImpl from there.
 // ---------------------------------------------------------------------------
-console.log("[6] Dashboard checkLiteLLM filters the placeholder model name");
+console.log("[7] Dashboard checkLiteLLM filters the placeholder model name");
 {
   const checkPath = path.join(repoRoot, "src", "lib", "health", "litellm-check.ts");
   const src = fs.readFileSync(checkPath, "utf-8");
@@ -315,9 +348,9 @@ console.log("[6] Dashboard checkLiteLLM filters the placeholder model name");
 }
 
 // ---------------------------------------------------------------------------
-// Test 7: Provider-save handler imports syncProvidersToYaml and triggers it
+// Test 8: Provider-save handler imports syncProvidersToYaml and triggers it
 // ---------------------------------------------------------------------------
-console.log("[7] Provider-save route triggers sync");
+console.log("[8] Provider-save route triggers sync");
 {
   const savePath = path.join(repoRoot, "src", "app", "api", "config", "providers", "route.ts");
   const src = fs.readFileSync(savePath, "utf-8");
@@ -346,9 +379,9 @@ console.log("[7] Provider-save route triggers sync");
 }
 
 // ---------------------------------------------------------------------------
-// Test 8: Provider-delete handler also triggers sync
+// Test 9: Provider-delete handler also triggers sync
 // ---------------------------------------------------------------------------
-console.log("[8] Provider-delete route triggers sync");
+console.log("[9] Provider-delete route triggers sync");
 {
   const delPath = path.join(repoRoot, "src", "app", "api", "config", "providers", "[id]", "route.ts");
   const src = fs.readFileSync(delPath, "utf-8");
@@ -368,11 +401,11 @@ console.log("[8] Provider-delete route triggers sync");
 }
 
 // ---------------------------------------------------------------------------
-// Test 9: assertSafeYamlValue is referenced in the lib (not silently dropped)
+// Test 10: assertSafeYamlValue is referenced in the lib (not silently dropped)
 // 2026-05-09: extracted from route.ts → src/lib/litellm/sync.ts. Same call
 // count expected: 2 in provider loop + 3 in configured-models loop = 5.
 // ---------------------------------------------------------------------------
-console.log("[9] assertSafeYamlValue still wired into syncProvidersToYaml");
+console.log("[10] assertSafeYamlValue still wired into syncProvidersToYaml");
 {
   const libPath = path.join(repoRoot, "src", "lib", "litellm", "sync.ts");
   const src = fs.readFileSync(libPath, "utf-8");
@@ -381,9 +414,9 @@ console.log("[9] assertSafeYamlValue still wired into syncProvidersToYaml");
 }
 
 // ---------------------------------------------------------------------------
-// Test 10: LiteLLM control avoids shadow-process fallback on systemd installs
+// Test 11: LiteLLM control avoids shadow-process fallback on systemd installs
 // ---------------------------------------------------------------------------
-console.log("[10] LiteLLM control avoids systemd shadow fallback");
+console.log("[11] LiteLLM control avoids systemd shadow fallback");
 {
   const routePath = path.join(repoRoot, "src", "app", "api", "system", "litellm", "route.ts");
   const src = fs.readFileSync(routePath, "utf-8");
@@ -407,9 +440,9 @@ console.log("[10] LiteLLM control avoids systemd shadow fallback");
 }
 
 // ---------------------------------------------------------------------------
-// Test 11: Secret-leak guard — no fake api_key value ever appeared in logs
+// Test 12: Secret-leak guard — no fake api_key value ever appeared in logs
 // ---------------------------------------------------------------------------
-console.log("[11] Secret-leak guard: no api_key values printed");
+console.log("[12] Secret-leak guard: no api_key values printed");
 {
   // We taps stdout + stderr from the start of this script. The fixtures
   // wrote api_keys into YAML files but the verifier itself must never
@@ -423,10 +456,14 @@ console.log("[11] Secret-leak guard: no api_key values printed");
     !allLogs.includes(FAKE_OPENAI_KEY),
     "openai fake api_key never logged to stdout/stderr",
   );
+  assert(
+    !allLogs.includes(FAKE_NVIDIA_KEY),
+    "nvidia fake api_key never logged to stdout/stderr",
+  );
 }
 
 // ---------------------------------------------------------------------------
-// Test 12: ConfigurationPanel surfaces the manual-Restart contract
+// Test 13: ConfigurationPanel surfaces the manual-Restart contract
 //
 // internal reviewer 2026-05-09 conditional sign-off: provider save / delete syncs
 // litellm/config.yaml but does NOT auto-restart LiteLLM. The dashboard
@@ -434,7 +471,7 @@ console.log("[11] Secret-leak guard: no api_key values printed");
 // Infrastructure Health panel — operators otherwise won't know LiteLLM
 // is still serving the old config.
 // ---------------------------------------------------------------------------
-console.log("[12] ConfigurationPanel surfaces manual-Restart contract");
+console.log("[13] ConfigurationPanel surfaces manual-Restart contract");
 {
   const cfgPath = path.join(repoRoot, "src", "components", "dashboard", "panels", "ConfigurationPanel.tsx");
   const src = fs.readFileSync(cfgPath, "utf-8");

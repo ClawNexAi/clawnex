@@ -7,12 +7,12 @@
  * through API routes.
  *
  * Key responsibilities:
- * - Provider CRUD (config_providers table): LM Studio, OpenRouter, Anthropic, OpenAI, etc.
+ * - Provider CRUD (config_providers table): LM Studio, OpenRouter, Anthropic, OpenAI, NVIDIA NIM, etc.
  * - Model CRUD (config_models table): models per provider, with auto-seeding for known types
  * - Gateway CRUD (config_gateways table): OpenClaw gateway instances
  * - Settings (config_defaults table): key-value store for runtime configuration
  *
- * Auto-seeding: when addProvider() is called with a known type (openrouter, anthropic, openai),
+ * Auto-seeding: when addProvider() is called with a known type (openrouter, anthropic, openai, nvidia-nim),
  * popular models are automatically inserted into config_models. This populates the model
  * dropdown in the Configuration UI without requiring manual model entry.
  *
@@ -247,6 +247,9 @@ const SEED_MODELS: Record<string, Array<{ model_id: string; name: string }>> = {
     { model_id: "gpt-4o-mini", name: "GPT-4o Mini" },
     { model_id: "o3-mini", name: "o3-mini" },
   ],
+  "nvidia-nim": [
+    { model_id: "nvidia/llama-3.3-nemotron-super-49b-v1", name: "Llama 3.3 Nemotron Super 49B" },
+  ],
 };
 
 // Codex 2026-05-17 round 2 #3: even with a write-time DNS check, the
@@ -272,6 +275,8 @@ const PROVIDER_HOST_ALLOWLIST: ReadonlyArray<string> = [
   'api.x.ai',                            // xAI / Grok
   'api.cohere.ai',
   'api.fireworks.ai',
+  'integrate.api.nvidia.com',
+  'ai.api.nvidia.com',
 ];
 
 function getProviderHostAllowlist(): Set<string> {
