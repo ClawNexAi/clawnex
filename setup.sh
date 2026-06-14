@@ -1091,25 +1091,26 @@ echo -e "${BOLD}[9/10] Configuring authentication + generating secrets...${NC}"
 
 ENV_LOCAL_PATH="$INSTALL_DIR/.env.local"
 
-# Two-mode topology choice — single highest-leverage UX decision in the
-# whole installer. Most operators want Local (laptop, single user, no DNS,
-# no Caddy, no operators to create); some want Public-facing (multi-
-# operator, HTTPS, Caddy, RBAC, magic-URL admin setup). Asking this
-# upfront lets us skip irrelevant prompts AND set the right env so the
-# Edge middleware bakes RBAC correctly on the next build step.
+# Topology choice — single highest-leverage UX decision in the whole
+# installer. Most operators want Local (laptop, single user, no DNS,
+# no Caddy); some want Public-facing (multi-operator, HTTPS, Caddy,
+# RBAC, magic-URL admin setup). Local mode asks a second auth-posture
+# question so operators can choose first-admin RBAC or simpler localhost-only
+# no-RBAC behavior. Asking this upfront lets us skip irrelevant prompts AND
+# set the right env so the Edge middleware bakes RBAC correctly on the next
+# build step.
 echo ""
 echo "  Will this be:"
-echo "    [1] Local — laptop or single-operator host. RBAC on, localhost only,"
-echo "                creates a first admin account. No domain or DNS."
+echo "    [1] Local — laptop or single-operator host. Localhost only,"
+echo "                no domain or DNS. You'll choose auth posture next."
 echo "    [2] Public-facing — multi-operator. RBAC on, public domain, HTTPS via"
 echo "                        Caddy. You'll need a domain pointed at this server"
 echo "                        and run ./deploy/install-prod.sh after this finishes."
 echo ""
 
-# Explicit-answer required — no silent default. Picking RBAC posture by
-# accidentally hitting Enter is exactly the kind of footgun we want to
-# eliminate, since "Local" means "no auth, anyone who reaches port 5001
-# is full admin."
+# Explicit-answer required — no silent topology default. The local auth
+# posture has its own prompt below because "Local" can legitimately mean
+# RBAC-on first-admin setup or RBAC-off localhost-only operation.
 while true; do
     _tty_read "  Select [1] Local or [2] Public-facing (no default — must pick): " INSTALL_TOPOLOGY
     case "$INSTALL_TOPOLOGY" in
@@ -1130,7 +1131,32 @@ NEXT_PUBLIC_RBAC_ENABLED_VAL="true"
 INSTALL_TOPOLOGY_LABEL="Local (RBAC on, localhost only)"
 PUBLIC_DOMAIN=""
 
-if [ "$INSTALL_TOPOLOGY" = "2" ]; then
+if [ "$INSTALL_TOPOLOGY" = "1" ]; then
+    echo ""
+    echo "  Local authentication:"
+    echo "    [1] RBAC on  — first-admin setup, operators, sessions (recommended)"
+    echo "    [2] RBAC off — localhost-only, no login/setup wizard"
+    echo ""
+    while true; do
+        _tty_read "  Select local auth mode [1/2] [1]: " LOCAL_AUTH_MODE
+        LOCAL_AUTH_MODE="${LOCAL_AUTH_MODE:-1}"
+        case "$LOCAL_AUTH_MODE" in
+            1)
+                INSTALL_TOPOLOGY_LABEL="Local (RBAC on, localhost only)"
+                RBAC_ENABLED_VAL="true"
+                NEXT_PUBLIC_RBAC_ENABLED_VAL="true"
+                break
+                ;;
+            2)
+                INSTALL_TOPOLOGY_LABEL="Local (RBAC off, localhost only)"
+                RBAC_ENABLED_VAL="false"
+                NEXT_PUBLIC_RBAC_ENABLED_VAL="false"
+                break
+                ;;
+            *) echo "    '$LOCAL_AUTH_MODE' isn't 1 or 2 — please type 1 or 2." ;;
+        esac
+    done
+elif [ "$INSTALL_TOPOLOGY" = "2" ]; then
     INSTALL_TOPOLOGY_LABEL="Public-facing (RBAC on)"
     RBAC_ENABLED_VAL="true"
     NEXT_PUBLIC_RBAC_ENABLED_VAL="true"
@@ -1188,9 +1214,17 @@ INGEST_SECRET="${EXISTING_INGEST_SECRET:-$(openssl rand -hex 32)}"
 SESSION_SECRET="${EXISTING_SESSION_SECRET:-$(openssl rand -hex 32)}"
 
 if [ -n "$EXISTING_SETUP_SECRET" ]; then
-    echo -e "  ${GREEN}✓${NC} Reusing existing SETUP_SECRET from .env.local (no rotation on re-run)"
+    if [ "$RBAC_ENABLED_VAL" = "true" ]; then
+        echo -e "  ${GREEN}✓${NC} Reusing existing SETUP_SECRET from .env.local (no rotation on re-run)"
+    else
+        echo -e "  ${GREEN}✓${NC} Reusing existing SETUP_SECRET from .env.local (inactive while RBAC is off)"
+    fi
 else
-    echo -e "  ${GREEN}✓${NC} Fresh SETUP_SECRET generated (64 hex chars)"
+    if [ "$RBAC_ENABLED_VAL" = "true" ]; then
+        echo -e "  ${GREEN}✓${NC} Fresh SETUP_SECRET generated (64 hex chars)"
+    else
+        echo -e "  ${GREEN}✓${NC} Fresh SETUP_SECRET generated (inactive while RBAC is off)"
+    fi
 fi
 if [ -n "$EXISTING_SESSION_SECRET" ]; then
     echo -e "  ${GREEN}✓${NC} Reusing existing SESSION_SECRET from .env.local"
@@ -1198,9 +1232,9 @@ else
     echo -e "  ${GREEN}✓${NC} Fresh SESSION_SECRET generated (64 hex chars)"
 fi
 
-# Optional: prompt for GitHub OAuth credentials. Only relevant in
-# public-facing mode — local installs have no operator concept (RBAC
-# off), so seeding GitHub creds would be config that never gets used.
+# Optional: prompt for GitHub OAuth credentials. Only public-facing setup asks
+# here; local RBAC installs can configure OAuth later from Authentication
+# Methods, and local RBAC-off installs have no login surface.
 GH_CLIENT_ID=""
 GH_CLIENT_SECRET=""
 GH_CALLBACK_URL=""
@@ -1251,7 +1285,7 @@ cat > "$ENV_LOCAL_PATH" <<EOF
 # Edit freely; .env.local takes precedence over .env defaults.
 
 # RBAC (operator authentication) — value chosen by install topology above.
-# Local mode → true, but dashboard binds localhost only.
+# Local mode → operator choice, but dashboard binds localhost only.
 # Public mode → true, with public URL/TLS configured by install-prod/lib-macos.
 RBAC_ENABLED=${RBAC_ENABLED_VAL}
 NEXT_PUBLIC_RBAC_ENABLED=${NEXT_PUBLIC_RBAC_ENABLED_VAL}
@@ -1294,7 +1328,7 @@ fi)
 LITELLM_HOST=127.0.0.1
 LITELLM_PORT=${LITELLM_PORT}
 
-# Dashboard port. The bind host is chosen at start time based on RBAC:
+# Dashboard port. The bind host is chosen at start time based on topology:
 #   Local mode         → 127.0.0.1
 #   Public-facing mode → 0.0.0.0 until the service/reverse-proxy layer owns it
 PORT=${DASHBOARD_PORT}
@@ -1389,9 +1423,9 @@ fi
 # start to initialize the schema) — is deferred to the orchestrator.
 if [ "$CLAWNEX_NO_START" != "1" ]; then
 # Start Dashboard (production mode)
-# Bind host follows topology: Local always stays on loopback even though RBAC
-# is enabled, while Public-facing direct setup binds all interfaces before the
-# production reverse-proxy layer takes over.
+# Bind host follows topology: Local always stays on loopback regardless of
+# RBAC posture, while Public-facing direct setup binds all interfaces before
+# the production reverse-proxy layer takes over.
 if [ "$INSTALL_TOPOLOGY" = "2" ]; then
     DASHBOARD_BIND="0.0.0.0"
 else
@@ -1540,10 +1574,10 @@ echo -e "${NC}"
 echo ""
 
 # ╭──────────────────────────────────────────────────────────────────────╮
-# │  Topology-aware final-message — Local mode stays localhost-only but  │
-# │  still uses RBAC and first-admin setup. Public mode shows the magic  │
-# │  URL like before AND reminds them install-prod.sh is the next step   │
-# │  for Caddy + systemd + HTTPS.                                        │
+# │  Topology-aware final-message — Local mode stays localhost-only and  │
+# │  may run with RBAC on or off. Public mode shows the magic URL like   │
+# │  before AND reminds them install-prod.sh is the next step for Caddy  │
+# │  + systemd + HTTPS.                                                  │
 # ╰──────────────────────────────────────────────────────────────────────╯
 if [ "$CLAWNEX_NO_START" = "1" ]; then
     echo -e "  ${CYAN}•${NC} setup.sh finished build/config only."
@@ -1620,7 +1654,11 @@ else
     box_sep $W
     box_line "    ${DEFAULT_RP_ORIGIN}" $W
     box_sep $W
-    box_line "  RBAC is on; create the first admin via the setup URL." $W
+    if [ "$RBAC_ENABLED_VAL" = "true" ]; then
+        box_line "  RBAC is on; create the first admin via the setup URL." $W
+    else
+        box_line "  RBAC is off; localhost-only dashboard, no login." $W
+    fi
     box_line "  The dashboard still binds localhost only in Local mode." $W
     box_bot $W
     echo -e "${NC}"
@@ -1649,8 +1687,12 @@ if [ "$INSTALL_TOPOLOGY" = "2" ]; then
     echo -e "    4. Configuration → Authentication Methods — turn on GitHub OAuth / Magic Link as desired"
 else
     echo -e "    1. Open the dashboard at ${DEFAULT_RP_ORIGIN}"
-    echo -e "    2. Create the first admin from the setup URL printed by install.sh"
-    echo -e "    3. Walk the Welcome Wizard (Configuration → providers → Clawkeeper → CVE → routing → shield test)"
+    if [ "$RBAC_ENABLED_VAL" = "true" ]; then
+        echo -e "    2. Create the first admin from the setup URL printed by install.sh"
+        echo -e "    3. Walk the Welcome Wizard (Configuration → providers → Clawkeeper → CVE → routing → shield test)"
+    else
+        echo -e "    2. Walk the Welcome Wizard (Configuration → providers → Clawkeeper → CVE → routing → shield test)"
+    fi
 fi
 echo ""
 echo -e "  ${BOLD}Service commands:${NC}"

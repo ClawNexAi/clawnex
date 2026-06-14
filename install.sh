@@ -11,7 +11,7 @@
 # Non-interactive (QA/CI):
 #   bash install.sh --mode vps|mac-local|mac-server --domain X \
 #        --provider openrouter|openai|anthropic|skip [--provider-key-env VAR] \
-#        [--clean] [--yes]
+#        [--local-auth rbac|off] [--clean] [--yes]
 #
 # Phase 0 detects prior ClawNex artifacts and — only with consent
 # (interactive y, or --clean) — removes them via scripts/uninstall.sh,
@@ -52,6 +52,11 @@ _tty_read() {
         printf "%s" "$_prompt"
         IFS= read -r "$_var"
     fi
+}
+
+_can_prompt() {
+    [ -t 0 ] && return 0
+    [ -c /dev/tty ] && { : >/dev/tty; } 2>/dev/null
 }
 
 # Port-in-use probe: ss on Linux (lsof misses binds on Ubuntu 24), lsof on macOS.
@@ -163,7 +168,7 @@ INSTALL_DIR="$(pwd)"
 ENGINE_BASH="${BASH:-bash}"
 
 # ---- Flags -------------------------------------------------------------------
-FLAG_MODE=""; FLAG_DOMAIN=""; FLAG_PROVIDER=""; FLAG_KEY_ENV=""
+FLAG_MODE=""; FLAG_DOMAIN=""; FLAG_PROVIDER=""; FLAG_KEY_ENV=""; FLAG_LOCAL_AUTH=""
 FLAG_CLEAN=0; FLAG_YES=0
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -171,6 +176,7 @@ while [ $# -gt 0 ]; do
         --domain)           FLAG_DOMAIN="${2:-}"; shift 2 ;;
         --provider)         FLAG_PROVIDER="${2:-}"; shift 2 ;;
         --provider-key-env) FLAG_KEY_ENV="${2:-}"; shift 2 ;;
+        --local-auth)       FLAG_LOCAL_AUTH="${2:-}"; shift 2 ;;
         --clean)            FLAG_CLEAN=1; shift ;;
         --yes|-y)           FLAG_YES=1; shift ;;
         -h|--help)
@@ -420,8 +426,26 @@ if [ -n "$FLAG_MODE" ]; then
 else
     echo ""
     if [ "$OS" = "linux" ]; then
-        info "Linux host → VPS server install (systemd + Caddy + Let's Encrypt)"
-        MODE="vps"
+        echo "  Suggested deployment approach:"
+        echo "    [1] VPS server — systemd + Caddy + Let's Encrypt + UFW"
+        echo ""
+        if [ "$FLAG_YES" = "1" ]; then
+            info "--yes supplied; accepting suggested VPS server install"
+            MODE="vps"
+        elif _can_prompt; then
+            MODE_CONFIRM=""
+            _tty_read "  Use this approach? (Y/n): " MODE_CONFIRM
+            case "${MODE_CONFIRM:-Y}" in
+                y|Y|yes|YES) MODE="vps" ;;
+                n|N|no|NO)
+                    echo "  Cancelled. Re-run with --mode vps when you want the VPS server install."
+                    exit 0
+                    ;;
+                *) die "Invalid choice: $MODE_CONFIRM. Enter Y or n." ;;
+            esac
+        else
+            die "No TTY available to confirm detected Linux install mode. Re-run with --mode vps for automation."
+        fi
     else
         echo "  How should ClawNex run on this Mac?"
         echo "    [1] Local   — dashboard on localhost, launchd keep-alive (most operators)"
@@ -441,6 +465,39 @@ case "$MODE" in
     *) die "Invalid mode: $MODE (vps|mac-local|mac-server)" ;;
 esac
 ok "Mode: $MODE"
+
+LOCAL_AUTH_MODE="1"
+LOCAL_AUTH_LABEL="RBAC on"
+if [ -n "$FLAG_LOCAL_AUTH" ] && [ "$MODE" != "mac-local" ]; then
+    die "--local-auth only applies to --mode mac-local"
+fi
+if [ "$MODE" = "mac-local" ]; then
+    if [ -n "$FLAG_LOCAL_AUTH" ]; then
+        case "$FLAG_LOCAL_AUTH" in
+            rbac|on|yes|true|1) LOCAL_AUTH_MODE="1"; LOCAL_AUTH_LABEL="RBAC on" ;;
+            off|none|no|false|0) LOCAL_AUTH_MODE="2"; LOCAL_AUTH_LABEL="RBAC off" ;;
+            *) die "--local-auth must be rbac|off" ;;
+        esac
+    elif [ "$FLAG_YES" = "1" ]; then
+        info "--yes supplied; using Local auth default: RBAC on"
+        LOCAL_AUTH_MODE="1"
+        LOCAL_AUTH_LABEL="RBAC on"
+    else
+        echo ""
+        echo "  Local authentication:"
+        echo "    [1] RBAC on  — first-admin setup, operators, sessions (recommended)"
+        echo "    [2] RBAC off — localhost-only, no login/setup wizard"
+        echo ""
+        LOCAL_AUTH_PICK=""
+        _tty_read "  Select local auth mode (1/2) [1]: " LOCAL_AUTH_PICK
+        case "${LOCAL_AUTH_PICK:-1}" in
+            1) LOCAL_AUTH_MODE="1"; LOCAL_AUTH_LABEL="RBAC on" ;;
+            2) LOCAL_AUTH_MODE="2"; LOCAL_AUTH_LABEL="RBAC off" ;;
+            *) die "Invalid local auth mode: $LOCAL_AUTH_PICK. Enter 1 or 2." ;;
+        esac
+    fi
+    ok "Local auth: $LOCAL_AUTH_LABEL"
+fi
 
 # ---- [2/5] Domain + provider ----------------------------------------------------
 echo ""
@@ -534,6 +591,7 @@ export CLAWNEX_ANSWER_INSTALL_SYMLINK="yes"
 export CLAWNEX_ANSWER_RUN_INSTALL_PROD="no"    # orchestrator owns service layer
 if [ "$MODE" = "mac-local" ]; then
     export CLAWNEX_ANSWER_INSTALL_TOPOLOGY="1"
+    export CLAWNEX_ANSWER_LOCAL_AUTH_MODE="$LOCAL_AUTH_MODE"
 else
     export CLAWNEX_ANSWER_INSTALL_TOPOLOGY="2"
     export CLAWNEX_ANSWER_PUBLIC_DOMAIN="$DOMAIN"
@@ -578,15 +636,24 @@ for i in $(seq 1 30); do
 done
 [ "$LITELLM_OK" = "1" ] || warn "LiteLLM not responding after 60s — dashboard Configuration tab can finish this later"
 
-# A clean install must land on the first-admin setup gate. This catches the
-# exact failure mode where stale DB/operator state survived cleanup and the
-# browser shows /login instead of /setup.
 AUTH_STATUS="$(curl -s -m 8 "http://127.0.0.1:5001/api/auth/status" 2>/dev/null || true)"
-if echo "$AUTH_STATUS" | grep -q '"needsSetup":true'; then
-    ok "First-run setup gate active"
+if [ "$MODE" = "mac-local" ] && [ "$LOCAL_AUTH_MODE" = "2" ]; then
+    if echo "$AUTH_STATUS" | grep -q '"rbacEnabled":false' && echo "$AUTH_STATUS" | grep -q '"needsSetup":false'; then
+        ok "Local RBAC-off mode active"
+    else
+        echo "$AUTH_STATUS" | sed 's/^/  auth-status: /'
+        die "Local RBAC-off mode did not take effect — check .env.local and rebuild output"
+    fi
 else
-    echo "$AUTH_STATUS" | sed 's/^/  auth-status: /'
-    die "First-run setup gate is not active — stale operator/auth state likely survived cleanup"
+    # A clean RBAC-on install must land on the first-admin setup gate. This
+    # catches the exact failure mode where stale DB/operator state survived
+    # cleanup and the browser shows /login instead of /setup.
+    if echo "$AUTH_STATUS" | grep -q '"needsSetup":true'; then
+        ok "First-run setup gate active"
+    else
+        echo "$AUTH_STATUS" | sed 's/^/  auth-status: /'
+        die "First-run setup gate is not active — stale operator/auth state likely survived cleanup"
+    fi
 fi
 
 # Deferred engine steps that need a RUNNING dashboard (setup.sh skipped them
@@ -626,17 +693,25 @@ fi
 
 SETUP_SECRET="$(grep -m1 '^SETUP_SECRET=' .env.local | cut -d= -f2-)"
 if [ "$DOMAIN" = "localhost" ]; then
-    SETUP_URL="http://localhost:5001/setup?secret=${SETUP_SECRET}"
+    DASHBOARD_URL="http://localhost:5001"
 else
-    SETUP_URL="https://${DOMAIN}/setup?secret=${SETUP_SECRET}"
+    DASHBOARD_URL="https://${DOMAIN}"
+fi
+SETUP_URL="${DASHBOARD_URL}/setup?secret=${SETUP_SECRET}"
+if [ "$MODE" = "mac-local" ] && [ "$LOCAL_AUTH_MODE" = "2" ]; then
+    READY_LABEL="Open the dashboard:"
+    READY_URL="$DASHBOARD_URL"
+else
+    READY_LABEL="Create your admin account:"
+    READY_URL="$SETUP_URL"
 fi
 echo ""
 echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}${BOLD}║   ClawNex is ready                                   ║${NC}"
 echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo "  Create your admin account:"
-echo -e "    ${CYAN}${SETUP_URL}${NC}"
+echo "  ${READY_LABEL}"
+echo -e "    ${CYAN}${READY_URL}${NC}"
 echo ""
 case "$MODE" in
     vps)
