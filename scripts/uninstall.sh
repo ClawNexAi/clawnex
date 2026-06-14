@@ -292,6 +292,7 @@ if command -v systemctl &>/dev/null; then
     if systemctl list-unit-files 2>/dev/null | grep -q "clawnex-litellm.service"; then
         _sudo systemctl disable --now clawnex-litellm.service 2>/dev/null
         _sudo rm -f /etc/systemd/system/clawnex-litellm.service 2>/dev/null
+        _sudo rm -f /etc/sudoers.d/clawnex-litellm 2>/dev/null
         echo -e "  ${GREEN}✓${NC} clawnex-litellm systemd service removed"
     fi
     if systemctl list-unit-files 2>/dev/null | grep -q "clawnex.service"; then

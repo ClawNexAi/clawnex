@@ -354,7 +354,11 @@ echo -e "  ${GREEN}✓${NC} Secret-scrub pass complete"
 # the bundle name so extraction creates `clawnex-vX.Y.Z-deploy/` rather
 # than dumping files into the current directory.
 mkdir -p "$INSTALL_DIR/deploy"
-tar -czf "$OUTPUT_TARBALL" -C "$STAGING_DIR" "$PACKAGE_NAME"
+if tar --help 2>&1 | grep -q -- '--no-xattrs'; then
+    COPYFILE_DISABLE=1 tar --no-xattrs -czf "$OUTPUT_TARBALL" -C "$STAGING_DIR" "$PACKAGE_NAME"
+else
+    COPYFILE_DISABLE=1 tar -czf "$OUTPUT_TARBALL" -C "$STAGING_DIR" "$PACKAGE_NAME"
+fi
 TARBALL_SIZE=$(du -h "$OUTPUT_TARBALL" | awk '{print $1}')
 TARBALL_BYTES=$(stat -f %z "$OUTPUT_TARBALL" 2>/dev/null || stat -c %s "$OUTPUT_TARBALL" 2>/dev/null)
 echo -e "  ${GREEN}✓${NC} ${OUTPUT_TARBALL} (${TARBALL_SIZE} / ${TARBALL_BYTES} bytes)"

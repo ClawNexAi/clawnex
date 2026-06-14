@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isRbacEnabled, requireSession, requirePermission, getOperatorFromRequest } from '@/lib/rbac/guard';
 import { requireLocalhost } from "@/lib/middleware/localhost-guard";
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import { run, getDb } from "@/lib/db/index";
@@ -22,6 +22,51 @@ export const dynamic = "force-dynamic";
 // re-export crashes `next build` with "is not a valid Route export field"
 // (caught on a staging host 2026-05-10). All importers now pull the constant
 // directly from @/lib/litellm/sync, so the re-export is dead code.
+
+function getSystemctlPath(): string {
+  try {
+    const discovered = execSync("command -v systemctl", {
+      encoding: "utf8",
+      shell: "/bin/bash",
+      timeout: 3000,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (discovered) return discovered;
+  } catch {}
+  for (const candidate of ["/usr/bin/systemctl", "/bin/systemctl"]) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return "systemctl";
+}
+
+function isLiteLLMSystemdEnabled(systemctlPath: string): boolean {
+  try {
+    execFileSync(systemctlPath, ["is-enabled", "clawnex-litellm.service"], {
+      timeout: 3000,
+      stdio: "ignore",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function runLiteLLMSystemdAction(systemctlPath: string, action: "start" | "stop" | "restart"): void {
+  execFileSync("sudo", ["-n", systemctlPath, action, "clawnex-litellm.service"], {
+    timeout: 15000,
+    stdio: "ignore",
+  });
+}
+
+function sudoSystemdUnavailable(action: "start" | "stop" | "restart") {
+  return NextResponse.json({
+    ok: false,
+    error: `LiteLLM is managed by systemd, but the dashboard could not ${action} clawnex-litellm.service non-interactively.`,
+    manualCommand: `sudo systemctl ${action} clawnex-litellm.service`,
+    needsSudo: true,
+    usedSystemd: true,
+  }, { status: 503 });
+}
 
 export async function POST(request: NextRequest) {
   if (isRbacEnabled()) {
@@ -46,11 +91,21 @@ export async function POST(request: NextRequest) {
 
     const operator = getOperatorFromRequest(request);
     const actor = operator?.username || 'operator';
+    const systemctlPath = getSystemctlPath();
+    const systemdEnabled = isLiteLLMSystemdEnabled(systemctlPath);
 
     if (action === "stop") {
-      try {
-        execSync(`kill $(lsof -ti :${port}) 2>/dev/null`, { timeout: 5000 });
-      } catch {}
+      if (systemdEnabled) {
+        try {
+          runLiteLLMSystemdAction(systemctlPath, "stop");
+        } catch {
+          return sudoSystemdUnavailable("stop");
+        }
+      } else {
+        try {
+          execSync(`kill $(lsof -ti :${port}) 2>/dev/null`, { timeout: 5000 });
+        } catch {}
+      }
       try { run(`INSERT INTO audit_log (id, actor, action, resource_type, resource_id, detail, source, created_at) VALUES (?, ?, 'litellm_stop', 'system', NULL, 'LiteLLM proxy stopped', 'dashboard', datetime('now'))`, [require("crypto").randomUUID(), actor]); } catch {}
       return NextResponse.json({ ok: true, action: "stopped" });
     }
@@ -78,16 +133,20 @@ export async function POST(request: NextRequest) {
       // "stopped" state that Restart=on-failure wouldn't recover from. Going
       // through systemctl restart ensures the unit's own ExecStart runs —
       // whatever path that's pointing at, including ~/.litellm-venv/bin/litellm.
+      //
+      // If systemd is present but sudo -n cannot restart the unit, fail
+      // clearly. Falling back to nohup from a systemd install creates a
+      // shadow LiteLLM process that races Restart=always and leaves :4001 in
+      // an address-in-use loop.
       let usedSystemd = false;
-      try {
-        execSync("systemctl is-enabled clawnex-litellm.service", { timeout: 3000, stdio: "ignore" });
-        // Unit is enabled — use it. systemctl restart handles both stop+start
-        // atomically; no race window.
-        execSync("sudo -n systemctl restart clawnex-litellm.service", { timeout: 15000, stdio: "ignore" });
-        usedSystemd = true;
-      } catch {
-        // Systemd unit not installed (likely macOS/launchd or a manual
-        // install). Fall through to the binary-search nohup path.
+      if (systemdEnabled) {
+        const systemdAction = action === "start" ? "start" : "restart";
+        try {
+          runLiteLLMSystemdAction(systemctlPath, systemdAction);
+          usedSystemd = true;
+        } catch {
+          return sudoSystemdUnavailable(systemdAction);
+        }
       }
 
       if (!usedSystemd) {

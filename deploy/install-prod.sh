@@ -130,6 +130,8 @@ if [ ! -d "$INSTALL_DIR/.next" ]; then
     exit 1
 fi
 
+SYSTEMCTL_BIN="$(command -v systemctl || echo /usr/bin/systemctl)"
+
 # Pre-flight: kill any non-systemd squatter on port 5001. setup.sh starts the
 # dashboard via nohup; install-prod.sh wants to take over via systemd. The
 # nohup process MUST exit before the systemd unit can bind. Without this the
@@ -499,6 +501,17 @@ StandardError=journal
 WantedBy=multi-user.target
 UNIT
     LITELLM_UNIT_INSTALLED=1
+    SUDOERS_TMP="$(mktemp)"
+    cat > "$SUDOERS_TMP" <<SUDOERS
+# ClawNex: allow the dashboard service user to restart only the LiteLLM proxy
+# after provider config sync. No shell access or arbitrary systemctl verbs.
+${SERVICE_USER} ALL=(root) NOPASSWD: ${SYSTEMCTL_BIN} start clawnex-litellm.service, ${SYSTEMCTL_BIN} stop clawnex-litellm.service, ${SYSTEMCTL_BIN} restart clawnex-litellm.service
+SUDOERS
+    if [ -x /usr/sbin/visudo ]; then
+        $SUDO /usr/sbin/visudo -cf "$SUDOERS_TMP" >/dev/null
+    fi
+    $SUDO install -m 0440 "$SUDOERS_TMP" /etc/sudoers.d/clawnex-litellm
+    rm -f "$SUDOERS_TMP"
 else
     LITELLM_UNIT_INSTALLED=0
 fi
@@ -507,6 +520,7 @@ $SUDO systemctl daemon-reload
 echo -e "  ${GREEN}✓${NC} clawnex-dashboard.service installed (User=${SERVICE_USER})"
 if [ "$LITELLM_UNIT_INSTALLED" = "1" ]; then
     echo -e "  ${GREEN}✓${NC} clawnex-litellm.service installed"
+    echo -e "  ${GREEN}✓${NC} sudoers scoped for dashboard LiteLLM start/stop/restart"
 else
     echo -e "  ${DIM}—${NC} clawnex-litellm.service skipped (no litellm/config.yaml — proxy not configured)"
 fi
@@ -533,7 +547,7 @@ echo -e "${BOLD}[8/8] Starting services + first cert handshake${NC}"
 # If a transient LiteLLM is still running from setup.sh's nohup, kill it
 # so systemd can take ownership of the port like we do for the dashboard.
 if [ "$LITELLM_UNIT_INSTALLED" = "1" ]; then
-    LL_PID=$(lsof -ti :4001 2>/dev/null | head -1)
+    LL_PID=$(ss -tlnp 2>/dev/null | awk '/:4001 /' | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
     if [ -n "$LL_PID" ]; then
         kill "$LL_PID" 2>/dev/null && sleep 1
         echo -e "  ${DIM}Killed transient LiteLLM (PID $LL_PID) — systemd will own it now${NC}"

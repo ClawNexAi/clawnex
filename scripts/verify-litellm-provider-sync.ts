@@ -381,9 +381,35 @@ console.log("[9] assertSafeYamlValue still wired into syncProvidersToYaml");
 }
 
 // ---------------------------------------------------------------------------
-// Test 10: Secret-leak guard — no fake api_key value ever appeared in logs
+// Test 10: LiteLLM control avoids shadow-process fallback on systemd installs
 // ---------------------------------------------------------------------------
-console.log("[10] Secret-leak guard: no api_key values printed");
+console.log("[10] LiteLLM control avoids systemd shadow fallback");
+{
+  const routePath = path.join(repoRoot, "src", "app", "api", "system", "litellm", "route.ts");
+  const src = fs.readFileSync(routePath, "utf-8");
+  assert(
+    src.includes("sudoSystemdUnavailable"),
+    "route has explicit systemd sudo-unavailable response",
+  );
+  assert(
+    src.includes("shadow LiteLLM process"),
+    "route documents why systemd installs must not fall back to nohup",
+  );
+  assert(
+    src.includes('execFileSync("sudo", ["-n", systemctlPath'),
+    "route invokes systemctl through sudo -n with the whitelisted absolute path",
+  );
+  const systemdBranch = src.slice(src.indexOf("if (systemdEnabled)"), src.indexOf("if (!usedSystemd)"));
+  assert(
+    systemdBranch.includes("return sudoSystemdUnavailable(systemdAction)"),
+    "systemd restart failure returns an error instead of falling through to nohup",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Test 11: Secret-leak guard — no fake api_key value ever appeared in logs
+// ---------------------------------------------------------------------------
+console.log("[11] Secret-leak guard: no api_key values printed");
 {
   // We taps stdout + stderr from the start of this script. The fixtures
   // wrote api_keys into YAML files but the verifier itself must never
@@ -400,7 +426,7 @@ console.log("[10] Secret-leak guard: no api_key values printed");
 }
 
 // ---------------------------------------------------------------------------
-// Test 11: ConfigurationPanel surfaces the manual-Restart contract
+// Test 12: ConfigurationPanel surfaces the manual-Restart contract
 //
 // internal reviewer 2026-05-09 conditional sign-off: provider save / delete syncs
 // litellm/config.yaml but does NOT auto-restart LiteLLM. The dashboard
@@ -408,7 +434,7 @@ console.log("[10] Secret-leak guard: no api_key values printed");
 // Infrastructure Health panel — operators otherwise won't know LiteLLM
 // is still serving the old config.
 // ---------------------------------------------------------------------------
-console.log("[11] ConfigurationPanel surfaces manual-Restart contract");
+console.log("[12] ConfigurationPanel surfaces manual-Restart contract");
 {
   const cfgPath = path.join(repoRoot, "src", "components", "dashboard", "panels", "ConfigurationPanel.tsx");
   const src = fs.readFileSync(cfgPath, "utf-8");
