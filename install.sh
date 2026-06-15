@@ -332,14 +332,26 @@ _p0_macos_stop_clawnex_launchd() {
 
 _p0_macos_kill_install_port_owners() {
     [ "${OS:-}" = "macos" ] || return 0
-    local _port _pid _cwd _cmd _round
+    local _port _pid _cwd _cmd _round _owned _extra_dir
     for _round in term kill; do
         for _port in 5001 4001; do
             while IFS= read -r _pid; do
                 [ -n "$_pid" ] || continue
                 _cwd="$(lsof -a -p "$_pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1 || true)"
                 _cmd="$(ps -p "$_pid" -o command= 2>/dev/null || true)"
-                if [ "$_cwd" = "$INSTALL_DIR" ] || printf '%s\n' "$_cmd" | grep -Fq "$INSTALL_DIR/"; then
+                _owned=0
+                [ "$_cwd" = "$INSTALL_DIR" ] && _owned=1
+                printf '%s\n' "$_cmd" | grep -Fq "$INSTALL_DIR/" && _owned=1
+                if [ -n "${P0_EXISTING_DIR:-}" ]; then
+                    [ "$_cwd" = "$P0_EXISTING_DIR" ] && _owned=1
+                    printf '%s\n' "$_cmd" | grep -Fq "$P0_EXISTING_DIR/" && _owned=1
+                fi
+                for _extra_dir in "${P0_EXTRA_DIRS[@]:-}"; do
+                    [ -n "$_extra_dir" ] || continue
+                    [ "$_cwd" = "$_extra_dir" ] && _owned=1
+                    printf '%s\n' "$_cmd" | grep -Fq "$_extra_dir/" && _owned=1
+                done
+                if [ "$_owned" = "1" ]; then
                     if [ "$_round" = "term" ]; then
                         kill "$_pid" 2>/dev/null || true
                     else
@@ -530,6 +542,7 @@ P0_FOUND=()
 P0_EXISTING_DIR=""
 P0_CURRENT_ARTIFACTS=()
 P0_STALE_PATHS=()
+P0_EXTRA_DIRS=()
 # systemd units (Linux). Capture-then-test: `grep -q` directly on a
 # systemctl pipe SIGPIPEs systemctl under pipefail and silently reads as
 # "no units" (live false-negative on the first Crucible run, 2026-06-13).
@@ -582,8 +595,14 @@ fi
 # at, including old ~/sentinel installs.
 for _wkd in "$HOME/clawnex" "$HOME"/clawnex-v*-deploy "$HOME"/clawnex-v*-macos; do
     [ -d "$_wkd" ] || continue
-    if [ -z "$P0_EXISTING_DIR" ] && [ -f "$_wkd/.env.local" ] && [ "$_wkd" != "$INSTALL_DIR" ]; then
-        P0_EXISTING_DIR="$_wkd"
+    [ "$_wkd" != "$INSTALL_DIR" ] || continue
+    if [ -f "$_wkd/.env.local" ]; then
+        [ -z "$P0_EXISTING_DIR" ] && P0_EXISTING_DIR="$_wkd"
+    elif { [ -f "$_wkd/package.json" ] && grep -q '"name"[[:space:]]*:[[:space:]]*"clawnex"' "$_wkd/package.json" 2>/dev/null; } \
+        || { [ -f "$_wkd/install.sh" ] && grep -qi 'ClawNex Installer' "$_wkd/install.sh" 2>/dev/null; } \
+        || { [ -f "$_wkd/setup.sh" ] && grep -qi 'ClawNex' "$_wkd/setup.sh" 2>/dev/null; }; then
+        P0_EXTRA_DIRS+=("$_wkd")
+        P0_FOUND+=("stale ClawNex source/install dir: $_wkd")
     fi
 done
 # Last-resort: derive the install dir from whoever owns port 5001 — the
@@ -760,6 +779,16 @@ else
 
     for stale_path in "${P0_STALE_PATHS[@]}"; do
         rm -f "$stale_path" 2>/dev/null || true
+    done
+    for extra_dir in "${P0_EXTRA_DIRS[@]}"; do
+        if [ -d "$extra_dir" ] && [ "$extra_dir" != "$INSTALL_DIR" ]; then
+            if [ "$OS" = "macos" ]; then
+                _p0_macos_stop_clawnex_launchd
+                _p0_macos_kill_install_port_owners
+            fi
+            rm -rf "$extra_dir"
+            ok "Deleted stale ClawNex directory: $extra_dir"
+        fi
     done
 
     if [ "$OS" = "linux" ]; then
