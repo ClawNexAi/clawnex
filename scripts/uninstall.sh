@@ -23,6 +23,34 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+BOX_W=48
+repeat_box_char() {
+    local char="$1" count="$2" i
+    for ((i = 0; i < count; i++)); do
+        printf '%s' "$char"
+    done
+}
+box_rule() {
+    local left="$1" fill="$2" right="$3"
+    printf '%s' "$left"
+    repeat_box_char "$fill" "$BOX_W"
+    printf '%s\n' "$right"
+}
+box_line() {
+    local text="$1" pad
+    pad=$(( BOX_W - ${#text} ))
+    [ "$pad" -lt 0 ] && pad=0
+    printf '║%s%*s║\n' "$text" "$pad" ''
+}
+box_center() {
+    local text="$1" total left right
+    total=$(( BOX_W - ${#text} ))
+    [ "$total" -lt 0 ] && total=0
+    left=$(( total / 2 ))
+    right=$(( total - left ))
+    printf '║%*s%s%*s║\n' "$left" '' "$text" "$right" ''
+}
+
 # ---- argument / help handling --------------------------------------------
 # --force-clean: skip all 3 confirm prompts AND default both preserve prompts
 # to "no" (full nuke). Intended for scripted resets / CI / test harnesses.
@@ -115,11 +143,13 @@ if [ "$INSTALL_DIR" != "$SCRIPT_LOCATION" ]; then
 fi
 
 echo ""
-echo -e "${RED}╔══════════════════════════════════════════════════╗${NC}"
-echo -e "${RED}║          CLAWNEX UNINSTALL                      ║${NC}"
-echo -e "${RED}║  This will remove the ClawNex installation.     ║${NC}"
-echo -e "${RED}║  A ClawNex Project                        ║${NC}"
-echo -e "${RED}╚══════════════════════════════════════════════════╝${NC}"
+echo -ne "${RED}"
+box_rule "╔" "═" "╗"
+box_center "CLAWNEX UNINSTALL"
+box_center "This will remove the ClawNex installation."
+box_center "A ClawNex Project"
+box_rule "╚" "═" "╝"
+echo -e "${NC}"
 echo ""
 echo -e "Installation directory: ${YELLOW}${INSTALL_DIR}${NC}"
 echo ""
@@ -533,9 +563,11 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║  ClawNex has been uninstalled.                  ║${NC}"
-echo -e "${GREEN}╚══════════════════════════════════════════════════╝${NC}"
+echo -ne "${GREEN}"
+box_rule "╔" "═" "╗"
+box_center "ClawNex has been uninstalled."
+box_rule "╚" "═" "╝"
+echo -e "${NC}"
 echo ""
 if [ "$KEEP_BACKUPS" = "yes" ] || [ "$KEEP_DOCS" = "yes" ]; then
     echo -e "Preserved:"

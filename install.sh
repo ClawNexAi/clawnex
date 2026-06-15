@@ -29,6 +29,7 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
+REQUIRED_LITELLM_VERSION="1.83.0"
 
 # ---- Helpers ---------------------------------------------------------------
 
@@ -69,6 +70,244 @@ _port_in_use() {
     else
         lsof -ti :"$_port" >/dev/null 2>&1
     fi
+}
+
+P0_SUDO_READY=0
+_p0_sudo() {
+    if [ "$(id -u)" = "0" ]; then
+        "$@"
+    elif [ "$P0_SUDO_READY" = "1" ]; then
+        sudo "$@"
+    elif [ -n "${SUDO_PASSWORD:-}" ]; then
+        printf '%s\n' "$SUDO_PASSWORD" | sudo -S -p '' "$@"
+    else
+        sudo -n "$@"
+    fi
+}
+
+_p0_prime_sudo() {
+    [ "${OS:-}" = "linux" ] || return 0
+    [ "$(id -u)" != "0" ] || { P0_SUDO_READY=1; return 0; }
+    if [ -n "${SUDO_PASSWORD:-}" ]; then
+        printf '%s\n' "$SUDO_PASSWORD" | sudo -S -p '' -v >/dev/null 2>&1 && P0_SUDO_READY=1 && return 0
+    elif _can_prompt; then
+        info "sudo is required to remove stale systemd units and port listeners"
+        sudo -v && P0_SUDO_READY=1 && return 0
+    elif sudo -n -v >/dev/null 2>&1; then
+        P0_SUDO_READY=1
+        return 0
+    fi
+    warn "sudo unavailable — privileged cleanup will be limited"
+    return 1
+}
+
+_p0_linux_stop_clawnex_systemd() {
+    [ "${OS:-}" = "linux" ] || return 0
+    command -v systemctl >/dev/null 2>&1 || return 0
+    [ "$P0_SUDO_READY" = "1" ] || return 0
+    for u in clawnex-dashboard clawnex-litellm; do
+        _p0_sudo systemctl stop "$u" 2>/dev/null || true
+        _p0_sudo systemctl disable "$u" 2>/dev/null || true
+        _p0_sudo rm -f "/etc/systemd/system/${u}.service" 2>/dev/null || true
+    done
+    _p0_sudo systemctl daemon-reload 2>/dev/null || true
+}
+
+_p0_linux_kill_install_port_owners() {
+    [ "${OS:-}" = "linux" ] || return 0
+    command -v ss >/dev/null 2>&1 || return 0
+    [ "$P0_SUDO_READY" = "1" ] || return 0
+    local _port _pid _cwd _cmd _round _owned
+    for _round in term kill; do
+        for _port in 5001 4001; do
+            while IFS= read -r _pid; do
+                [ -n "$_pid" ] || continue
+                _cwd="$(_p0_sudo readlink "/proc/${_pid}/cwd" 2>/dev/null || true)"
+                _cmd="$(_p0_sudo sh -c "tr '\\000' ' ' < '/proc/${_pid}/cmdline'" 2>/dev/null || true)"
+                _owned=0
+                [ -n "$_cwd" ] && [ "$_cwd" = "$INSTALL_DIR" ] && _owned=1
+                [ -n "$P0_EXISTING_DIR" ] && [ -n "$_cwd" ] && [ "$_cwd" = "$P0_EXISTING_DIR" ] && _owned=1
+                [ -n "$_cwd" ] && printf '%s\n' "$_cwd" | grep -Fq '/clawnex' && _owned=1
+                [ -n "$_cmd" ] && printf '%s\n' "$_cmd" | grep -Fq "$INSTALL_DIR/" && _owned=1
+                [ -n "$P0_EXISTING_DIR" ] && [ -n "$_cmd" ] && printf '%s\n' "$_cmd" | grep -Fq "$P0_EXISTING_DIR/" && _owned=1
+                [ "$_port" = "4001" ] && [ -n "$_cmd" ] && printf '%s\n' "$_cmd" | grep -qi 'litellm' && _owned=1
+                [ "$_port" = "5001" ] && [ -n "$_cmd" ] && printf '%s\n' "$_cmd" | grep -qi 'next-server' && printf '%s\n' "$_cmd $_cwd" | grep -qi 'clawnex' && _owned=1
+                if [ "$_owned" = "1" ]; then
+                    if [ "$_round" = "term" ]; then
+                        _p0_sudo kill "$_pid" 2>/dev/null || true
+                    else
+                        _p0_sudo kill -9 "$_pid" 2>/dev/null || true
+                    fi
+                fi
+            done < <(_p0_sudo ss -ltnp 2>/dev/null | awk -v port=":${_port}" '$4 ~ (port "$") { while (match($0, /pid=[0-9]+/)) { print substr($0, RSTART + 4, RLENGTH - 4); $0 = substr($0, RSTART + RLENGTH) } }' | sort -u)
+        done
+        sleep 1
+    done
+}
+
+_version_major() {
+    "$1" --version 2>&1 | awk '{print $NF}' | sed 's/^v//' | cut -d. -f1
+}
+
+_python_version() {
+    "$1" --version 2>&1 | awk '{print $2}'
+}
+
+_python_meets_min() {
+    local _cmd="$1" _ver _major _minor
+    _ver="$(_python_version "$_cmd")"
+    _major="$(echo "$_ver" | cut -d. -f1)"
+    _minor="$(echo "$_ver" | cut -d. -f2)"
+    [ -n "$_major" ] && [ -n "$_minor" ] || return 1
+    [ "$_major" -gt 3 ] || { [ "$_major" -eq 3 ] && [ "$_minor" -ge 10 ]; }
+}
+
+_find_modern_python() {
+    local _candidates=()
+    _candidates+=(python3.13 python3.12 python3.11 python3.10)
+    if [ "$OS" = "macos" ] && command -v brew >/dev/null 2>&1; then
+        local _brew_py
+        _brew_py="$(brew --prefix python@3.12 2>/dev/null || true)"
+        [ -n "$_brew_py" ] && _candidates+=("$_brew_py/bin/python3.12")
+    fi
+    _candidates+=(python3 python)
+
+    local _cand
+    for _cand in "${_candidates[@]}"; do
+        [ -n "$_cand" ] || continue
+        if command -v "$_cand" >/dev/null 2>&1 && _python_meets_min "$_cand"; then
+            command -v "$_cand"
+            return 0
+        fi
+    done
+    return 1
+}
+
+_brew_cellar_writable_or_die() {
+    local _cellar
+    _cellar="$(brew --cellar 2>/dev/null || true)"
+    [ -n "$_cellar" ] || die "Homebrew Cellar path could not be detected. Run: brew doctor"
+    [ -d "$_cellar" ] || die "Homebrew Cellar is missing at $_cellar. Run: brew doctor"
+    if [ ! -w "$_cellar" ]; then
+        die "Homebrew Cellar is not writable: $_cellar
+    Fix: sudo chown -R \"\$(whoami)\" \"$_cellar\""
+    fi
+}
+
+_brew_python312_install_or_upgrade() {
+    command -v brew >/dev/null 2>&1 || die "Python 3.10+ is required and Homebrew is not installed.
+    Install Python manually, then re-run: brew install python@3.12"
+    _brew_cellar_writable_or_die
+
+    local _log
+    _log="$(mktemp -t clawnex-brew-python.XXXXXX)"
+    if brew list python@3.12 >/dev/null 2>&1; then
+        info "Upgrading Homebrew Python 3.12 for LiteLLM"
+        if ! { brew upgrade python@3.12 || brew reinstall python@3.12; } >"$_log" 2>&1; then
+            tail -n 16 "$_log" | sed 's/^/    /' >&2
+            die "Unable to upgrade/reinstall Homebrew Python 3.12. Check network access and Homebrew health, then re-run."
+        fi
+    else
+        info "Installing Homebrew Python 3.12 for LiteLLM"
+        if ! brew install python@3.12 >"$_log" 2>&1; then
+            tail -n 16 "$_log" | sed 's/^/    /' >&2
+            die "Unable to install Homebrew Python 3.12. Check network access and Homebrew health, then re-run."
+        fi
+    fi
+    rm -f "$_log" 2>/dev/null || true
+}
+
+_litellm_version_for_python() {
+    "$1" -c "import importlib.metadata as m; print(m.version('litellm'))" 2>/dev/null || true
+}
+
+_ensure_litellm_for_python() {
+    local _python_cmd="$1" _installed _pip_flags _log
+    _installed="$(_litellm_version_for_python "$_python_cmd")"
+    if [ "$_installed" = "$REQUIRED_LITELLM_VERSION" ]; then
+        ok "LiteLLM $REQUIRED_LITELLM_VERSION"
+        return 0
+    fi
+
+    if [ -n "$_installed" ]; then
+        warn "LiteLLM $_installed found; required $REQUIRED_LITELLM_VERSION"
+    else
+        warn "LiteLLM $REQUIRED_LITELLM_VERSION not installed"
+    fi
+
+    _pip_flags=""
+    if "$_python_cmd" -m pip install --help 2>/dev/null | grep -q -- '--break-system-packages'; then
+        _pip_flags="--break-system-packages"
+    fi
+    _log="$(mktemp -t clawnex-pip-litellm.XXXXXX)"
+    info "Installing LiteLLM $REQUIRED_LITELLM_VERSION"
+    if ! "$_python_cmd" -m pip install "litellm[proxy]==$REQUIRED_LITELLM_VERSION" $_pip_flags >"$_log" 2>&1; then
+        tail -n 16 "$_log" | sed 's/^/    /' >&2
+        die "Unable to install LiteLLM $REQUIRED_LITELLM_VERSION. Check Python package network access, then re-run."
+    fi
+    rm -f "$_log" 2>/dev/null || true
+
+    _installed="$(_litellm_version_for_python "$_python_cmd")"
+    [ "$_installed" = "$REQUIRED_LITELLM_VERSION" ] || die "LiteLLM install completed but version check failed. Got '${_installed:-metadata not found}', expected $REQUIRED_LITELLM_VERSION."
+    ok "LiteLLM $REQUIRED_LITELLM_VERSION"
+}
+
+_host_dependency_preflight() {
+    echo -e "${BOLD}[1/6] Host dependency preflight${NC}"
+    echo "  Detected OS: $OS"
+
+    if command -v node >/dev/null 2>&1; then
+        local _node_major _node_version
+        _node_version="$(node -v | sed 's/^v//')"
+        _node_major="$(_version_major node)"
+        if [ "$_node_major" -ge 18 ]; then
+            ok "Node.js v$_node_version"
+        else
+            die "Node.js v$_node_version found, but ClawNex requires v18+.
+    macOS: brew install node@22
+    Linux: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash - && sudo apt install -y nodejs"
+        fi
+    else
+        die "Node.js not found.
+    macOS: brew install node
+    Linux: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash - && sudo apt install -y nodejs"
+    fi
+
+    if command -v npm >/dev/null 2>&1; then
+        ok "npm v$(npm -v)"
+    else
+        die "npm not found. Install Node.js first; npm should come with it."
+    fi
+
+    local _python_cmd
+    _python_cmd="$(_find_modern_python || true)"
+    if [ -z "$_python_cmd" ]; then
+        warn "Python 3.10+ not found; LiteLLM requires it"
+        if [ "$OS" = "macos" ]; then
+            _brew_python312_install_or_upgrade
+            _python_cmd="$(_find_modern_python || true)"
+        else
+            die "Python 3.10+ is required before install.
+    Ubuntu/Debian: sudo apt-get install python3.12 python3.12-venv"
+        fi
+    fi
+    [ -n "$_python_cmd" ] || die "Python remediation completed, but no usable Python 3.10+ was found."
+    ok "Python $(_python_version "$_python_cmd") ($_python_cmd)"
+    _ensure_litellm_for_python "$_python_cmd"
+
+    if command -v git >/dev/null 2>&1; then
+        ok "Git $(git --version | awk '{print $3}')"
+    else
+        warn "Git not found — recommended for version tracking"
+    fi
+
+    if [ "$MODE" = "vps" ] && ! command -v systemctl >/dev/null 2>&1; then
+        die "VPS mode requires systemd/systemctl. Choose local mode on non-systemd hosts."
+    fi
+    if [ "$MODE" = "mac-server" ] && ! command -v brew >/dev/null 2>&1; then
+        die "mac-server mode requires Homebrew for Caddy. Install Homebrew first, then re-run."
+    fi
+    ok "Host dependencies ready"
 }
 
 _p0_macos_stop_clawnex_launchd() {
@@ -195,12 +434,97 @@ case "$FLAG_ARCHIVE_DB" in
     *) die "--archive-db must be yes or no" ;;
 esac
 
-# ---- Phase 0: clean-slate preflight -------------------------------------------
+# ---- [0/6] Mode ----------------------------------------------------------------
+echo -e "${BOLD}[0/6] Install mode${NC}"
+echo "  Detected OS: $OS"
+if [ -n "$FLAG_MODE" ]; then
+    MODE="$FLAG_MODE"
+else
+    echo ""
+    if [ "$OS" = "linux" ]; then
+        echo "  Suggested deployment approach:"
+        echo "    [1] VPS server — systemd + Caddy + Let's Encrypt + UFW"
+        echo ""
+        if [ "$FLAG_YES" = "1" ]; then
+            info "--yes supplied; accepting suggested VPS server install"
+            MODE="vps"
+        elif _can_prompt; then
+            MODE_CONFIRM=""
+            _tty_read "  Use this approach? (Y/n): " MODE_CONFIRM
+            case "${MODE_CONFIRM:-Y}" in
+                y|Y|yes|YES) MODE="vps" ;;
+                n|N|no|NO)
+                    echo "  Cancelled. Re-run with --mode vps when you want the VPS server install."
+                    exit 0
+                    ;;
+                *) die "Invalid choice: $MODE_CONFIRM. Enter Y or n." ;;
+            esac
+        else
+            die "No TTY available to confirm detected Linux install mode. Re-run with --mode vps for automation."
+        fi
+    else
+        echo "  How should ClawNex run on this Mac?"
+        echo "    [1] Local   — dashboard on localhost, launchd keep-alive (most operators)"
+        echo "    [2] Server  — public domain + Caddy + TLS on this Mac"
+        echo ""
+        MAC_PICK=""
+        _tty_read "  Select (1/2) [1]: " MAC_PICK
+        case "${MAC_PICK:-1}" in
+            2) MODE="mac-server" ;;
+            *) MODE="mac-local" ;;
+        esac
+    fi
+fi
+case "$MODE" in
+    vps)        [ "$OS" = "linux" ] || die "--mode vps requires Linux (you're on $OS)" ;;
+    mac-local|mac-server) [ "$OS" = "macos" ] || die "--mode $MODE requires macOS (you're on $OS)" ;;
+    *) die "Invalid mode: $MODE (vps|mac-local|mac-server)" ;;
+esac
+ok "Mode: $MODE"
+
+LOCAL_AUTH_MODE="1"
+LOCAL_AUTH_LABEL="RBAC on"
+if [ -n "$FLAG_LOCAL_AUTH" ] && [ "$MODE" != "mac-local" ]; then
+    die "--local-auth only applies to --mode mac-local"
+fi
+if [ "$MODE" = "mac-local" ]; then
+    if [ -n "$FLAG_LOCAL_AUTH" ]; then
+        case "$FLAG_LOCAL_AUTH" in
+            rbac|on|yes|true|1) LOCAL_AUTH_MODE="1"; LOCAL_AUTH_LABEL="RBAC on" ;;
+            off|none|no|false|0) LOCAL_AUTH_MODE="2"; LOCAL_AUTH_LABEL="RBAC off" ;;
+            *) die "--local-auth must be rbac|off" ;;
+        esac
+    elif [ "$FLAG_YES" = "1" ]; then
+        info "--yes supplied; using Local auth default: RBAC on"
+        LOCAL_AUTH_MODE="1"
+        LOCAL_AUTH_LABEL="RBAC on"
+    else
+        echo ""
+        echo "  Local authentication:"
+        echo "    [1] RBAC on  — first-admin setup, operators, sessions (recommended)"
+        echo "    [2] RBAC off — localhost-only, no login/setup wizard"
+        echo ""
+        LOCAL_AUTH_PICK=""
+        _tty_read "  Select local auth mode (1/2) [1]: " LOCAL_AUTH_PICK
+        case "${LOCAL_AUTH_PICK:-1}" in
+            1) LOCAL_AUTH_MODE="1"; LOCAL_AUTH_LABEL="RBAC on" ;;
+            2) LOCAL_AUTH_MODE="2"; LOCAL_AUTH_LABEL="RBAC off" ;;
+            *) die "Invalid local auth mode: $LOCAL_AUTH_PICK. Enter 1 or 2." ;;
+        esac
+    fi
+    ok "Local auth: $LOCAL_AUTH_LABEL"
+fi
+
+echo ""
+_host_dependency_preflight
+
+# ---- [2/6] clean-slate preflight -------------------------------------------
 # Rule: if ClawNex installed it, remove it; if ClawNex did not, leave it
 # alone. Removal is scripts/uninstall.sh — the ONE removal code path — which
 # also restores OpenClaw routing from its first-touch backup. Never silent:
 # interactive consent or an explicit --clean flag is required.
-echo -e "${BOLD}[0/5] Clean-slate preflight${NC}"
+echo ""
+echo -e "${BOLD}[2/6] Clean-slate preflight${NC}"
 
 P0_FOUND=()
 P0_EXISTING_DIR=""
@@ -396,13 +720,19 @@ else
         info "DB archive skipped by operator"
     fi
 
+    if [ "$OS" = "linux" ]; then
+        _p0_prime_sudo || true
+        _p0_linux_stop_clawnex_systemd
+    fi
+
     if [ "$IN_PLACE" = "1" ] && { [ -z "$P0_EXISTING_DIR" ] || [ "$P0_EXISTING_DIR" = "$INSTALL_DIR" ]; }; then
         # Installing over the same extracted tree: do NOT uninstall (it would
         # delete the very files we're installing from). Stop services, then
         # remove runtime artifacts so failed installs cannot
         # poison the next run. Source dirs/scripts stay intact.
         if [ "$OS" = "linux" ] && command -v systemctl >/dev/null 2>&1; then
-            sudo systemctl stop clawnex-dashboard clawnex-litellm 2>/dev/null || true
+            _p0_linux_stop_clawnex_systemd
+            _p0_linux_kill_install_port_owners
         fi
         if [ "$OS" = "macos" ]; then
             _p0_macos_stop_clawnex_launchd
@@ -432,19 +762,10 @@ else
         rm -f "$stale_path" 2>/dev/null || true
     done
 
-    # Privileged sweep: older uninstalls can't sudo non-interactively
-    # (sudo -n timestamps are tty-keyed and a detached installer has no
-    # tty), which leaves systemd units running. When SUDO_PASSWORD is
-    # available, finish that job here — only ClawNex-named artifacts.
-    if [ "$OS" = "linux" ] && command -v systemctl >/dev/null 2>&1 && [ -n "${SUDO_PASSWORD:-}" ]; then
-        _p0_sudo() { printf '%s\n' "$SUDO_PASSWORD" | sudo -S -p '' "$@" 2>/dev/null; }
-        for u in clawnex-dashboard clawnex-litellm; do
-            _p0_sudo systemctl stop "$u" || true
-            _p0_sudo systemctl disable "$u" || true
-            _p0_sudo rm -f "/etc/systemd/system/${u}.service" || true
-        done
-        _p0_sudo systemctl daemon-reload || true
-        ok "Privileged sweep: clawnex systemd units stopped + removed"
+    if [ "$OS" = "linux" ]; then
+        _p0_linux_stop_clawnex_systemd
+        _p0_linux_kill_install_port_owners
+        [ "$P0_SUDO_READY" = "1" ] && ok "Privileged sweep: clawnex systemd units and owned port listeners cleared"
     fi
 
     # Re-scan: ports free AND no leftover install tree
@@ -465,91 +786,9 @@ else
     ok "Clean-slate verified"
 fi
 
-# ---- [1/5] Mode ----------------------------------------------------------------
+# ---- [3/6] Domain + provider ----------------------------------------------------
 echo ""
-echo -e "${BOLD}[1/5] Install mode${NC}"
-echo "  Detected OS: $OS"
-if [ -n "$FLAG_MODE" ]; then
-    MODE="$FLAG_MODE"
-else
-    echo ""
-    if [ "$OS" = "linux" ]; then
-        echo "  Suggested deployment approach:"
-        echo "    [1] VPS server — systemd + Caddy + Let's Encrypt + UFW"
-        echo ""
-        if [ "$FLAG_YES" = "1" ]; then
-            info "--yes supplied; accepting suggested VPS server install"
-            MODE="vps"
-        elif _can_prompt; then
-            MODE_CONFIRM=""
-            _tty_read "  Use this approach? (Y/n): " MODE_CONFIRM
-            case "${MODE_CONFIRM:-Y}" in
-                y|Y|yes|YES) MODE="vps" ;;
-                n|N|no|NO)
-                    echo "  Cancelled. Re-run with --mode vps when you want the VPS server install."
-                    exit 0
-                    ;;
-                *) die "Invalid choice: $MODE_CONFIRM. Enter Y or n." ;;
-            esac
-        else
-            die "No TTY available to confirm detected Linux install mode. Re-run with --mode vps for automation."
-        fi
-    else
-        echo "  How should ClawNex run on this Mac?"
-        echo "    [1] Local   — dashboard on localhost, launchd keep-alive (most operators)"
-        echo "    [2] Server  — public domain + Caddy + TLS on this Mac"
-        echo ""
-        MAC_PICK=""
-        _tty_read "  Select (1/2) [1]: " MAC_PICK
-        case "${MAC_PICK:-1}" in
-            2) MODE="mac-server" ;;
-            *) MODE="mac-local" ;;
-        esac
-    fi
-fi
-case "$MODE" in
-    vps)        [ "$OS" = "linux" ] || die "--mode vps requires Linux (you're on $OS)" ;;
-    mac-local|mac-server) [ "$OS" = "macos" ] || die "--mode $MODE requires macOS (you're on $OS)" ;;
-    *) die "Invalid mode: $MODE (vps|mac-local|mac-server)" ;;
-esac
-ok "Mode: $MODE"
-
-LOCAL_AUTH_MODE="1"
-LOCAL_AUTH_LABEL="RBAC on"
-if [ -n "$FLAG_LOCAL_AUTH" ] && [ "$MODE" != "mac-local" ]; then
-    die "--local-auth only applies to --mode mac-local"
-fi
-if [ "$MODE" = "mac-local" ]; then
-    if [ -n "$FLAG_LOCAL_AUTH" ]; then
-        case "$FLAG_LOCAL_AUTH" in
-            rbac|on|yes|true|1) LOCAL_AUTH_MODE="1"; LOCAL_AUTH_LABEL="RBAC on" ;;
-            off|none|no|false|0) LOCAL_AUTH_MODE="2"; LOCAL_AUTH_LABEL="RBAC off" ;;
-            *) die "--local-auth must be rbac|off" ;;
-        esac
-    elif [ "$FLAG_YES" = "1" ]; then
-        info "--yes supplied; using Local auth default: RBAC on"
-        LOCAL_AUTH_MODE="1"
-        LOCAL_AUTH_LABEL="RBAC on"
-    else
-        echo ""
-        echo "  Local authentication:"
-        echo "    [1] RBAC on  — first-admin setup, operators, sessions (recommended)"
-        echo "    [2] RBAC off — localhost-only, no login/setup wizard"
-        echo ""
-        LOCAL_AUTH_PICK=""
-        _tty_read "  Select local auth mode (1/2) [1]: " LOCAL_AUTH_PICK
-        case "${LOCAL_AUTH_PICK:-1}" in
-            1) LOCAL_AUTH_MODE="1"; LOCAL_AUTH_LABEL="RBAC on" ;;
-            2) LOCAL_AUTH_MODE="2"; LOCAL_AUTH_LABEL="RBAC off" ;;
-            *) die "Invalid local auth mode: $LOCAL_AUTH_PICK. Enter 1 or 2." ;;
-        esac
-    fi
-    ok "Local auth: $LOCAL_AUTH_LABEL"
-fi
-
-# ---- [2/5] Domain + provider ----------------------------------------------------
-echo ""
-echo -e "${BOLD}[2/5] Configuration${NC}"
+echo -e "${BOLD}[3/6] Configuration${NC}"
 DOMAIN=""
 if [ -n "$FLAG_DOMAIN" ]; then
     DOMAIN="$FLAG_DOMAIN"
@@ -638,9 +877,9 @@ if [ "$FLAG_YES" != "1" ]; then
     case "$CONFIRM" in y|yes) ;; *) echo "  Cancelled."; exit 0 ;; esac
 fi
 
-# ---- [3/5] Engine: setup.sh -------------------------------------------------------
+# ---- [4/6] Engine: setup.sh -------------------------------------------------------
 echo ""
-echo -e "${BOLD}[3/5] Engine (setup.sh)${NC}"
+echo -e "${BOLD}[4/6] Engine (setup.sh)${NC}"
 
 # install.sh and setup.sh intentionally use the same provider numbering:
 # 1 OpenRouter · 2 Anthropic · 3 OpenAI · 4 NVIDIA NIM · 5 Skip.
@@ -670,9 +909,9 @@ fi
 
 "$ENGINE_BASH" setup.sh --preseeded --no-start
 
-# ---- [4/5] Service layer ----------------------------------------------------------
+# ---- [5/6] Service layer ----------------------------------------------------------
 echo ""
-echo -e "${BOLD}[4/5] Service layer${NC}"
+echo -e "${BOLD}[5/6] Service layer${NC}"
 case "$MODE" in
     vps)
         bash deploy/install-prod.sh "$DOMAIN"
@@ -685,9 +924,9 @@ case "$MODE" in
         ;;
 esac
 
-# ---- [5/5] Verify + banner ---------------------------------------------------------
+# ---- [6/6] Verify + banner ---------------------------------------------------------
 echo ""
-echo -e "${BOLD}[5/5] Verify${NC}"
+echo -e "${BOLD}[6/6] Verify${NC}"
 HEALTHY=0
 for i in $(seq 1 60); do
     if curl -sf -m 3 "http://127.0.0.1:5001/api/health" >/dev/null 2>&1; then

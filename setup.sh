@@ -321,15 +321,6 @@ if [ -n "$PYTHON_CMD" ]; then
     if command -v python3 >/dev/null 2>&1 && ! _python_meets_min python3; then
         DEFAULT_PYTHON_VERSION="$(_python_version python3)"
         echo -e "  ${YELLOW}⚠${NC} python3 is ${DEFAULT_PYTHON_VERSION}; LiteLLM requires ${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR}+"
-        if [ "$OS_TYPE" = "Darwin" ] && command -v brew &>/dev/null; then
-            _tty_read "  Upgrade/reinstall Homebrew Python 3.12 for LiteLLM? (yes/no) [yes]: " INSTALL_PYTHON
-            INSTALL_PYTHON=${INSTALL_PYTHON:-yes}
-            if is_yes "$INSTALL_PYTHON"; then
-                _install_or_upgrade_python312
-                PYTHON_CMD="$(_find_modern_python || true)"
-                PYTHON_VERSION="$(_python_version "$PYTHON_CMD")"
-            fi
-        fi
         echo -e "  ${GREEN}✓${NC} Using $PYTHON_CMD (${PYTHON_VERSION}) for LiteLLM"
     else
         echo -e "  ${GREEN}✓${NC} Python ${PYTHON_VERSION}"
@@ -652,10 +643,10 @@ if [ -n "$PYTHON_CMD" ]; then
         if [ "$LITELLM_INSTALLED" = "$LITELLM_VERSION" ]; then
             echo -e "  ${GREEN}✓${NC} LiteLLM ${LITELLM_VERSION} installed (verified)"
         else
-            echo -e "  ${YELLOW}⚠${NC} LiteLLM install attempted but version check failed."
+            echo -e "  ${RED}✗${NC} LiteLLM install attempted but version check failed."
             echo -e "    Got: '${LITELLM_INSTALLED:-(metadata not found)}', expected: ${LITELLM_VERSION}"
-            echo -e "    Dashboard will still come up; the proxy will be skipped in step 10."
             echo -e "    To retry: ${PYTHON_CMD} -m pip install 'litellm[proxy]==${LITELLM_VERSION}' ${PIP_FLAGS}"
+            exit 1
         fi
     fi
 fi
@@ -1541,8 +1532,12 @@ if [ -x "$INSTALL_DIR/clawnex" ] && ! command -v clawnex &>/dev/null; then
             INSTALL_SYMLINK=${INSTALL_SYMLINK:-yes}
             if is_yes "$INSTALL_SYMLINK"; then
                 mkdir -p "$USER_BIN"
-                ln -sf "$INSTALL_DIR/clawnex" "$USER_BIN/clawnex"
-                echo -e "  ${GREEN}✓${NC} Installed: $USER_BIN/clawnex → $INSTALL_DIR/clawnex"
+                if ln -sf "$INSTALL_DIR/clawnex" "$USER_BIN/clawnex"; then
+                    echo -e "  ${GREEN}✓${NC} Installed: $USER_BIN/clawnex → $INSTALL_DIR/clawnex"
+                else
+                    echo -e "  ${YELLOW}⚠${NC} Could not install CLI shortcut at $USER_BIN/clawnex"
+                    echo -e "    Run from this directory instead: $INSTALL_DIR/clawnex"
+                fi
             else
                 echo -e "  ${DIM}Skipped — run via $INSTALL_DIR/clawnex instead.${NC}"
             fi
