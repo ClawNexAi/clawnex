@@ -1,0 +1,213 @@
+# API and MCP Integration Guide
+
+ClawNex exposes integration surfaces for automation, CI/CD, dashboards, SIEM workflows, and AI assistants.
+
+This guide covers the public REST API, the OpenAI-compatible chat endpoint, and the MCP server at a public-safe level.
+
+## Integration Surfaces
+
+| Surface | Use Case | Auth |
+|---------|----------|------|
+| Public REST API | Automations, CI checks, SIEM pulls, fleet status | API key |
+| OpenAI-compatible chat endpoint | Route prompts through ClawNex Shield Rules | API key |
+| MCP server | Let AI assistants call ClawNex tools | Local MCP transport, optional HTTP key |
+| Internal dashboard API | Dashboard operation | Session auth when RBAC is enabled |
+
+Most external integrations should use the public REST API or the OpenAI-compatible endpoint.
+
+## API Keys
+
+Create API keys in the dashboard:
+
+1. Open **Configuration**.
+2. Expand **Access Control**.
+3. Open **API Keys**.
+4. Create a key for the integration.
+5. Store the key in the integration's secret manager.
+
+Use one of these headers:
+
+```bash
+X-ClawNex-Key: YOUR_KEY
+```
+
+or:
+
+```bash
+Authorization: Bearer YOUR_KEY
+```
+
+Do not paste production keys into screenshots, support tickets, logs, or browser recordings.
+
+## Health Check
+
+The minimal public health endpoint is intentionally unauthenticated:
+
+```bash
+curl -fsS https://clawnex.example.com/api/v1/health
+```
+
+Use it for uptime checks. It should not return sensitive operational data.
+
+## Scan Text
+
+Use the scan endpoint when a pipeline or automation wants ClawNex to evaluate text before release or execution.
+
+```bash
+curl -fsS https://clawnex.example.com/api/v1/shield/scan \
+  -H "Authorization: Bearer $CLAWNEX_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "review this prompt before deployment",
+    "source": "ci",
+    "direction": "inbound"
+  }'
+```
+
+Typical response fields include verdict, score, detections, and metadata useful for automation decisions.
+
+## Fleet Status
+
+Use fleet endpoints to pull instance, agent, and operational state into external dashboards or monitoring systems.
+
+Example use cases:
+
+- confirm ClawNex is seeing the expected OpenClaw instance
+- detect disconnected agents
+- report fleet readiness during deployment
+- collect status before and after a change window
+
+## Alerts and Audit
+
+Security teams can pull alerts and audit events into SIEM or evidence workflows.
+
+Common integration pattern:
+
+1. Store an API key in the SIEM connector.
+2. Poll alerts on a schedule.
+3. Pull audit events for the same time window.
+4. Link ClawNex event IDs into the SIEM case.
+5. Keep raw prompt content out of external systems unless your policy allows it.
+
+## OpenAI-Compatible Chat Endpoint
+
+ClawNex can act as an OpenAI-compatible gateway with shield scanning.
+
+```bash
+curl -fsS https://clawnex.example.com/api/v1/chat/completions \
+  -H "Authorization: Bearer $CLAWNEX_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "openrouter/auto",
+    "messages": [
+      { "role": "user", "content": "Summarize this release note." }
+    ],
+    "max_tokens": 500
+  }'
+```
+
+The endpoint scans inbound prompts, forwards allowed requests through the configured provider route, scans outbound responses, and returns an OpenAI-compatible response.
+
+## CI/CD Pattern
+
+Use ClawNex in CI to prevent risky prompts, templates, or agent instructions from shipping unnoticed.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+response="$(curl -fsS "$CLAWNEX_URL/api/v1/shield/scan" \
+  -H "Authorization: Bearer $CLAWNEX_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d @prompt.json)"
+
+echo "$response"
+
+if echo "$response" | grep -q '"verdict":"BLOCK"'; then
+  echo "ClawNex blocked this prompt."
+  exit 1
+fi
+```
+
+For production CI, parse JSON with a real JSON parser rather than grep.
+
+## MCP Server
+
+The Model Context Protocol server lets AI assistants interact with ClawNex tools.
+
+Use cases:
+
+- ask an assistant to inspect fleet status
+- retrieve recent alerts
+- run a shield scan
+- query audit context
+- help an operator investigate a live issue
+
+MCP should normally run locally. HTTP/SSE mode should stay bound to localhost unless you put it behind your own access controls.
+
+## MCP Configuration
+
+Example local stdio configuration:
+
+```json
+{
+  "mcpServers": {
+    "clawnex": {
+      "command": "npx",
+      "args": ["tsx", "/path/to/clawnex/src/mcp/server.ts"],
+      "env": {
+        "CLAWNEX_URL": "http://127.0.0.1:5001"
+      }
+    }
+  }
+}
+```
+
+HTTP/SSE mode requires an MCP API key:
+
+```bash
+MCP_ENABLED=1 MCP_API_KEY=replace-with-a-long-random-key MCP_PORT=5002 npx tsx ~/clawnex/src/mcp/server.ts
+```
+
+Keep the server local unless your deployment explicitly secures it.
+
+## Rate Limits and Errors
+
+External integrations should expect:
+
+| Code | Meaning |
+|------|---------|
+| 200 | Request accepted |
+| 400 | Invalid request shape |
+| 401 | Missing or invalid API key |
+| 403 | Authenticated but not allowed |
+| 413 | Payload too large |
+| 429 | Rate limit exceeded |
+| 500 | Server-side failure |
+
+Integrations should retry transient failures with backoff, but should not retry block verdicts as if they were network errors.
+
+## Integration Guidance
+
+Recommended practices:
+
+- create one API key per integration
+- rotate keys on a schedule
+- store keys in a secret manager
+- keep ClawNex behind HTTPS for remote API use
+- do not expose local backend ports directly
+- log event IDs, not full sensitive prompt content
+- use the dashboard audit trail to review integration activity
+- prefer public API endpoints over internal dashboard API routes
+
+## What Not to Do
+
+Avoid these patterns:
+
+- sharing one API key across unrelated systems
+- exposing the MCP HTTP server publicly without access controls
+- scraping dashboard HTML instead of using API endpoints
+- sending full prompt archives to third-party systems by default
+- treating observe-mode findings as enforcement
+- bypassing LiteLLM and expecting live blocking to happen
+
