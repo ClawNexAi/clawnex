@@ -167,11 +167,6 @@ if [ -f "$INSTALL_DIR/deploy/lib-macos.sh" ]; then
     chmod +x "$BUNDLE_DIR/deploy/lib-macos.sh"
     echo -e "  ${GREEN}✓${NC} deploy/lib-macos.sh"
 fi
-if [ -f "$INSTALL_DIR/deploy/install-from-github.sh" ]; then
-    cp "$INSTALL_DIR/deploy/install-from-github.sh" "$BUNDLE_DIR/deploy/"
-    chmod +x "$BUNDLE_DIR/deploy/install-from-github.sh"
-    echo -e "  ${GREEN}✓${NC} deploy/install-from-github.sh"
-fi
 
 # -----------------------------------------------------------------------------
 # [2/5] Stage root-level config + setup files.
@@ -188,7 +183,6 @@ ROOT_FILES=(
     .gitignore
     .env.example
     setup.sh
-    install
     install.sh
     clawnex
     CLAUDE.md
@@ -208,11 +202,10 @@ for f in "${ROOT_FILES[@]}"; do
     fi
 done
 chmod +x "$BUNDLE_DIR/setup.sh" 2>/dev/null || true
-chmod +x "$BUNDLE_DIR/install" 2>/dev/null || true
 chmod +x "$BUNDLE_DIR/install.sh" 2>/dev/null || true
 chmod +x "$BUNDLE_DIR/clawnex" 2>/dev/null || true
 
-echo -e "  ${GREEN}✓${NC} root configs + install wrappers + setup.sh + readme/license/changelog"
+echo -e "  ${GREEN}✓${NC} root configs + setup.sh + install.sh + readme/license/changelog"
 
 # -----------------------------------------------------------------------------
 # [3/5] Stage operator-facing docs. Governance + policies + registers are
@@ -289,11 +282,10 @@ cd clawnex-v${VERSION}-deploy
 ./install.sh
 \`\`\`
 
-\`install.sh\` asks you to confirm the detected install mode. Linux hosts ask
-whether this is Local / VNC (localhost-only systemd services) or Public VPS
-(systemd, Caddy, Let's Encrypt, UFW). macOS hosts ask for Local or Server
-mode. Local mode also asks whether to use RBAC or run localhost-only without
-login.
+\`install.sh\` asks you to confirm the detected install mode. Linux hosts
+default to VPS mode with systemd, Caddy, and Let's Encrypt. macOS hosts ask
+for Local or Server mode. Local mode also asks whether to use RBAC or run
+localhost-only without login.
 
 ## 2. Open the dashboard
 
@@ -310,7 +302,7 @@ login.
 | \`src/\`, \`public/\` | Next.js application source + assets |
 | \`litellm/\` | LiteLLM proxy + ClawNex logger plugin |
 | \`scripts/\` | Operational helpers including \`uninstall.sh\` |
-| \`install\`, \`install.sh\` | Single installer entry point for Linux local/VPS, macOS local, and macOS server |
+| \`install.sh\` | Single installer entry point for Linux VPS, macOS local, and macOS server |
 | \`setup.sh\`, \`deploy/\` | Internal installer/service-layer components used by \`install.sh\` |
 | \`docs/\` | Basic + advanced user manuals, ops manual, deployment + troubleshooting guides |
 | \`README.md\`, \`CHANGELOG.md\`, etc. | Project meta |

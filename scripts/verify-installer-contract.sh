@@ -84,11 +84,6 @@ assert_grep install.sh 'Local authentication:' "local installs ask for RBAC post
 assert_grep install.sh 'CLAWNEX_ANSWER_LOCAL_AUTH_MODE' "orchestrator preseeds local RBAC posture into setup.sh"
 assert_grep install.sh 'lib-linux-local\.sh' "linux-local mode calls the Linux local service layer"
 assert_grep install.sh 'lib-macos\.sh' "mac modes call the macOS service layer"
-assert_grep deploy/install-from-github.sh 'Updating existing ClawNex checkout' "source bootstrap updates an existing clean checkout"
-assert_grep deploy/install-from-github.sh 'Move this directory aside and clone ClawNex fresh' "source bootstrap handles existing non-empty source dirs interactively"
-assert_grep deploy/install-from-github.sh '\-\-replace-source' "source bootstrap has explicit non-interactive source replacement flag"
-assert_grep install 'exec bash "\$SCRIPT_DIR/install\.sh"' "root install wrapper dispatches to install.sh"
-assert_grep README.md 'install-from-github\.sh' "README primary install path uses idempotent source bootstrap"
 assert_grep install.sh 'Archive existing database before removal\?' "Phase 0 asks before archiving an existing DB"
 assert_grep install.sh 'P0_DB_ARCHIVE_CANDIDATES' "Phase 0 de-duplicates DB archive candidates"
 assert_grep install.sh 'clawnex-pre-install-backup' "Phase 0 archives DB outside install dir when selected"
@@ -140,15 +135,11 @@ echo "[5] shipping manifest"
 if [ -f deploy/package.sh ]; then
     assert_grep deploy/package.sh 'lib-linux-local\.sh' "tarball ships lib-linux-local.sh"
     assert_grep deploy/package.sh 'lib-macos\.sh' "tarball ships lib-macos.sh"
-    assert_grep deploy/package.sh 'install-from-github\.sh' "tarball ships source bootstrap"
-    assert_grep deploy/package.sh 'install wrappers' "tarball ships root install wrapper"
     assert_grep deploy/package.sh 'third_party/' "tarball ships bundled third-party scanner files"
     assert_grep deploy/package.sh 'NOTICE' "tarball ships third-party NOTICE"
 else
     [ -f deploy/lib-linux-local.sh ] && pass "packaged runtime includes lib-linux-local.sh" || fail "packaged runtime includes lib-linux-local.sh"
     [ -f deploy/lib-macos.sh ] && pass "packaged runtime includes lib-macos.sh" || fail "packaged runtime includes lib-macos.sh"
-    [ -f deploy/install-from-github.sh ] && pass "packaged runtime includes install-from-github.sh" || fail "packaged runtime includes install-from-github.sh"
-    [ -f install ] && pass "packaged runtime includes install wrapper" || fail "packaged runtime includes install wrapper"
     [ -d third_party/clawkeeper ] && pass "packaged runtime includes bundled third-party scanner files" || fail "packaged runtime includes bundled third-party scanner files"
     [ -f NOTICE ] && pass "packaged runtime includes third-party NOTICE" || fail "packaged runtime includes third-party NOTICE"
 fi
@@ -182,7 +173,7 @@ echo "[6] stale installers retired"
 [ ! -f deploy/deploy.sh ]   && pass "deploy/deploy.sh deleted"   || fail "deploy/deploy.sh still present (legacy)"
 
 echo "[7] bash syntax"
-for f in install install.sh setup.sh deploy/install-from-github.sh deploy/lib-linux-local.sh deploy/lib-macos.sh deploy/install-prod.sh scripts/uninstall.sh; do
+for f in install.sh setup.sh deploy/lib-linux-local.sh deploy/lib-macos.sh deploy/install-prod.sh scripts/uninstall.sh; do
     [ -f "$f" ] || { fail "$f missing"; continue; }
     bash -n "$f" && pass "bash -n $f" || fail "bash -n $f"
 done
