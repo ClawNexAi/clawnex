@@ -51,16 +51,5 @@ jobs:
           path: sbom.json
           retention-days: 90
 
-  docker:
-    name: Docker Build
-    runs-on: ubuntu-latest
-    needs: build
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: docker build -t clawnex:ci .
-        env:
-          DOCKER_BUILDKIT: '1'
+  # Docker packaging is intentionally deferred. Re-add a Docker build job only
+  # when the repository ships a supported Dockerfile / compose path.
