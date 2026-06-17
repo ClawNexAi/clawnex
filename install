@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Convenience wrapper so `bash install` and `./install` both run the
+# ClawNex installer instead of falling through to the system install binary.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec bash "$SCRIPT_DIR/install.sh" "$@"

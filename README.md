@@ -28,18 +28,22 @@ Requirements:
 - macOS or Linux
 
 ```bash
-git clone https://github.com/ClawNexAi/clawnex.git clawnex
-cd clawnex
-bash install.sh
+curl -fsSL https://raw.githubusercontent.com/ClawNexAi/clawnex/main/deploy/install-from-github.sh | bash
 ```
+
+That command is safe to retry. It clones ClawNex into `~/clawnex` on first run,
+updates an existing clean checkout on later runs, and asks before moving aside
+an unrelated or dirty `~/clawnex` directory. After the source checkout is ready,
+it launches `install.sh`.
 
 The installer detects the host, recommends an install mode, asks you to confirm the deployment approach, configures auth, builds ClawNex, and starts the service layer for the selected mode.
 
 | Path | Use it for | Start here |
 |---|---|---|
-| **macOS local** | Evaluation, local testing, development | `bash install.sh`, choose Local, then choose RBAC or localhost-only mode |
-| **macOS server** | Hosting from a Mac with server-style auth | `bash install.sh`, choose Server, provide the domain |
-| **Linux/VPS** | Public-facing server with systemd, Caddy, HTTPS | `bash install.sh`, confirm VPS mode, provide the domain |
+| **macOS local** | Evaluation, local testing, development | Run the bootstrap, choose Local, then choose RBAC or localhost-only mode |
+| **macOS server** | Hosting from a Mac with server-style auth | Run the bootstrap, choose Server, provide the domain |
+| **Linux local / VPS desktop** | Local-only use on Linux, including cloud VPS accessed by VNC/RDP/SSH tunnel | Run the bootstrap, choose Local / VNC |
+| **Linux public VPS** | Public-facing server with systemd, Caddy, HTTPS | Run the bootstrap, choose Public VPS, provide the domain |
 
 When RBAC is enabled, the installer prints a one-time setup URL. Open it to create the first admin account.
 
