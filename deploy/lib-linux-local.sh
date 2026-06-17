@@ -203,8 +203,20 @@ fi
 echo ""
 
 echo -e "${BOLD}[4/4] Local health check${NC}"
-curl -fsS "http://127.0.0.1:${DASHBOARD_PORT}/api/health" >/dev/null
-echo -e "  ${GREEN}✓${NC} Dashboard healthy on http://localhost:${DASHBOARD_PORT}"
+DASHBOARD_HEALTHY=0
+for i in $(seq 1 60); do
+    if curl -fsS -m 3 "http://127.0.0.1:${DASHBOARD_PORT}/api/health" >/dev/null 2>&1; then
+        DASHBOARD_HEALTHY=1
+        echo -e "  ${GREEN}✓${NC} Dashboard healthy on http://localhost:${DASHBOARD_PORT} (after ${i} polls / $((i*2))s)"
+        break
+    fi
+    sleep 2
+done
+if [ "$DASHBOARD_HEALTHY" != "1" ]; then
+    echo -e "  ${RED}✗${NC} Dashboard did not answer /api/health after 120s — last 40 journal lines:"
+    $SUDO journalctl -u clawnex-dashboard -n 40 --no-pager
+    exit 1
+fi
 if [ "$LITELLM_UNIT_INSTALLED" = "1" ]; then
     if curl -fsS "http://127.0.0.1:${LITELLM_PORT}/health/liveliness" >/dev/null 2>&1; then
         echo -e "  ${GREEN}✓${NC} LiteLLM liveliness healthy on http://localhost:${LITELLM_PORT}"
