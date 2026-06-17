@@ -142,6 +142,14 @@ if [ "$INSTALL_DIR" != "$SCRIPT_LOCATION" ]; then
     echo -e "  (script lives at ${SCRIPT_LOCATION}, but operating on the path above)"
 fi
 
+CURRENT_SHELL_DIR="$(pwd -P 2>/dev/null || pwd 2>/dev/null || true)"
+STARTED_INSIDE_INSTALL=0
+if [ -n "$CURRENT_SHELL_DIR" ]; then
+    case "${CURRENT_SHELL_DIR}/" in
+        "${INSTALL_DIR}/"*) STARTED_INSIDE_INSTALL=1 ;;
+    esac
+fi
+
 echo ""
 echo -ne "${RED}"
 box_rule "╔" "═" "╗"
@@ -152,6 +160,12 @@ box_rule "╚" "═" "╝"
 echo -e "${NC}"
 echo ""
 echo -e "Installation directory: ${YELLOW}${INSTALL_DIR}${NC}"
+if [ "$STARTED_INSIDE_INSTALL" -eq 1 ]; then
+    echo ""
+    echo -e "${YELLOW}!${NC} You are running uninstall from inside the ClawNex install directory."
+    echo "  The uninstall will remove this directory. When it finishes, your shell"
+    echo -e "  may still show a deleted path; run ${CYAN}cd ~${NC} to return home."
+fi
 echo ""
 
 # ---- sudo wrapper -----------------------------------------------------------
@@ -511,6 +525,9 @@ shopt -u nullglob
 
 # Step 5b: Remove installation files inside the install dir
 echo "[6b/8] Removing installation files..."
+if [ "$STARTED_INSIDE_INSTALL" -eq 1 ]; then
+    cd "$HOME" 2>/dev/null || cd / 2>/dev/null || true
+fi
 rm -rf "${INSTALL_DIR}/.next" && echo "  - Removed .next"
 rm -rf "${INSTALL_DIR}/node_modules" && echo "  - Removed node_modules"
 rm -rf "${INSTALL_DIR}/src" && echo "  - Removed src/"
@@ -577,5 +594,11 @@ if [ "$KEEP_BACKUPS" = "yes" ] || [ "$KEEP_DOCS" = "yes" ]; then
     echo -e "To fully remove everything: ${RED}rm -rf ${INSTALL_DIR}${NC}"
 else
     echo "All ClawNex files have been removed."
+fi
+if [ "$STARTED_INSIDE_INSTALL" -eq 1 ]; then
+    echo ""
+    echo -e "${YELLOW}!${NC} Your shell was launched from inside the removed install directory."
+    echo "  Run this now to return to a valid directory:"
+    echo -e "    ${CYAN}cd ~${NC}"
 fi
 echo ""

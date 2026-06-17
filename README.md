@@ -1,12 +1,18 @@
-# ClawNex
+<p align="center">
+  <img src="public/clawnex-icon-dark.png" alt="ClawNex logo" width="160">
+</p>
 
-**One nexus. Total control.**
+<h1 align="center">ClawNex</h1>
 
-[![CI](https://github.com/ClawNexAi/clawnex/actions/workflows/ci.yml/badge.svg)](https://github.com/ClawNexAi/clawnex/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/ClawNexAi/clawnex/actions/workflows/codeql.yml/badge.svg)](https://github.com/ClawNexAi/clawnex/actions/workflows/codeql.yml)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![DCO](https://img.shields.io/badge/Sign--off-DCO-brightgreen)](DCO)
-[![Version](https://img.shields.io/badge/version-0.15.0--alpha-orange)](CHANGELOG.md)
+<p align="center"><strong>One nexus. Total control.</strong></p>
+
+<p align="center">
+  <a href="https://github.com/ClawNexAi/clawnex/actions/workflows/ci.yml"><img src="https://github.com/ClawNexAi/clawnex/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/ClawNexAi/clawnex/actions/workflows/codeql.yml"><img src="https://github.com/ClawNexAi/clawnex/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"></a>
+  <a href="DCO"><img src="https://img.shields.io/badge/Sign--off-DCO-brightgreen" alt="DCO"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.15.0--alpha-orange" alt="Version 0.15.0-alpha"></a>
+</p>
 
 ClawNex is a runtime security control plane for AI agent fleets. It sits between agents and model providers, scans model traffic, surfaces fleet risk, tracks cost, governs operator access, and preserves audit evidence when something goes wrong.
 
@@ -44,6 +50,20 @@ The installer detects the host, recommends an install mode, asks you to confirm 
 When RBAC is enabled, the installer prints a one-time setup URL. Open it to create the first admin account.
 
 For production details, use the [deployment guide](docs/12-deployment-guide.md), [VPS quickstart](docs/15-vps-deployment-quickstart.md), and [troubleshooting guide](docs/17-troubleshooting-guide.md).
+
+### Uninstall
+
+From the ClawNex checkout:
+
+```bash
+bash scripts/uninstall.sh
+```
+
+Or from anywhere, pass the install path explicitly:
+
+```bash
+bash ~/clawnex/scripts/uninstall.sh ~/clawnex
+```
 
 ## Why ClawNex
 

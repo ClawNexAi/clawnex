@@ -132,6 +132,9 @@ assert_grep scripts/uninstall.sh 'io\.clawnex\.litellm\.plist' "uninstall remove
 assert_grep scripts/uninstall.sh '\.local/bin/clawnex' "uninstall removes clawnex CLI symlink"
 assert_grep scripts/uninstall.sh '\-\-no-archive' "uninstall supports skipping DB archive"
 assert_grep scripts/uninstall.sh 'Archive database before uninstall\?' "interactive uninstall asks before DB archive"
+assert_grep scripts/uninstall.sh 'STARTED_INSIDE_INSTALL' "uninstall detects when launched inside install dir"
+assert_grep scripts/uninstall.sh 'cd "\$HOME"' "uninstall leaves deleted cwd before removing install dir"
+assert_grep scripts/uninstall.sh 'Run this now to return to a valid directory' "uninstall explains parent-shell cwd recovery"
 
 echo "[5] shipping manifest"
 if [ -f deploy/package.sh ]; then
