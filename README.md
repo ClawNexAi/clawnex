@@ -274,7 +274,7 @@ Please do not open public issues for security-sensitive bugs. Use the responsibl
 
 - Documentation: [docs.clawnexai.com](https://docs.clawnexai.com) and `docs/`
 - Issues: [GitHub Issues](https://github.com/ClawNexAi/clawnex/issues)
-- Commercial support: `sales@clawnexai.com`
+- Commercial and general inquiries: `contact@clawnexai.com`
 
 ## License
 

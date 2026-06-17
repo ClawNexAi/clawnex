@@ -145,7 +145,7 @@ Projects that use DCO: the Linux kernel, Docker, Sigstore, Grafana, GitLab, CNCF
 
 ### CLA Clarification
 
-**There is no Contributor License Agreement (CLA) for ClawNex.** DCO sign-off is sufficient. Contributors do NOT need to sign any additional legal document to have their contributions accepted. If a corporate policy requires a CLA before employees can contribute to OSS projects, contact `legal@clawnexai.com` to discuss.
+**There is no Contributor License Agreement (CLA) for ClawNex.** DCO sign-off is sufficient. Contributors do NOT need to sign any additional legal document to have their contributions accepted. If a corporate policy requires a CLA before employees can contribute to OSS projects, contact `contact@clawnexai.com` to discuss.
 
 ---
 
@@ -324,7 +324,7 @@ For **security issues**, see `SECURITY.md` — do not file them as public GitHub
 
 Be respectful, be constructive, be patient. This is a small project run by a small team; we'd like contributors to enjoy being here. Disagreements about technical decisions are fine and welcome — personal attacks are not.
 
-A formal Code of Conduct based on the **Contributor Covenant v2.1** will be added at the public repository cutover (target: v0.7 release). Until then, the informal rules in this section apply. Enforcement contact at cutover will be `conduct@clawnexai.com`.
+A formal Code of Conduct based on the **Contributor Covenant v2.1** will be added at the public repository cutover (target: v0.7 release). Until then, the informal rules in this section apply. Enforcement contact at cutover will be `contact@clawnexai.com`.
 
 Behaviors that are NOT acceptable in ClawNex contribution channels:
 

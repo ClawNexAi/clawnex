@@ -35,4 +35,4 @@ Do **not** file public issues for security vulnerabilities. See [SECURITY.md](SE
 
 ## Commercial Support
 
-For enterprise deployments, priority support, and custom integrations, contact **info@clawnexai.com**.
+For enterprise deployments, priority support, and custom integrations, contact **contact@clawnexai.com**.

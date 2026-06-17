@@ -1208,7 +1208,7 @@ The uninstall step stops services, removes the watchdog cron entry, and deletes 
 
 | Tier | Role | Responsibility | Escalate After | Contact |
 |------|------|---------------|----------------|---------|
-| **Tier 1** | Frontline operator | Triage, apply runbook, document findings | 30 min of unresolved Sev2+ | `support@clawnexai.com` |
+| **Tier 1** | Frontline operator | Triage, apply runbook, document findings | 30 min of unresolved Sev2+ | `contact@clawnexai.com` |
 | **Tier 2** | Senior engineer / SRE | Deep diagnosis, hotfix, service recovery | 2 hours of unresolved Sev1 | On-call rotation (PagerDuty) |
 | **Tier 3** | Engineering lead + Security lead | Code changes, incident command, customer comms | Customer-impacting Sev1 > 4 hours | ClawNex Engineering leadership |
 
