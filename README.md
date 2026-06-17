@@ -224,6 +224,8 @@ For architecture details, start with the [high-level architecture](docs/02-high-
 
 For source development:
 
+Use Node.js 22 for local development. It is the safest recommended install target; newer Node releases may work, but they can run ahead of native dependency engine support and produce warnings.
+
 ```bash
 git clone https://github.com/ClawNexAi/clawnex.git clawnex
 cd clawnex
