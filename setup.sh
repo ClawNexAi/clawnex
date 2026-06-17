@@ -1105,7 +1105,7 @@ ENV_LOCAL_PATH="$INSTALL_DIR/.env.local"
 # build step.
 echo ""
 echo "  Will this be:"
-echo "    [1] Local — laptop or single-operator host. Localhost only,"
+echo "    [1] Local — laptop, VPS desktop, or single-operator host. Localhost only,"
 echo "                no domain or DNS. You'll choose auth posture next."
 echo "    [2] Public-facing — multi-operator. RBAC on, public domain, HTTPS via"
 echo "                        Caddy. You'll need a domain pointed at this server"

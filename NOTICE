@@ -16,7 +16,7 @@ distributed under `node_modules/<package>/LICENSE` (Node) and the corresponding
 reference here per Apache 2.0 §4(d).
 
 The dependency inventory was generated 2026-05-15 against
-`v0.14.5-alpha` (commit `944216e`). License methodology is maintained in the internal release evidence set.
+`v0.14.5-alpha` (commit `944216e`). See `docs/qa/oss-license-audit-2026-05-15.md`
 for the full audit methodology, per-license breakdown, and the live verifier
 that re-runs this analysis. SBOM artifact: `sbom.json` (CycloneDX, prod only).
 
@@ -124,6 +124,24 @@ No GPL, AGPL, SSPL, or proprietary licenses are present in the production
 Python tree.
 
 --------------------------------------------------------------------------------
+THIRD-PARTY RULE ATTRIBUTION
+--------------------------------------------------------------------------------
+
+ClawNex Shield Rules are bundled, reviewed, and versioned as part of ClawNex.
+The installer does not download or apply third-party rule logic at setup time.
+
+Some ClawNex Shield Rules were derived from or informed by Cisco AI Defense's
+DefenseClaw project:
+
+  Project: DefenseClaw
+  Source:  https://github.com/cisco-ai-defense/defenseclaw
+  Scope:   Go detection rules reviewed and ported into ClawNex-owned
+           TypeScript rules.
+
+DefenseClaw is listed here for attribution and provenance. Inclusion does not
+imply Cisco endorsement, partnership, support, or runtime dependency.
+
+--------------------------------------------------------------------------------
 EXCLUSIONS — packages deliberately NOT bundled into the OSS distribution
 --------------------------------------------------------------------------------
 
@@ -151,7 +169,7 @@ SUPPORTING DATA
 --------------------------------------------------------------------------------
 
   Repo license file:                        LICENSE
-  Full audit methodology:                   Internal release evidence set
+  Full audit methodology:                   docs/qa/oss-license-audit-2026-05-15.md
   Machine-readable inventory (Node):        sbom.json (CycloneDX, regenerated
                                             via `npm run sbom`)
   Machine-readable inventory (Python):      regenerable via
@@ -160,7 +178,7 @@ SUPPORTING DATA
 
 If you identify a dependency that should be attributed here and is not, or a
 license classification that requires correction, please open an issue at the
-ClawNex repository or email contact@clawnexai.com.
+ClawNex repository or email security@clawnexai.com.
 
 --------------------------------------------------------------------------------
 APACHE 2.0 NOTICE REQUIREMENT

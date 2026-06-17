@@ -3,8 +3,9 @@
 # verify-installer-contract.sh — static invariants for the single installer.
 #
 # Asserts the load-bearing contract between install.sh (orchestrator),
-# setup.sh (engine), deploy/lib-macos.sh + deploy/install-prod.sh (service
-# layers), uninstall.sh (removal), and package.sh (shipping manifest).
+# setup.sh (engine), deploy/lib-linux-local.sh + deploy/lib-macos.sh +
+# deploy/install-prod.sh (service layers), uninstall.sh (removal), and
+# package.sh (shipping manifest).
 # Runs with no network and no root; safe in CI.
 # =============================================================================
 set -u
@@ -46,11 +47,11 @@ assert_nogrep setup.sh 'npm install --prefer-offline 2>&1[[:space:]]*\|[[:space:
 echo "[2] install.sh orchestrator"
 assert_grep install.sh 'setup\.sh --preseeded --no-start' "routes ALL modes through the engine"
 assert_nogrep install.sh 'npm install' "no duplicated engine work (npm install) in orchestrator"
-assert_grep install.sh 'Host dependency preflight' "checks host dependencies before cleanup/install"
+assert_grep install.sh 'Host dependency preflight' "checks host dependencies before build/install"
 assert_grep install.sh '_host_dependency_preflight' "has a dedicated dependency gate"
-assert_grep install.sh 'Python 3\.10\+' "preflight requires modern Python before cleanup"
-assert_grep install.sh '_ensure_litellm_for_python' "preflight ensures required LiteLLM before cleanup"
-assert_grep install.sh 'Unable to install LiteLLM' "LiteLLM dependency failure aborts before cleanup"
+assert_grep install.sh 'Python 3\.10\+' "preflight requires modern Python before build/install"
+assert_grep install.sh '_ensure_litellm_for_python' "preflight ensures required LiteLLM before build/install"
+assert_grep install.sh 'Unable to install LiteLLM' "LiteLLM dependency failure aborts before build/install"
 assert_grep install.sh 'Homebrew Cellar is not writable' "macOS Python remediation aborts cleanly on Homebrew permission issues"
 assert_grep install.sh 'Unable to install Homebrew Python 3\.12' "macOS Python remediation aborts cleanly on Homebrew install failure"
 assert_grep install.sh '_p0_prime_sudo' "Linux cleanup primes sudo before nested uninstall"
@@ -58,6 +59,7 @@ assert_grep install.sh '_p0_linux_stop_clawnex_systemd' "Linux cleanup removes s
 assert_grep install.sh '_p0_linux_kill_install_port_owners' "Linux cleanup kills install-owned port listeners"
 assert_grep install.sh 'owned port listeners cleared' "Linux cleanup reports privileged port listener sweep"
 assert_grep install.sh '\-\-clean'   "has --clean flag for non-interactive wipe consent"
+assert_grep install.sh 'linux-local' "linux-local mode exists"
 assert_grep install.sh 'mac-server'   "mac-server mode exists"
 assert_grep install.sh 'mac-local'    "mac-local mode exists"
 assert_grep install.sh '\-\-local-auth\)' "has --local-auth automation flag for local mode"
@@ -73,11 +75,14 @@ assert_grep install.sh 'CLAWNEX_ANSWER_NVIDIA_BASE_URL' "orchestrator preseeds N
 assert_grep install.sh 'REG_TYPE="nvidia-nim"' "orchestrator registers NVIDIA provider type"
 assert_nogrep install.sh 'Local model \(LM Studio/Ollama\)' "top-level first-run menu does not expose LM Studio/Ollama"
 assert_nogrep install.sh 'CLAWNEX_ANSWER_LOCAL_PROVIDER_SELECT' "orchestrator no longer preseeds first-run local provider type"
-assert_grep install.sh 'Suggested deployment approach' "Linux detection recommends instead of silently choosing"
-assert_grep install.sh 'Use this approach\?' "interactive Linux install confirms suggested mode"
-assert_grep install.sh 'No TTY available to confirm detected Linux install mode' "headless install requires explicit --mode"
-assert_grep install.sh 'Local authentication:' "mac-local install asks for RBAC posture"
+assert_grep install.sh 'Local / VNC' "Linux install offers localhost-only VPS/VNC mode"
+assert_grep install.sh 'Public VPS' "Linux install still offers public Caddy/TLS mode"
+assert_grep install.sh 'Linux has two valid install modes' "headless --yes Linux install requires explicit mode"
+assert_grep install.sh 'No TTY available to choose Linux install mode' "headless install requires explicit --mode"
+assert_grep install.sh '\-\-domain is ignored for \$MODE' "local modes ignore accidental public domain flags"
+assert_grep install.sh 'Local authentication:' "local installs ask for RBAC posture"
 assert_grep install.sh 'CLAWNEX_ANSWER_LOCAL_AUTH_MODE' "orchestrator preseeds local RBAC posture into setup.sh"
+assert_grep install.sh 'lib-linux-local\.sh' "linux-local mode calls the Linux local service layer"
 assert_grep install.sh 'lib-macos\.sh' "mac modes call the macOS service layer"
 assert_grep install.sh 'Archive existing database before removal\?' "Phase 0 asks before archiving an existing DB"
 assert_grep install.sh 'P0_DB_ARCHIVE_CANDIDATES' "Phase 0 de-duplicates DB archive candidates"
@@ -110,7 +115,11 @@ echo "[2b] package dependency pins"
 assert_grep package.json '"postcss": "8\.4\.31"' "postcss pin uses conservative version already present in Next lock graph"
 assert_nogrep package.json '"postcss": "8\.5\.' "unresolved postcss 8.5.x pins retired"
 
-echo "[3] macOS service layer"
+echo "[3] local service layers"
+assert_grep deploy/lib-linux-local.sh 'ClawNex Local Linux Deploy' "Linux local service layer exists"
+assert_grep deploy/lib-linux-local.sh 'Environment=HOSTNAME=127\.0\.0\.1' "Linux local dashboard binds loopback"
+assert_grep deploy/lib-linux-local.sh '\-\-host 127\.0\.0\.1 \-\-port \$\{LITELLM_PORT\}' "Linux local LiteLLM binds loopback"
+assert_nogrep deploy/lib-linux-local.sh 'apt-get install.*caddy|ufw allow|systemctl .*caddy' "Linux local service layer does not install public edge services"
 assert_grep deploy/lib-macos.sh 'io\.clawnex\.dashboard' "dashboard launchd label"
 assert_grep deploy/lib-macos.sh 'io\.clawnex\.litellm'   "litellm launchd label"
 assert_grep deploy/lib-macos.sh 'KeepAlive'              "KeepAlive set"
@@ -124,16 +133,26 @@ assert_grep scripts/uninstall.sh 'Archive database before uninstall\?' "interact
 
 echo "[5] shipping manifest"
 if [ -f deploy/package.sh ]; then
+    assert_grep deploy/package.sh 'lib-linux-local\.sh' "tarball ships lib-linux-local.sh"
     assert_grep deploy/package.sh 'lib-macos\.sh' "tarball ships lib-macos.sh"
     assert_grep deploy/package.sh 'third_party/' "tarball ships bundled third-party scanner files"
+    assert_grep deploy/package.sh 'NOTICE' "tarball ships third-party NOTICE"
 else
+    [ -f deploy/lib-linux-local.sh ] && pass "packaged runtime includes lib-linux-local.sh" || fail "packaged runtime includes lib-linux-local.sh"
     [ -f deploy/lib-macos.sh ] && pass "packaged runtime includes lib-macos.sh" || fail "packaged runtime includes lib-macos.sh"
     [ -d third_party/clawkeeper ] && pass "packaged runtime includes bundled third-party scanner files" || fail "packaged runtime includes bundled third-party scanner files"
+    [ -f NOTICE ] && pass "packaged runtime includes third-party NOTICE" || fail "packaged runtime includes third-party NOTICE"
 fi
 
 echo "[5b] bundled host security scanner"
 assert_grep setup.sh 'Host security scanner bundled with ClawNex' "setup uses bundled host security scanner"
 assert_nogrep setup.sh 'clawkeeper\.dev/install\.sh|raw\.githubusercontent\.com/rad-security/clawkeeper' "setup does not download Clawkeeper at runtime"
+assert_nogrep setup.sh 'cisco-ai-defense/defenseclaw|DefenseClaw Rules|DefenseClaw rules' "setup does not download or advertise third-party Shield rule updates"
+assert_nogrep install.sh 'cisco-ai-defense/defenseclaw|DefenseClaw Rules|DefenseClaw rules' "installer does not fetch DefenseClaw rule logic"
+assert_nogrep deploy/install-prod.sh 'cisco-ai-defense/defenseclaw|DefenseClaw Rules|DefenseClaw rules' "prod service layer does not fetch DefenseClaw rule logic"
+assert_grep src/app/api/config/updates/route.ts 'name: "ClawNex Shield Rules"' "updates API exposes ClawNex Shield Rules label"
+assert_grep src/app/api/config/updates/route.ts 'Upstream DefenseClaw changed; review for possible future ClawNex Shield Rules updates' "upstream DefenseClaw check is informational"
+assert_grep NOTICE 'DefenseClaw is listed here for attribution and provenance' "NOTICE carries DefenseClaw attribution as provenance"
 assert_grep src/lib/services/host-security/scanner-path.ts 'third_party.*clawkeeper.*clawkeeper\.sh' "scanner helper points at bundled scanner"
 assert_grep src/lib/services/clawkeeper-runner.ts 'findHostSecurityScanner' "runner uses shared scanner discovery"
 assert_grep src/app/api/system/install-clawkeeper/route.ts 'no network install is required' "compat install endpoint is local-only"
@@ -154,7 +173,7 @@ echo "[6] stale installers retired"
 [ ! -f deploy/deploy.sh ]   && pass "deploy/deploy.sh deleted"   || fail "deploy/deploy.sh still present (legacy)"
 
 echo "[7] bash syntax"
-for f in install.sh setup.sh deploy/lib-macos.sh deploy/install-prod.sh scripts/uninstall.sh; do
+for f in install.sh setup.sh deploy/lib-linux-local.sh deploy/lib-macos.sh deploy/install-prod.sh scripts/uninstall.sh; do
     [ -f "$f" ] || { fail "$f missing"; continue; }
     bash -n "$f" && pass "bash -n $f" || fail "bash -n $f"
 done

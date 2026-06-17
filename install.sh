@@ -3,13 +3,14 @@
 # ClawNex Installer — single entry point for every supported target.
 #
 # Modes:
-#   vps         Linux VPS — systemd + Caddy + Let's Encrypt + UFW
+#   linux-local Linux — systemd keep-alive, dashboard on localhost
+#   vps         Linux — systemd + Caddy + Let's Encrypt + UFW
 #   mac-local   macOS — launchd keep-alive, dashboard on localhost
 #   mac-server  macOS — launchd + Homebrew Caddy + domain TLS
 #
 # Interactive: bash install.sh
 # Non-interactive (QA/CI):
-#   bash install.sh --mode vps|mac-local|mac-server --domain X \
+#   bash install.sh --mode linux-local|vps|mac-local|mac-server --domain X \
 #        --provider openrouter|anthropic|openai|nvidia|skip \
 #        [--provider-url URL] [--provider-model MODEL] [--provider-key-env VAR] \
 #        [--local-auth rbac|off] [--archive-db yes|no] [--clean] [--yes]
@@ -253,7 +254,7 @@ _ensure_litellm_for_python() {
 }
 
 _host_dependency_preflight() {
-    echo -e "${BOLD}[1/6] Host dependency preflight${NC}"
+    echo -e "${BOLD}[2/6] Host dependency preflight${NC}"
     echo "  Detected OS: $OS"
 
     if command -v node >/dev/null 2>&1; then
@@ -301,8 +302,8 @@ _host_dependency_preflight() {
         warn "Git not found — recommended for version tracking"
     fi
 
-    if [ "$MODE" = "vps" ] && ! command -v systemctl >/dev/null 2>&1; then
-        die "VPS mode requires systemd/systemctl. Choose local mode on non-systemd hosts."
+    if { [ "$MODE" = "vps" ] || [ "$MODE" = "linux-local" ]; } && ! command -v systemctl >/dev/null 2>&1; then
+        die "Linux service mode requires systemd/systemctl. Choose mac-local on macOS or run on a systemd Linux host."
     fi
     if [ "$MODE" = "mac-server" ] && ! command -v brew >/dev/null 2>&1; then
         die "mac-server mode requires Homebrew for Caddy. Install Homebrew first, then re-run."
@@ -446,97 +447,13 @@ case "$FLAG_ARCHIVE_DB" in
     *) die "--archive-db must be yes or no" ;;
 esac
 
-# ---- [0/6] Mode ----------------------------------------------------------------
-echo -e "${BOLD}[0/6] Install mode${NC}"
-echo "  Detected OS: $OS"
-if [ -n "$FLAG_MODE" ]; then
-    MODE="$FLAG_MODE"
-else
-    echo ""
-    if [ "$OS" = "linux" ]; then
-        echo "  Suggested deployment approach:"
-        echo "    [1] VPS server — systemd + Caddy + Let's Encrypt + UFW"
-        echo ""
-        if [ "$FLAG_YES" = "1" ]; then
-            info "--yes supplied; accepting suggested VPS server install"
-            MODE="vps"
-        elif _can_prompt; then
-            MODE_CONFIRM=""
-            _tty_read "  Use this approach? (Y/n): " MODE_CONFIRM
-            case "${MODE_CONFIRM:-Y}" in
-                y|Y|yes|YES) MODE="vps" ;;
-                n|N|no|NO)
-                    echo "  Cancelled. Re-run with --mode vps when you want the VPS server install."
-                    exit 0
-                    ;;
-                *) die "Invalid choice: $MODE_CONFIRM. Enter Y or n." ;;
-            esac
-        else
-            die "No TTY available to confirm detected Linux install mode. Re-run with --mode vps for automation."
-        fi
-    else
-        echo "  How should ClawNex run on this Mac?"
-        echo "    [1] Local   — dashboard on localhost, launchd keep-alive (most operators)"
-        echo "    [2] Server  — public domain + Caddy + TLS on this Mac"
-        echo ""
-        MAC_PICK=""
-        _tty_read "  Select (1/2) [1]: " MAC_PICK
-        case "${MAC_PICK:-1}" in
-            2) MODE="mac-server" ;;
-            *) MODE="mac-local" ;;
-        esac
-    fi
-fi
-case "$MODE" in
-    vps)        [ "$OS" = "linux" ] || die "--mode vps requires Linux (you're on $OS)" ;;
-    mac-local|mac-server) [ "$OS" = "macos" ] || die "--mode $MODE requires macOS (you're on $OS)" ;;
-    *) die "Invalid mode: $MODE (vps|mac-local|mac-server)" ;;
-esac
-ok "Mode: $MODE"
-
-LOCAL_AUTH_MODE="1"
-LOCAL_AUTH_LABEL="RBAC on"
-if [ -n "$FLAG_LOCAL_AUTH" ] && [ "$MODE" != "mac-local" ]; then
-    die "--local-auth only applies to --mode mac-local"
-fi
-if [ "$MODE" = "mac-local" ]; then
-    if [ -n "$FLAG_LOCAL_AUTH" ]; then
-        case "$FLAG_LOCAL_AUTH" in
-            rbac|on|yes|true|1) LOCAL_AUTH_MODE="1"; LOCAL_AUTH_LABEL="RBAC on" ;;
-            off|none|no|false|0) LOCAL_AUTH_MODE="2"; LOCAL_AUTH_LABEL="RBAC off" ;;
-            *) die "--local-auth must be rbac|off" ;;
-        esac
-    elif [ "$FLAG_YES" = "1" ]; then
-        info "--yes supplied; using Local auth default: RBAC on"
-        LOCAL_AUTH_MODE="1"
-        LOCAL_AUTH_LABEL="RBAC on"
-    else
-        echo ""
-        echo "  Local authentication:"
-        echo "    [1] RBAC on  — first-admin setup, operators, sessions (recommended)"
-        echo "    [2] RBAC off — localhost-only, no login/setup wizard"
-        echo ""
-        LOCAL_AUTH_PICK=""
-        _tty_read "  Select local auth mode (1/2) [1]: " LOCAL_AUTH_PICK
-        case "${LOCAL_AUTH_PICK:-1}" in
-            1) LOCAL_AUTH_MODE="1"; LOCAL_AUTH_LABEL="RBAC on" ;;
-            2) LOCAL_AUTH_MODE="2"; LOCAL_AUTH_LABEL="RBAC off" ;;
-            *) die "Invalid local auth mode: $LOCAL_AUTH_PICK. Enter 1 or 2." ;;
-        esac
-    fi
-    ok "Local auth: $LOCAL_AUTH_LABEL"
-fi
-
-echo ""
-_host_dependency_preflight
-
-# ---- [2/6] clean-slate preflight -------------------------------------------
+# ---- [0/6] clean-slate preflight -------------------------------------------
 # Rule: if ClawNex installed it, remove it; if ClawNex did not, leave it
 # alone. Removal is scripts/uninstall.sh — the ONE removal code path — which
 # also restores OpenClaw routing from its first-touch backup. Never silent:
 # interactive consent or an explicit --clean flag is required.
 echo ""
-echo -e "${BOLD}[2/6] Clean-slate preflight${NC}"
+echo -e "${BOLD}[0/6] Clean-slate preflight${NC}"
 
 P0_FOUND=()
 P0_EXISTING_DIR=""
@@ -815,14 +732,100 @@ else
     ok "Clean-slate verified"
 fi
 
+# ---- [1/6] Mode ----------------------------------------------------------------
+echo ""
+echo -e "${BOLD}[1/6] Install mode${NC}"
+echo "  Detected OS: $OS"
+if [ -n "$FLAG_MODE" ]; then
+    MODE="$FLAG_MODE"
+else
+    echo ""
+    if [ "$OS" = "linux" ]; then
+        echo "  How should ClawNex run on this Linux host?"
+        echo "    [1] Local / VNC — dashboard on localhost, systemd keep-alive, no Caddy/TLS"
+        echo "    [2] Public VPS  — public domain, Caddy, Let's Encrypt, UFW"
+        echo ""
+        if [ "$FLAG_YES" = "1" ]; then
+            die "Linux has two valid install modes. Re-run with --mode linux-local or --mode vps for automation."
+        elif _can_prompt; then
+            LINUX_PICK=""
+            _tty_read "  Select (1/2) [1]: " LINUX_PICK
+            case "${LINUX_PICK:-1}" in
+                1) MODE="linux-local" ;;
+                2) MODE="vps" ;;
+                *) die "Invalid Linux install mode: $LINUX_PICK. Enter 1 or 2." ;;
+            esac
+        else
+            die "No TTY available to choose Linux install mode. Re-run with --mode linux-local or --mode vps for automation."
+        fi
+    else
+        echo "  How should ClawNex run on this Mac?"
+        echo "    [1] Local   — dashboard on localhost, launchd keep-alive (most operators)"
+        echo "    [2] Server  — public domain + Caddy + TLS on this Mac"
+        echo ""
+        MAC_PICK=""
+        _tty_read "  Select (1/2) [1]: " MAC_PICK
+        case "${MAC_PICK:-1}" in
+            2) MODE="mac-server" ;;
+            *) MODE="mac-local" ;;
+        esac
+    fi
+fi
+[ "$MODE" = "vps-local" ] && MODE="linux-local"
+case "$MODE" in
+    vps|linux-local) [ "$OS" = "linux" ] || die "--mode $MODE requires Linux (you're on $OS)" ;;
+    mac-local|mac-server) [ "$OS" = "macos" ] || die "--mode $MODE requires macOS (you're on $OS)" ;;
+    *) die "Invalid mode: $MODE (linux-local|vps|mac-local|mac-server)" ;;
+esac
+ok "Mode: $MODE"
+
+LOCAL_AUTH_MODE="1"
+LOCAL_AUTH_LABEL="RBAC on"
+if [ -n "$FLAG_LOCAL_AUTH" ] && { [ "$MODE" != "mac-local" ] && [ "$MODE" != "linux-local" ]; }; then
+    die "--local-auth only applies to --mode mac-local or --mode linux-local"
+fi
+if [ "$MODE" = "mac-local" ] || [ "$MODE" = "linux-local" ]; then
+    if [ -n "$FLAG_LOCAL_AUTH" ]; then
+        case "$FLAG_LOCAL_AUTH" in
+            rbac|on|yes|true|1) LOCAL_AUTH_MODE="1"; LOCAL_AUTH_LABEL="RBAC on" ;;
+            off|none|no|false|0) LOCAL_AUTH_MODE="2"; LOCAL_AUTH_LABEL="RBAC off" ;;
+            *) die "--local-auth must be rbac|off" ;;
+        esac
+    elif [ "$FLAG_YES" = "1" ]; then
+        info "--yes supplied; using Local auth default: RBAC on"
+        LOCAL_AUTH_MODE="1"
+        LOCAL_AUTH_LABEL="RBAC on"
+    else
+        echo ""
+        echo "  Local authentication:"
+        echo "    [1] RBAC on  — first-admin setup, operators, sessions (recommended)"
+        echo "    [2] RBAC off — localhost-only, no login/setup wizard"
+        echo ""
+        LOCAL_AUTH_PICK=""
+        _tty_read "  Select local auth mode (1/2) [1]: " LOCAL_AUTH_PICK
+        case "${LOCAL_AUTH_PICK:-1}" in
+            1) LOCAL_AUTH_MODE="1"; LOCAL_AUTH_LABEL="RBAC on" ;;
+            2) LOCAL_AUTH_MODE="2"; LOCAL_AUTH_LABEL="RBAC off" ;;
+            *) die "Invalid local auth mode: $LOCAL_AUTH_PICK. Enter 1 or 2." ;;
+        esac
+    fi
+    ok "Local auth: $LOCAL_AUTH_LABEL"
+fi
+
+echo ""
+_host_dependency_preflight
+
 # ---- [3/6] Domain + provider ----------------------------------------------------
 echo ""
 echo -e "${BOLD}[3/6] Configuration${NC}"
 DOMAIN=""
-if [ -n "$FLAG_DOMAIN" ]; then
-    DOMAIN="$FLAG_DOMAIN"
-elif [ "$MODE" = "mac-local" ]; then
+if [ "$MODE" = "mac-local" ] || [ "$MODE" = "linux-local" ]; then
+    if [ -n "$FLAG_DOMAIN" ] && [ "$FLAG_DOMAIN" != "localhost" ]; then
+        warn "--domain is ignored for $MODE; localhost-only mode always uses http://localhost:5001"
+    fi
     DOMAIN="localhost"
+elif [ -n "$FLAG_DOMAIN" ]; then
+    DOMAIN="$FLAG_DOMAIN"
 else
     echo ""
     echo "  Public DNS name for this install (Caddy will obtain HTTPS for it)."
@@ -928,7 +931,7 @@ export CLAWNEX_ANSWER_INSTALL_CLAWKEEPER="yes"
 export CLAWNEX_ANSWER_SYNC_CVE="yes"
 export CLAWNEX_ANSWER_INSTALL_SYMLINK="yes"
 export CLAWNEX_ANSWER_RUN_INSTALL_PROD="no"    # orchestrator owns service layer
-if [ "$MODE" = "mac-local" ]; then
+if [ "$MODE" = "mac-local" ] || [ "$MODE" = "linux-local" ]; then
     export CLAWNEX_ANSWER_INSTALL_TOPOLOGY="1"
     export CLAWNEX_ANSWER_LOCAL_AUTH_MODE="$LOCAL_AUTH_MODE"
 else
@@ -942,6 +945,9 @@ fi
 echo ""
 echo -e "${BOLD}[5/6] Service layer${NC}"
 case "$MODE" in
+    linux-local)
+        "$ENGINE_BASH" deploy/lib-linux-local.sh
+        ;;
     vps)
         bash deploy/install-prod.sh "$DOMAIN"
         ;;
@@ -976,7 +982,7 @@ done
 [ "$LITELLM_OK" = "1" ] || warn "LiteLLM not responding after 60s — dashboard Configuration tab can finish this later"
 
 AUTH_STATUS="$(curl -s -m 8 "http://127.0.0.1:5001/api/auth/status" 2>/dev/null || true)"
-if [ "$MODE" = "mac-local" ] && [ "$LOCAL_AUTH_MODE" = "2" ]; then
+if { [ "$MODE" = "mac-local" ] || [ "$MODE" = "linux-local" ]; } && [ "$LOCAL_AUTH_MODE" = "2" ]; then
     if echo "$AUTH_STATUS" | grep -q '"rbacEnabled":false' && echo "$AUTH_STATUS" | grep -q '"needsSetup":false'; then
         ok "Local RBAC-off mode active"
     else
@@ -1048,7 +1054,7 @@ else
     DASHBOARD_URL="https://${DOMAIN}"
 fi
 SETUP_URL="${DASHBOARD_URL}/setup?secret=${SETUP_SECRET}"
-if [ "$MODE" = "mac-local" ] && [ "$LOCAL_AUTH_MODE" = "2" ]; then
+if { [ "$MODE" = "mac-local" ] || [ "$MODE" = "linux-local" ]; } && [ "$LOCAL_AUTH_MODE" = "2" ]; then
     READY_LABEL="Open the dashboard:"
     READY_URL="$DASHBOARD_URL"
 else
@@ -1064,6 +1070,9 @@ echo "  ${READY_LABEL}"
 echo -e "    ${CYAN}${READY_URL}${NC}"
 echo ""
 case "$MODE" in
+    linux-local)
+        echo "  Status:    sudo systemctl status clawnex-dashboard clawnex-litellm"
+        echo "  Logs:      sudo journalctl -u clawnex-dashboard -f" ;;
     vps)
         echo "  Status:    sudo systemctl status clawnex-dashboard caddy"
         echo "  Logs:      sudo journalctl -u clawnex-dashboard -f" ;;

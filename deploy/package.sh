@@ -27,12 +27,12 @@
 #   - node_modules/ (run `npm ci` after extract)
 #   - .next/ (rebuilt during setup)
 #   - .git/ (operator doesn't need our commit history)
-#   - sentinel.db, *.db-wal, *.db-shm (each install creates its own)
+#   - clawnex.db, *.db-wal, *.db-shm (each install creates its own)
 #   - .env, .env.local (each install generates its own SETUP_SECRET etc.)
 #   - logs/, backups/ (per-install runtime state)
 #   - litellm/venv/, litellm/__pycache__/ (each install rebuilds via pip)
 #   - litellm/config.yaml (replaced with template before packaging)
-#   - litellm/start.sh (may contain operator-specific paths)
+#   - runtime LiteLLM config and local env files (may contain operator-specific secrets)
 #   - training-video-prototype/ (marketing assets, not runtime)
 #   - deploy/clawnex-v*.tar.gz (previous builds, no recursion)
 #
@@ -149,8 +149,14 @@ if [ -d "$INSTALL_DIR/third_party" ]; then
 fi
 
 # Platform service layers — stay in deploy/ inside the tarball. install.sh
-# invokes the right one per mode (Linux: install-prod.sh, macOS: lib-macos.sh).
+# invokes the right one per mode (Linux: lib-linux-local.sh/install-prod.sh,
+# macOS: lib-macos.sh).
 mkdir -p "$BUNDLE_DIR/deploy"
+if [ -f "$INSTALL_DIR/deploy/lib-linux-local.sh" ]; then
+    cp "$INSTALL_DIR/deploy/lib-linux-local.sh" "$BUNDLE_DIR/deploy/"
+    chmod +x "$BUNDLE_DIR/deploy/lib-linux-local.sh"
+    echo -e "  ${GREEN}✓${NC} deploy/lib-linux-local.sh"
+fi
 if [ -f "$INSTALL_DIR/deploy/install-prod.sh" ]; then
     cp "$INSTALL_DIR/deploy/install-prod.sh" "$BUNDLE_DIR/deploy/"
     chmod +x "$BUNDLE_DIR/deploy/install-prod.sh"
@@ -187,6 +193,7 @@ ROOT_FILES=(
     SECURITY.md
     SUPPORT.md
     LICENSE
+    NOTICE
     DCO
 )
 for f in "${ROOT_FILES[@]}"; do
@@ -272,29 +279,21 @@ packages declared in \`package.json\` and \`litellm/requirements.txt\`.
 \`\`\`bash
 tar -xzf clawnex-v${VERSION}-deploy.tar.gz
 cd clawnex-v${VERSION}-deploy
-./setup.sh
+./install.sh
 \`\`\`
 
-\`setup.sh\` will ask whether this is a **Local** install (laptop, single
-operator, RBAC off, ready in 60s) or **Public-facing** (multi-operator,
-HTTPS via Caddy, RBAC on). The default is Local. Pick whichever matches
-how you're going to use ClawNex.
+\`install.sh\` asks you to confirm the detected install mode. Linux hosts
+default to VPS mode with systemd, Caddy, and Let's Encrypt. macOS hosts ask
+for Local or Server mode. Local mode also asks whether to use RBAC or run
+localhost-only without login.
 
-## 2. (Public-facing only) Run the production layer
+## 2. Open the dashboard
 
-\`\`\`bash
-./deploy/install-prod.sh <your-public-domain>
-\`\`\`
-
-Installs Caddy + systemd unit + Let's Encrypt cert. Requires sudo and a
-DNS A record pointing the public domain at this server.
-
-## 3. Open the dashboard
-
-- **Local:** http://localhost:5001
-- **Public-facing:** https://your-public-domain — \`setup.sh\` prints a
-  one-time admin URL with an embedded \`SETUP_SECRET\` you'll click on
-  the first visit. After your admin account is created the secret is inert.
+- **Local RBAC off:** http://localhost:5001
+- **Local RBAC on:** \`install.sh\` prints a one-time admin setup URL.
+- **Public-facing/server:** https://your-public-domain — \`install.sh\`
+  prints a one-time admin URL with an embedded \`SETUP_SECRET\` for the
+  first visit. After your admin account is created the secret is inert.
 
 ## What's in this package
 
@@ -303,8 +302,8 @@ DNS A record pointing the public domain at this server.
 | \`src/\`, \`public/\` | Next.js application source + assets |
 | \`litellm/\` | LiteLLM proxy + ClawNex logger plugin |
 | \`scripts/\` | Operational helpers including \`uninstall.sh\` |
-| \`deploy/install-prod.sh\` | Linux production layer (Caddy + systemd) |
-| \`setup.sh\` | Cross-platform installer (Mac + Linux) |
+| \`install.sh\` | Single installer entry point for Linux VPS, macOS local, and macOS server |
+| \`setup.sh\`, \`deploy/\` | Internal installer/service-layer components used by \`install.sh\` |
 | \`docs/\` | Basic + advanced user manuals, ops manual, deployment + troubleshooting guides |
 | \`README.md\`, \`CHANGELOG.md\`, etc. | Project meta |
 
@@ -333,6 +332,9 @@ echo -e "[5/5] ${BOLD}Secret-scrub + creating tarball...${NC}"
 SECRET_PATTERNS=(
     ".env"
     ".env.local"
+    "clawnex.db"
+    "clawnex.db-shm"
+    "clawnex.db-wal"
     "sentinel.db"
     "sentinel.db-shm"
     "sentinel.db-wal"
@@ -404,6 +406,5 @@ echo ""
 OUTPUT_BASENAME="$(basename "$OUTPUT_TARBALL")"
 echo -e "  ${CYAN}Transfer:${NC}  scp \"${OUTPUT_TARBALL}\" user@host:~/"
 echo -e "  ${CYAN}Extract:${NC}   tar -xzf ${OUTPUT_BASENAME} && cd ${PACKAGE_NAME}"
-echo -e "  ${CYAN}Install:${NC}   ./setup.sh"
-echo -e "  ${CYAN}Prod (Linux only):${NC}  ./deploy/install-prod.sh <your-domain>"
+echo -e "  ${CYAN}Install:${NC}   ./install.sh"
 echo ""
