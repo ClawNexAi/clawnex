@@ -8,14 +8,8 @@ During the alpha phase (v0.x), only the **latest minor release** receives securi
 
 | Version | Supported |
 |---|---|
-| v0.15.0-alpha | Yes (current — chat-relay scan-equals-forward invariant via shared sanitize+rebuild allowlist on `/api/v1/chat/completions` + `/api/chat`; 13-commit hardening pass closing 5 Codex adversarial rounds plus internal reviewer round-4 BLOCKER; 2026-05-17 DAST Run 3 clean pass on staging host — zero CRITICAL / HIGH / MEDIUM open findings. Risk register R-037 (provider DNS rebinding, closed via hostname allowlist) and R-040 (chat-relay scan-vs-forward divergence, opened and closed in the same pass) both resolved. 137 assertions across 8 new Codex-class verifiers. New operator-extensible env vars: `TRUST_PROXY_HEADERS`, `TRUSTED_HOSTS`, `TRUSTED_PROVIDER_HOSTS`. Documented residual AR-001 (CSP `style-src-attr 'unsafe-inline'`) remains accepted and queued as the final gate before public OSS launch. Full DAST evidence: `docs/qa/dast-run-3-2026-05-17.md`. LIVE on `https://<qa-host>`.) |
-| v0.14.5-alpha | Yes — Triage Graph end-to-end across 9 source families; Mission Control cockpit; Tailscale-native deploy path; 2026-05-13/14 security hardening pass + 2026-05-14 DAST Round 15 remediation pass — 50+ findings closed across R13/R14/multi-vector/live-DAST reviews. Docker mode removed, RBAC fail-closed, nonce-based CSP, MCP HTTP key auth, NFKC shield, SSRF guards, sameSite=strict, rate-limiter persistence, requireLocalhost Origin/Referer enforcement, 21 Pattern-B GET routes hardened, login timing-oracle envelope, anonymous info-leak reduction across `/api/auth/status` + `/api/v1/health` + forgot-password, `Cache-Control: no-store` on `/api/*`, security header dedup with Caddy `-Via`/`-Server` strip, shield steg-rule raw-text scan, audit actor accuracy in RBAC-off, outbound shield gate on `/api/chat` direct paths. Full DAST evidence: `docs/qa/dast-remediation-2026-05-14.md`. (Superseded by v0.15.0-alpha 2026-05-17.) |
-| v0.11.0-v0.11.6 | Yes (security fixes only — upgrade to v0.14.5+ strongly recommended; pre-dates the 2026-05-13 hardening pass) |
-| v0.10.0 | Yes (security fixes only — upgrade to v0.14.5+ strongly recommended; Configurable Rule & Policy Framework v1, operator-authored DLP rules) |
-| v0.9.0-v0.9.2 | Yes (security fixes only — upgrade to v0.14.5+ strongly recommended) |
-| v0.8.x | Yes (security fixes only) |
-| v0.7.x | Yes (security fixes only) |
-| v0.6.x and earlier | No — upgrade |
+| v0.15.0-alpha | Yes (current). Latest public validation summary reports no open Critical, High, or Medium findings in the tested public-launch posture. |
+| v0.14.x-alpha and earlier | No. Upgrade to the latest public release. |
 
 Once v1.0 ships, the last two minor releases will be supported in parallel.
 
@@ -30,8 +24,6 @@ Email your report to **security@clawnexai.com** with the subject line:
 ```
 [SECURITY] Short description of the issue
 ```
-
-*(Placeholder — the canonical disclosure contact will be confirmed before the public repo cutover. Until then, contact the project owner directly via the channel you already know.)*
 
 ### What to include
 
@@ -99,7 +91,7 @@ ClawNex holds several production secrets. Operators should establish rotation pr
 
 | Secret | Rotation procedure |
 |---|---|
-| `SETUP_SECRET` | One-shot; zeroed (rendered inert) after the first admin is created. Regenerate only for fresh deployments (e.g. bootstrapping a new environment). **Handling discipline:** the deploy script writes the setup URL to its stdout and log file — treat that artifact as secret-bearing. Do not paste it into shared chat, screenshots, or CI logs. To retrieve the secret server-side post-deploy: `ssh <user>@<host> 'grep SETUP_SECRET ~/clawnex/.env.local'`. If the stored value is ever exposed before the first admin claims it, wipe `.env.local`, generate a new value with `openssl rand -hex 32`, restart the dashboard (`systemctl restart clawnex-dashboard`), and complete setup. Once `operatorCount: 0` flips to `1` in `/api/auth/status`, any leaked setup URL is inert — but rotate anyway if you suspect exposure before claim. |
+| `SETUP_SECRET` | One-shot; zeroed (rendered inert) after the first admin is created. Regenerate only for fresh deployments (e.g. bootstrapping a new environment). **Handling discipline:** the deploy script writes the setup URL to its stdout and log file — treat that artifact as secret-bearing. Do not paste it into shared chat, screenshots, or CI logs. To retrieve the secret server-side post-deploy: `ssh <user>@<host> 'grep SETUP_SECRET ~/clawnex/.env.local'`. If the stored value is ever exposed before the first admin claims it, wipe `.env.local`, generate a new value with `openssl rand -hex 32`, restart the dashboard (`systemctl restart clawnex-dashboard`), and complete setup. Once setup is complete, the original setup URL is inert — but rotate anyway if you suspect exposure before claim. |
 | `SESSION_SECRET` (if present) | Rotating invalidates every active dashboard session — plan a maintenance window. Generate a new 32-byte random string, update `.env.local`, restart the dashboard (`systemctl restart clawnex-dashboard`), and notify operators that they must sign in again. |
 | `CLAWNEX_INGEST_SECRET` | Used by the LiteLLM callback logger to POST to `/api/v1/ingest`. Generate a new secret, update both `.env.local` (dashboard) and any LiteLLM proxy config that references it, then `systemctl restart clawnex-*` (dashboard and LiteLLM). Until both sides are updated, ingest events will be rejected as 401. |
 | `RESEND_API_KEY` | Revoke the old key in the Resend dashboard, create a new one, update `.env.local` (or the value in Configuration → Mail if stored there), restart the dashboard. |
@@ -117,17 +109,17 @@ Document each rotation (secret name, date, actor) in your internal change log so
 
 ## Security Posture
 
-ClawNex maintains a continuous DAST + code-review program. The most recent assessment (2026-05-17 DAST Run 3, paired with the Codex 6-round adversarial closure and internal reviewer round-4 BLOCKER fix) ran against `<qa-host>` (staging host, RBAC on, production-like) and returned **zero CRITICAL / HIGH / MEDIUM open findings**. Two documented residuals remain accepted with explicit retest conditions: AR-001 (CSP `style-src-attr 'unsafe-inline'`) and AR-002 (Pattern-B same-host trust under RBAC-off). Both are tracked in `docs/qa/accepted-residuals.md`.
+ClawNex maintains a security validation and code-review program. The latest public validation summary reports **zero open Critical, High, or Medium findings** in the tested public-launch posture.
 
-External independent validation (penetration test, third-party audit) is **not** yet completed and is tracked as R-017 in `docs/registers/risk-register.md`, targeted for Q3 2026 before any enterprise pilot.
+Public evidence artifacts:
 
-Evidence artifacts:
-- `docs/qa/dast-run-3-2026-05-17.md` — DAST Run 3 canonical evidence (most recent)
-- `docs/qa/accepted-residuals.md` — AR-001 and AR-002 accepted residuals with retest conditions
-- `docs/qa/dast-remediation-2026-05-14.md` — Round 15 evidence (historical, superseded by Run 3)
-- `docs/24-security-assessment.md` — round-by-round security review history
-- `docs/registers/risk-register.md` — open + closed risks with priority
-- `docs/policy-evidence-checklist.md` — SOC-aligned control evidence map
+- `docs/security-validation-summary.md` — public validation summary
+- `docs/security-assessment-summary.md` — public assessment summary
+- `docs/security-roadmap.md` — security roadmap and maturity items
+- `docs/registers/risk-register.md` — public risk posture summary
+- `docs/policy-evidence-checklist.md` — public policy evidence map
+
+External independent validation, including third-party penetration testing, is still planned and is tracked in the public security roadmap.
 
 ## Bug Bounty
 

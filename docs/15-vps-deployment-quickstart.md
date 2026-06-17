@@ -142,7 +142,7 @@ As of **v0.6.2**, the systemd unit binds the Next.js server to `127.0.0.1` only 
 - **Tailscale** — run the dashboard on the Tailnet and reach it from any joined device over the magic `100.x.y.z` address; nothing opens to the public internet.
 - **SSH tunnel (ops-only)** — `ssh -L 5001:127.0.0.1:5001 user@your-vps` for quick admin sessions.
 
-Direct `http://YOUR_VPS_IP:5001` will not work unless you intentionally open UFW for 5001 and rebind the service to `0.0.0.0`, which is discouraged (H-6 / H-7 in `docs/security-audit-2026-04-22.md`).
+Direct `http://YOUR_VPS_IP:5001` will not work unless you intentionally open UFW for 5001 and rebind the service to `0.0.0.0`, which is discouraged. Use Caddy/TLS on ports 80/443 for public access.
 
 ### Service Management
 

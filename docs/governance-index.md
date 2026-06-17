@@ -26,9 +26,10 @@ See [policies/README.md](policies/README.md) for the full index with status.
 - [13 — Vulnerability Management Policy](policies/13-vulnerability-management-policy.md)
 - [14 — Acceptable Use Policy](policies/14-acceptable-use-policy.md)
 
-## Registers
+## Public risk and vendor summaries
 
-- [Risk Register](registers/risk-register.md) — 23 active + 2 closed (P0: 2, P1: 11, P2: 9, P3: 1, Closed: 2)
+- [Public Risk Posture Summary](registers/risk-register.md) — public-safe risk themes and maturity items
+- [Security Roadmap](security-roadmap.md) — near-term security improvements and assurance work
 - [Vendor Inventory Register](registers/vendor-inventory-register.md) — grouped by dependency category, live-reconciled against codebase
 
 ## Operational templates
@@ -45,11 +46,10 @@ See [policies/README.md](policies/README.md) for the full index with status.
 
 ## Readiness, audit, and security docs
 
-- [OSS Release Readiness Checklist (2026-04-22)](oss-release-readiness-checklist-2026-04-22.md)
-- [Security Audit (2026-04-22)](security-audit-2026-04-22.md)
-- [Pre-OSS Platform Audit (2026-04-22)](pre-oss-platform-audit-2026-04-22.md)
-- [Pre-OSS Hardening Checklist](pre-oss-hardening-checklist-for-claude.md)
-- [Pre-OSS Validation Checklist](pre-oss-validation-checklist.md)
+- [Security Validation Summary](security-validation-summary.md)
+- [Security Assessment Summary](security-assessment-summary.md)
+- [Security Validation Summary](security-validation-summary.md)
+- [Security Roadmap](security-roadmap.md)
 - [SECURITY.md](../SECURITY.md)
 
 ## Change Log
@@ -60,3 +60,4 @@ See [policies/README.md](policies/README.md) for the full index with status.
 | 1.1 | 2026-04-22 | Claude | Added registers summary, governance one-pager + evidence checklist links, corrected filename references. |
 | 1.2 | 2026-04-22 | Claude | v0.6.3-alpha pass: refreshed risk register counts (23 active + 2 closed after R-001 and R-010 shipped closed). |
 | 1.3 | 2026-05-05 | Internal reviewer (audit pass) | Source-truth verification at v0.11.6-alpha (staging host LIVE). Last Updated bumped 2026-04-22 → 2026-05-05; cross-link integrity re-verified against current `policies/` and `registers/` filenames. Risk register summary on this index left intact — counts (23 active + 2 closed; P0:2 / P1:11 / P2:9 / P3:1) still match the underlying register at version 1.3. No body changes to linked artifacts other than per-policy header reconciliation (see each policy's own changelog). |
+| 1.4 | 2026-06-17 | ClawNex Engineering | Replaced raw internal security evidence links with public-safe security validation, assessment, and roadmap summaries. |

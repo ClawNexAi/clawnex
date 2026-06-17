@@ -1608,7 +1608,7 @@ If the issue is not covered in this guide:
 
 **Resolution.** Rebuild the request so each entry in `messages[]` / `history[]` conforms to the documented schema. The API reference defines the allowed shape, allowed roles, and the supported `content` type. The error body is intentionally generic and does not enumerate which field tripped the validator — verify against the positive contract.
 
-**Escalation.** If the request matches the documented contract exactly and still returns 400, capture the request body + timestamp + correlation id and attach to the incident. The validator is `src/lib/shield/sanitize-chat-payload.ts` (closed under Codex round 5 / internal reviewer round-4 BLOCKER closure, 2026-05-17 — see [`docs/qa/dast-run-3-2026-05-17.md`](qa/dast-run-3-2026-05-17.md)).
+**Escalation.** If the request matches the documented contract exactly and still returns 400, capture the request body + timestamp + correlation id and attach it to the incident. The validator is `src/lib/shield/sanitize-chat-payload.ts`; public validation posture is summarized in `docs/security-validation-summary.md`.
 
 ---
 

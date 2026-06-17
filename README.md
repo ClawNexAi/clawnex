@@ -184,6 +184,7 @@ For architecture details, start with the [high-level architecture](docs/02-high-
 | Configure advanced controls | [Advanced user manual](docs/07-advanced-user-manual.md) |
 | Understand the architecture | [High-level architecture](docs/02-high-level-architecture.md) |
 | Review security design | [Security architecture](docs/11-security-architecture.md) |
+| Review validation posture | [Security validation summary](docs/security-validation-summary.md) |
 | Integrate with APIs or MCP | [API and MCP guide](docs/19-api-mcp-integration-guide.md) |
 | Troubleshoot a host | [Troubleshooting guide](docs/17-troubleshooting-guide.md) |
 | Track what changed | [Release notes](docs/13-release-notes.md) and [changelog](CHANGELOG.md) |
@@ -216,7 +217,9 @@ For architecture details, start with the [high-level architecture](docs/02-high-
 | `docs/21-project-history.md` | Everyone — project history |
 | `docs/22-keyboard-shortcuts.md` | Everyone — keyboard navigation |
 | `docs/23-help-surfaces-index.md` | Content and Engineering — help assets |
-| `docs/24-security-assessment.md` | Security — assessment and remediation status |
+| `docs/security-validation-summary.md` | Security — public validation summary |
+| `docs/security-assessment-summary.md` | Security — public assessment summary |
+| `docs/security-roadmap.md` | Security — public roadmap and maturity items |
 
 </details>
 

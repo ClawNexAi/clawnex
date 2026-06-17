@@ -19,7 +19,7 @@ Alpha. Single-maintainer open-source project preparing for an Apache 2.0 public 
 
 | Item | State |
 |---|---|
-| Internal security audit | Completed 2026-04-22; published in `docs/security-audit-2026-04-22.md` |
+| Security validation | Public summary available in `docs/security-validation-summary.md` |
 | Critical findings | 2 of 2 closed |
 | High findings | 9 of 13 closed; 4 deferred to v0.7.0 with documented rationale |
 | Automated release verification | `scripts/verify-pre-oss.sh` — 13 reachability routes (PASS/FAIL/AUTH per route, latency budget enforced) |
@@ -76,12 +76,13 @@ These numbers come from the 2026-04-22 security audit's control-mapping section.
 |---|---|
 | Governance index | `docs/governance-index.md` |
 | All policies | `docs/policies/README.md` |
-| Risks | `docs/registers/risk-register.md` |
+| Risks | `docs/registers/risk-register.md` public risk posture summary |
 | Vendors / supply chain | `docs/registers/vendor-inventory-register.md` |
 | Policy evidence map | `docs/policy-evidence-checklist.md` |
 | Security disclosure | `SECURITY.md` |
-| Latest security audit | `docs/security-audit-2026-04-22.md` |
-| Release readiness gate | `docs/oss-release-readiness-checklist-2026-04-22.md` |
+| Security validation | `docs/security-validation-summary.md` |
+| Security roadmap | `docs/security-roadmap.md` |
+| Release readiness gate | `docs/security-validation-summary.md` and `docs/security-roadmap.md` |
 | Release verification script | `scripts/verify-pre-oss.sh` |
 | SBOM | Regenerated per release — see `sbom.json` |
 

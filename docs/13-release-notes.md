@@ -40,7 +40,7 @@ Each release entry below is structured against a fixed metadata contract so that
 **Breaking Changes:** None.
 **Security Fixes:** V-B1 — shield verdict engine now floors ANY HIGH-severity detection to at least REVIEW (CRITICAL still BLOCK). A HIGH detection in a non-outbound-leak category (e.g. C2 exfil to `webhook.site` / `ngrok`, reverse-shell command, jailbreak) that scored below the 25-point REVIEW threshold *in isolation* previously returned ALLOW. Verified live (`webhook.site` exfil ALLOW → REVIEW) + hermetic. Verifier: `verify-verdict-high-floor`.
 
-**Veracity audit — six factual-drift fixes (full evidence: [`docs/qa/veracity-audit-2026-05-19/VERACITY-AUDIT.md`](qa/veracity-audit-2026-05-19/VERACITY-AUDIT.md)):**
+**Veracity audit — six factual-drift fixes:**
 
 - **F1 — Trust Audit rule count corrected 14 → 15.** Now derived from a client-safe `TRUST_AUDIT_RULE_COUNT` mirror of `AUDIT_RULES` so the tooltip can't drift from the engine.
 - **F2 — Panel count corrected to 26.** Scattered 22 / 23 / 25 claims reconciled to the canonical 26 (the guided tour narrates all `Object.keys(PANEL_HELP)` = 26 panels).
@@ -71,29 +71,21 @@ Each release entry below is structured against a fixed metadata contract so that
 **Release Date:** 2026-05-17 (version bump from prior v0.14.5-alpha tag landing the chat-relay hardening + DAST Run 3 closure work under the new v0.15.0-alpha tag)
 **Version:** v0.15.0-alpha
 **Type:** Alpha (security hardening + audit evidence; no new operator-visible features)
-**Status:** Local-only `main` at HEAD `a07fea6`. Deployed to staging host (`<qa-host>`). Not pushed to remote.
-**Scope:** 13 atomic security commits closing the Codex 6-round adversarial review chain (round 1: 4 HIGH + 1 MED; round 2: 3 HIGH; round 3: 1 HIGH + 1 MED; round 4: 2 HIGH; round 5: 2 HIGH including the reviewer's round-4 BLOCKER on scan-vs-forward parity; round 6: clean). DAST Run 3 on staging host returned zero CRITICAL / HIGH / MEDIUM open findings.
+**Status:** Public release line.
+**Scope:** Security validation and hardening pass before public source release. The public validation summary reports zero open Critical, High, or Medium findings in the tested public-launch posture.
 **Upgrade Path:** Source: any v0.14.x-alpha. In-place upgrade. **One breaking contract change** on chat routes (see Breaking Changes below).
 **Breaking Changes:**
-- `/api/v1/chat/completions` and `/api/chat` now strictly validate `messages[]` / `history[]` entries against an exact `{role, content}` allowlist with role in `system|user|assistant|function|tool`. Callers sending sibling fields (`name`, `tool_calls`, `function_call`, `tool_call_id`, arbitrary novel keys) or non-string content now receive 400. The positive contract is documented in [`docs/10-api-reference.md`](10-api-reference.md). This closes the scan-vs-forward divergence internal reviewer flagged as the round-4 BLOCKER.
+- `/api/v1/chat/completions` and `/api/chat` now strictly validate `messages[]` / `history[]` entries against the documented message contract. Invalid message shapes now receive 400. The positive contract is documented in [`docs/10-api-reference.md`](10-api-reference.md).
 **Latest commit:** `a07fea6`.
 
-**Security hardening — concise summary (full evidence: [`docs/qa/dast-run-3-2026-05-17.md`](qa/dast-run-3-2026-05-17.md)):**
+**Security hardening — public summary:**
 
-- **Chat relay scan/forward parity.** Both chat routes sanitize incoming `messages[]` / `history[]` through a shared strict allowlist and forward a rebuilt `safeMessages` / `safeHistory` representation rather than the raw caller-supplied body. The forwarded payload is exactly what the shield scanned. Shared helper: `src/lib/shield/sanitize-chat-payload.ts`. Capture-mock regression at `scripts/verify-chat-invariant.ts` (35/35) asserts upstream `messages[]` carry only `{role, content}` per entry.
-- **Strict message schema.** Non-string content + sibling fields rejected with generic 400 before any relay (recon-min: no field-naming in error body). Positive contract in [`docs/10-api-reference.md`](10-api-reference.md).
-- **CSRF session binding.** Re-verified in DAST Run 3 — token harvested from another session does not validate (4/4 forgery shapes → 403; valid pair reaches body validation).
-- **Audit input validation.** `/api/audit` ISO-8601 enforcement on `since` / `until` + `limit` cap (≤ 100) all return 400 on violation.
-- **RBAC matrix verified.** 5 roles × 6 representative endpoints — no escalation; Auditor read-only on `/audit` and denied elsewhere; Viewer denied on audit.
-- **Outbound shield discipline** — comprehensive across all 3 `/api/chat` LLM-relay branches via shared `extractAssistantOutput` helper (walks all OpenAI assistant-output channels including `tool_calls.arguments`, multimodal content parts, streaming `delta`, unknown nested fields); v1 chat-completions success path gates on outbound BLOCK with `proxy_block_mode` honor.
-- **Provider hostname allowlist.** New `PROVIDER_HOST_ALLOWLIST` of 12 known public LLM providers + operator-extensible `TRUSTED_PROVIDER_HOSTS` env; loopback always allowed. Closes the DNS-rebinding TOCTOU on `addProvider` / `updateProvider` flagged as risk register R-037.
-- **Origin host allowlist + DNS-rebinding GET coverage.** `validateOriginMatch` now enforces the host allowlist on every request including safe methods (closes the bypass where `attacker.example → 127.0.0.1` had matching Host=Origin but a hostname outside the allowlist). New operator-extensible `TRUSTED_HOSTS` env.
-- **XFF rate-limit trust gate.** Middleware no longer trusts `X-Forwarded-For` by default; trust gated on `TRUST_PROXY_HEADERS=1`. Caddyfile template emits `header_up X-Forwarded-For {remote_host}`, overwriting any spoofed client value.
-- **`getDbPath` resolver** wired into archive / migrate / uninstall routes — closes silent backup failure on post-rebrand installs where the live DB is `clawnex.db` (or `$DATABASE_PATH`) rather than the prior hardcoded `sentinel.db`.
+- Chat relay inputs are strictly validated before being routed upstream.
+- Prompt Shield scan/forward parity was reviewed and regression-tested.
+- Authentication, RBAC, CSRF, anonymous information exposure, API input validation, security headers, and deployment posture were included in the validation scope.
+- Public source was checked for source completeness and committed secrets before launch.
 
-**Three controls remain code-verified rather than DAST-proven** for environmental reasons (RBAC-off host allowlist on a RBAC-on QA target; provider DNS rebinding without a hostile-DNS rig; v1 sanitize invariant being API-key gated). Documented in [`docs/qa/dast-run-3-2026-05-17.md`](qa/dast-run-3-2026-05-17.md) §8 + [`docs/qa/accepted-residuals.md`](qa/accepted-residuals.md) "Environment-limited DAST verification" section.
-
-**Risk register changes:** R-037 (DNS rebinding on provider SSRF) closed; R-040 (chat-relay scan-vs-forward divergence) opened and closed in the same pass.
+Public evidence lives in [`security-validation-summary.md`](security-validation-summary.md), [`security-assessment-summary.md`](security-assessment-summary.md), and [`security-roadmap.md`](security-roadmap.md).
 
 ---
 
@@ -114,7 +106,7 @@ Each release entry below is structured against a fixed metadata contract so that
 - 5 upstream producers now actually emit rows for those 5 dispatch-ready families — before this release, the resolvers existed but no rows reached them in default fixtures. After: top-10 CVEs by CVSS, 3 most-recent CRIT alerts → blast graphs, RBAC-off + overprovisioned-role detector, low-confidence + stale Shield rule scanner, multi-source correlation in a 10-minute window all surface in Mission Control's Top Action Queue under live data.
 
 **What this means for the operator (visual):**
-- Every numbered Stat tile across the dashboard now reads as an elevated panel — clearer separation from the surrounding card chrome, slightly stronger cyan border on hover, no flatness regression. Visible on Mission Control KPI row, Fleet Command stat strip, Instance Detail 8-stat row, CVE Database, Traffic Monitor, Token & Cost Intel, Correlations, and Access Control. operator-validated 8-panel sweep at `docs/qa/aeade4b-visual-2026-05-08.md`.
+- Every numbered Stat tile across the dashboard now reads as an elevated panel — clearer separation from the surrounding card chrome, slightly stronger cyan border on hover, no flatness regression. Visible on Mission Control KPI row, Fleet Command stat strip, Instance Detail 8-stat row, CVE Database, Traffic Monitor, Token & Cost Intel, Correlations, and Access Control.
 - Long Timeline panels paginate at 10 rows / page (default-open) so the panel no longer pushes its footer below the fold. Same pagination shape as Shield Tests.
 - Blast Radius "Most Exposed Surfaces" displays an em dash in muted italic when an exposure value is unknown / missing, so a missing data point can't read as "no exposure."
 - Alerts row spacing is tightened to match Shield Tests density (single-line collapsed cards, same padding/radius scale).
@@ -132,7 +124,7 @@ Each release entry below is structured against a fixed metadata contract so that
 - `npx tsx scripts/verify-phase6-producers.ts` — 25 assertions PASS (5 producers × 5 contract checks each).
 - 130 new synonym-denylist assertions across `verify-correlation-resolver.ts` / `verify-blast-radius-resolver.ts` / `verify-auth-rbac-resolver.ts` / `verify-update-cve-resolver.ts` / `verify-policy-warning-resolver.ts`. Total verifier assertions across the test stack: 343.
 
-**Verified Platforms:** local dev host (macOS 15.x / Node 22) — visual sweep + verifier suite green. staging host deploy pending (gate cleared by visual-evidence file `docs/qa/aeade4b-visual-2026-05-08.md`).
+**Verified Platforms:** local dev host (macOS 15.x / Node 22) — visual sweep + verifier suite green.
 
 **Commit map (most-recent-first):** `eba1922` strip trailing punctuation from CVE package token · `2f6b534` CVE producer reads package from title · `7e219cc` Phase 6 rawSource producers (5 families) · `dc8296b` deploy [8/8] expanded health check · `6beacc4` portable python3.12 LiteLLM bootstrap · `0418c15` Alerts row spacing · `a6e4458` visual QA evidence preserved · `54a6dea` Timeline pagination + blast-radius unknown-state polish · `c7393d3` Tailscale-only deploy support + remote-user parameterization · `4a1771e` synonym-denylist sweep · `aeade4b` Stat tile lift + opt-in dimGlow · `a0a7cd5` Phase 5 family resolvers + dispatch verifier.
 
@@ -172,9 +164,7 @@ the latest tarball to pick up these changes.
 - `proxy_block_mode` default flipped from `'off'` to `'on'` on fresh
   installs (shield blocks by default; operator can opt to observe)
 - Session cookie `sameSite='strict'` on all 4 setters
-- SSRF guard on testProvider/testGateway + provider write site (blocks
-  private/link-local/metadata IP ranges; loopback allowed for
-  OpenClaw/LM Studio)
+- Network-target guardrails on provider test and write paths.
 - Workspace reader redacts `*_api_key` / token / secret values before
   returning to operators
 - Rate limiter persists timestamps to SQLite (`rate_limit_buckets`
@@ -192,53 +182,17 @@ nfkc-normalization, nextjs-cves.
 
 ---
 
-### DAST Run 2 + Round 3 — closure pass (2026-05-15 → 2026-05-16, same v0.14.5-alpha tag)
+### Security validation closure pass (2026-05-15 → 2026-05-16, same v0.14.5-alpha tag)
 
-Continuous-DAST closure campaign on top of Round 15. Run 2 surfaced 8 persisting + 1 new finding; Round 3 reverified after each landing and surfaced 2 LOW follow-ups, all closed at commit `48027e3`. **All RBAC-on actionable DAST findings closed on staging host at `48027e3`. M1 / CSP `style-src-attr` is the accepted residual for the future style-attribute migration. H8 / Pattern-B same-host trust is accepted / out of scope for this pass — production deploys hard-code `RBAC_ENABLED=true` so the residual cannot apply to a network-reachable host.** Full evidence (per-finding closure table, commit chain, verifier output, literal staging host response bodies, privilege-escalation matrix): [`docs/qa/dast-run-2-2026-05-15.md`](qa/dast-run-2-2026-05-15.md).
-
-Net posture at end of campaign: zero CRITICAL / HIGH / MEDIUM / LOW open beyond the two documented residuals **AR-001** (style-src-attr) and **AR-002** (Pattern-B). The two pre-existing risk-register items unrelated to this campaign — **R-037** (DNS rebinding on `testProvider`/`testGateway`) and **R-038** (denied-attempt audit logging) — remain open and unchanged.
+Follow-up validation work closed the actionable findings identified during the pre-launch security campaign. The public validation posture is summarized in [`security-validation-summary.md`](security-validation-summary.md).
 
 This release also includes the **Next.js 14 → 16 framework upgrade** that the prior DAST agent had advised for CVE coverage. Both the build (`next build --webpack`) and dev (`next dev --webpack`) scripts now pass `--webpack` explicitly because Next 16 defaults to Turbopack and refuses to start when a `webpack:` config is present without a corresponding `turbopack:` block. App-Router signatures changed: `params` is now `Promise<{...}>` (await before destructure), `headers()` and `cookies()` are async, `RootLayout` is async. `next` and `postcss` dropped from caret to exact pins per the dependency-pin policy.
 
 ---
 
-### DAST Round 15 — live remediation (2026-05-14, same v0.14.5-alpha tag)
+### Security hardening campaign (2026-05-14, same v0.14.5-alpha tag)
 
-> **Superseded 2026-05-16:** the "queued as the final gate before public OSS launch" framing in this section has been superseded by the Run 2 + Round 3 closure pass above. H2 was closed 2026-05-15 (commit `944216e`); the retained `style-src-attr 'unsafe-inline'` clause now lives as **AR-001** in [`docs/qa/accepted-residuals.md`](qa/accepted-residuals.md) with explicit retest conditions. The Round 15 narrative below is preserved as historical evidence.
-
-A live DAST sweep was run against both `localhost:5001` (local dev host, RBAC off) and `<qa-host>` (staging host, RBAC on, Caddy TLS). Every reported finding was DAST-confirmed remediated except **H2 (`style-src 'unsafe-inline'`)**, which was queued as the final gate before public OSS launch and subsequently closed 2026-05-15 (see superseding note above).
-
-Honest framing: this round closed the findings listed below. It did **not** make the dashboard "fully secure" — H2 remains open and three residual items (DNS rebinding on the SSRF guard, denied-attempt audit logging, external pen test) are tracked in `docs/registers/risk-register.md`.
-
-**Closures (live-verified on both targets):**
-
-- **P0-A** — `requireLocalhost` now enforces Origin/Referer same-host match on mutating methods. Closes browser-driven CSRF on `/api/system/purge`, `/api/break-glass/activate`, `/api/proxy/block-mode`, `/api/config/defaults`. Shared helper at `src/lib/auth/origin-match.ts` consumed by both `requireLocalhost` and `validateCsrf`. Commit `9088ff5`.
-- **P0-B** — explicit `else { requireLocalhost(request) }` clause added to 21 Pattern-B GET routes (fleet, events/stream, alerts, audit, tokens, costs, proxy/stats, shield/history, shield/stats, cve, threat-intel, tools, skills, models, sessions, reports, paperclip/observability, watcher/recent, workspace/agents, infrastructure, docs). RBAC-off deployments no longer leak data to anonymous remote callers. Commit `ab21c26`.
-- **P0-C** — `/api/config/defaults` rejects writes to `retention_*`, `break_glass`, `proxy_block_mode` (denylist) — those keys have dedicated routes with value-range validation. Closes the `retention_audit_days=1` audit-log-destruction bypass. Commit `0949d0c`.
-- **`requireLocalhost` loopback-bind trust** — when `NextRequest.ip` is undefined (self-hosted Node runtime), the guard now trusts `HOSTNAME=127.0.0.1` (OS-guaranteed loopback bind). Pre-fix, every legitimate same-origin POST returned 403 on production builds. Commit `e0667bf`.
-- **M4-related — outbound shield gate on `/api/chat` direct paths** — the LM-Studio-direct and OpenClaw-gateway-direct fallback paths were skipping outbound shield. Shared `outboundShieldGate` helper now wraps both, fail-CLOSED on scanner exception. Commit `2e2d78b`.
-- **L3 — audit actor accuracy** — `DEFAULT_OPERATOR.username` renamed `admin → localhost` so audit_log entries from RBAC-off unauthenticated actions are distinguishable from real authenticated admin actions. Commit `2e2d78b`.
-- **H1 — login timing oracle** — `MIN_LOGIN_FAILURE_MS = 2000` floor on every 401 return from `POST /api/auth/login`. Pre-fix delta admin@2638ms vs nonexistent@651ms (4×); post-fix delta on QA = **4ms**. Commit `b9b2677`.
-- **H4 — `operatorCount` stripped from anonymous `/api/auth/status`**. Commit `b9b2677`.
-- **M1 — security headers consolidated to Next.js**, `install-prod.sh` Caddyfile no longer emits duplicates, HSTS includes `preload`. Commit `b9b2677` + Caddyfile change.
-- **M2 — `POST /api/auth/login` returns 400 on malformed JSON** (was 500). Commit `b9b2677`.
-- **M3 — `/api/v1/health` strips `version` + `uptime` from anonymous responses**; authenticated v1 callers still see the full payload. Commit `b9b2677`.
-- **M5 — forgot-password returns the generic envelope on every branch**; previously leaked "RBAC is not enabled" and "Email is not configured". Commit `b9b2677`.
-- **M6 — `Cache-Control: no-store` on `/api/*`**. Commit `b9b2677`.
-- **L1 — Caddy `Via:` + `Server:` headers stripped**. `install-prod.sh` Caddyfile change.
-- **Shield T06** — steganography rules now scan raw text via `scanRules(..., { useRawText: true })`; `STEG-ZERO-WIDTH` + `STEG-BIDI-OVERRIDE` previously couldn't fire. Shield-triage release-grade 26/26. Commit `0b51a69`.
-
-**internal reviewer P1 sweep, landed overnight on the same v0.14.5-alpha tag (commit `cef9de7`):** P1-A `x-clawnex-nonce` response header removed; P1-B outbound shield fails CLOSED on scanner exception; P1-C `body.history[]` shield-scanned; P1-D `fetch()` in `testProvider`/`testGateway` uses `redirect: 'error'` (closes 302 redirect bypass).
-
-**New verifier scripts:** `scripts/verify-origin-block.sh` (17 unit + 4 live), `scripts/verify-pattern-b.sh` (21 static + 21 live), `scripts/verify-config-defaults-protect.sh` (16/16), `scripts/verify-outbound-gate.sh` (6/6), `scripts/verify-audit-actor.sh` (4/4). Pre-existing verifiers (`verify-symlink-escape`, `verify-rbac-fail-open`, `verify-ssrf-guard`, `verify-nfkc-normalization`, etc.) unchanged.
-
-**Known remaining issues:**
-
-- **H2** (~~queued as final gate~~ → **CLOSED 2026-05-15**, commit `944216e`). Retained `style-src-attr 'unsafe-inline'` clause documented as **AR-001** in [`docs/qa/accepted-residuals.md`](qa/accepted-residuals.md). Element-level vector closed by `style-src-elem 'self'`.
-- **DNS rebinding on `testProvider`/`testGateway`** — internal reviewer P1-D closed the 302-bypass class only. Tracked as **R-037**.
-- **Denied-attempt audit logging** — guard refusals (401/403) do not write `audit_log` rows. Tracked as **R-038**.
-
-Full evidence (commit chain, verifier output, live verification table, explicit exclusions): [`docs/qa/dast-remediation-2026-05-14.md`](qa/dast-remediation-2026-05-14.md).
+A focused pre-launch security campaign improved localhost/public deployment separation, authentication behavior, shield fail-closed behavior, HTTP response hygiene, and installer/deploy defaults. The detailed internal evidence is not published; the public posture is summarized in [`security-validation-summary.md`](security-validation-summary.md) and [`security-roadmap.md`](security-roadmap.md).
 
 ---
 
@@ -470,7 +424,7 @@ The historical content of the prior "In Development" block has been absorbed int
 
 **Verification:** Type-check clean. `scripts/shield-triage.ts` reports release-grade 26/26 + 1 Coverage Lab (T04 known gap). `scripts/openclaw-routing-test.ts` 10-scenario sandbox cycle all pass (idempotent wire, idempotent revert, conflict guards, force-wire, SHA-mismatch preservation, parent cleanup, coexistence with other providers). staging host + test host supervisor reach verified live.
 
-**See:** `CHANGELOG.md` Unreleased section for the full additive/change/fixed/security/migration breakdown, and `docs/qa/dogfood-2026-04-28/implementation-agent-deep-summary-2026-04-29.md` for the internal reviewer-grade post-mortem of both work-streams.
+**See:** `CHANGELOG.md` Unreleased section for the full additive/change/fixed/security/migration breakdown.
 
 A follow-up sweep landed 2026-05-01 covering the OpenClaw 4.12 transition + dashboard UX/integration:
 
@@ -492,7 +446,7 @@ A follow-up sweep landed 2026-05-01 covering the OpenClaw 4.12 transition + dash
 
 11. **Configurable Rule & Policy Framework v1 (`policy-framework-v1` branch).** A starter policy framework with operator-authoring built in. Two starter policies ship by default with **different runtime semantics**: `ClawNex Default` (`source = curated`, `lifecycle = starter`) — a 163-rule operator-visible **wire-inert mirror** of the inbound jailbreak / cognitive-tampering / secret / path detections the built-in shield runs from source (audit-visible reference data, NOT wire-active in v1); and `Generic Egress Starter` (`source = system`, `lifecycle = starter`) — **12 enabled outbound starter rules running on the wire**, comprising 7 PII families (email, phone, SSN, credit card, IPv4, date of birth, passport) and 5 outbound families (private key material, password assignment, env var leak, internal IP, database URI), plus **2 lab held drafts visible but disabled** (`JAIL-CREDENTIAL-EXTRACTION-REQUEST` and `OUT-GENERIC-API-KEY-SHAPE`) that operators can review the visible pattern and clone/copy into a custom policy after review (vendor rules can't be edited or enabled in place — clone-then-customize is the path). Three of the 12 enabled rules (PHONE_US, CREDIT_CARD, IPv4) and both held drafts route through `createReviewedSeedRule` with a hardcoded 5-key allow-list because their bounded patterns false-positive on `safe-regex2`'s static heuristic — explicit per-rule code-reviewed exemptions, not a generic bypass. Operator-authored DLP rules support literal substring (default) or opt-in regex with a 3-layer ReDoS defense (save-time `safe-regex2` static AST gate + 1024-char length cap + runtime `ITERATION_CAP = 1000` with auto-disable after 5 consecutive cap hits). Per-rule actions (`score` / `block` / `review` / `redact` / `allow`) with redact-span resolution that physically separates full match data from the truncated `samples` field. Per-rule literal exceptions with `rule_match_suppressed` audit events. RBAC: `policies:read` for all 5 roles, `policies:write` and `policies:test` for Admin + Security Manager only. 11 REST endpoints under `/api/policies/*` with full CRUD + the test endpoint. Disabling a vendor-shipped policy (`source IN ('curated', 'system')`) requires a typed-phrase confirmation plus a reason and lights an amber header warning ribbon across all dashboard tabs. Outbound-leak verdict semantics preserved across the OUT-* in-source-to-policy cutover via `OUTBOUND_LEAK_RULE_KEYS` allow-list at the scanner wire boundary. Migration is dual-key idempotent (`policy_framework_schema_version` + `policy_framework_seed_version`). **Enterprise EDM / DCM / OCR remain deferred** — those are enterprise-tier scope outside the OSS surface. Spec: `docs/superpowers/specs/2026-05-03-policy-framework-design.md`. Operator docs: `docs/06-basic-user-manual.md` Configuration → Policies & Rules. Engineer authoring guide: `docs/07-advanced-user-manual.md` §20. Architecture: `docs/18-developer-manual.md` §8 Policy framework subsection.
 
-**See:** `CHANGELOG.md` Unreleased section for the full additive/change/fixed/security/migration breakdown, and `docs/qa/dogfood-2026-04-28/implementation-agent-deep-summary-2026-04-29.md` for the internal reviewer-grade post-mortem of the original two work-streams.
+**See:** `CHANGELOG.md` Unreleased section for the full additive/change/fixed/security/migration breakdown.
 
 ---
 
@@ -1168,7 +1122,7 @@ Non-feature release that converts latent v0.6.2 value into visible operator valu
 
 - **State-component coverage is targeted, not exhaustive** — ToolsAccessPanel migrated in this release; remaining panels with naive "Loading..." strings (AgentWorkspace mid-panel file loader; Configuration sub-cards) are scoped as a follow-up lane.
 - **Trust Audit discovery itself is unchanged** — this release adds honesty copy about fidelity; a discovery rewrite (real agent metadata, authoritative tool registry, live sandbox detection) is a separate workstream.
-- Deferred High findings (H-4 clawkeeper install, H-5 Next.js major, H-13 source-signed shield whitelist) remain deferred with documented rationale in `docs/internal/archive/security-audit-2026-04-22.md` §10.
+- Deferred security follow-up items remain tracked in the public security roadmap.
 
 **Migration (v0.6.3) — Adopting the new RBAC safe default on an existing install:**
 
@@ -1220,17 +1174,16 @@ Same matrix as v0.6.2 below. No new OS / runtime / dependency versions introduce
 
 ### v0.6.2 — Pre-OSS Hardening Pass
 
-Hardening-focused release that closes 11 of 15 High/Critical findings from the 2026-04-22 security audit and lands the reviewer's 10-task pre-OSS hardening checklist. No new dashboard surfaces; this release sharpens what v0.6.1 shipped.
+Hardening-focused release that closed the major findings from the 2026-04-22 security review and landed the pre-OSS hardening checklist. No new dashboard surfaces; this release sharpened what v0.6.1 shipped.
 
-**Security (from `docs/security-audit-2026-04-22.md`):**
-- **[C-1] LiteLLM fork-bomb** — Triple-guard now prevents runaway LiteLLM processes: `lsof` pre-check in `start.sh`, socket-bind check in `run.py`, and `num_workers: 1` in `config.yaml`. Port collisions now cause a clean exit with a `[ClawNex] Port ... already in use` log line to `<operator-home>/.sentinel/litellm-error.log` (macOS) or systemd journal (Linux).
-- **[C-2] OPENROUTER_API_KEY plaintext exposure** — Removed from the launchd plist and `start.sh`; now sourced from `.env` only.
-- **[H-1] Audit stdout mirror** — Every audit entry also mirrored to stdout with a `[AUDIT]` prefix for SIEM ingestion. Mirror is unconditional and cannot be disabled (compliance invariant).
-- **[H-2] MCP audit logging** — Every MCP tool invocation now emits `mcp:<tool>:invoked`, `mcp:<tool>:completed`, and `mcp:<tool>:failed` audit events with actor, arguments (secrets redacted), and duration.
-- **[H-3] `operator_role_changed` audit action** — Role promotion/demotion now emits a dedicated audit event separate from `operator_updated`, making RBAC drift auditable without log parsing.
-- **[H-6 through H-12]** — See Security Fixes table below.
+**Security summary:**
+- LiteLLM process supervision and service startup checks improved.
+- Provider key handling moved out of service definitions and into environment files.
+- Audit mirroring and MCP invocation auditing improved.
+- Operator role changes received dedicated audit events.
+- Trust Audit caching, UI state handling, readiness indicators, and correlation rule workflows improved.
 
-**the reviewer's 10-Task Pre-OSS Hardening (from `docs/pre-oss-hardening-checklist-for-claude.md`):**
+**Pre-OSS hardening highlights:**
 1. **Trust Audit caching** — `/api/trust-audit` now serves the last cached report from `config_defaults.trust_audit_last_report` when available; re-runs are explicit via `POST /api/trust-audit/run`. New cache keys: `trust_audit_last_report` (JSON), `trust_audit_last_run_at` (ISO ts), `trust_audit_last_duration_ms` (int), `trust_audit_last_summary` (metadata fallback).
 2. **Evidence pills on Trust Audit findings** — Each finding now carries a compact evidence pill (severity × category × surface) rendered above the detail block.
 3. **UI state refactor** — Introduced shared panel-state components in `src/components/dashboard/shared.tsx`: `PanelDataState`, `PanelStateBar`, `PanelEmptyState`, `PanelErrorState`, `PanelDisconnected`, `isStale`, `formatTimeAgo`, `useDataState`. 15 panels migrated to the shared state bar for consistent loading/empty/error/disconnected presentation.
@@ -2042,7 +1995,7 @@ stage: alpha → beta → rc → (none for GA)
 | 1.4 | 2026-04-22 | ClawNex Engineering | Enterprise review pass: added Release Metadata Conventions, explicit Breaking Changes / Deprecations / Security Fixes / Known Issues / Verified Platforms matrices for v0.6.1; added upgrade path and metadata block to v0.6.0 entry; added cross-references. |
 | 1.5 | 2026-04-22 | ClawNex Engineering | v0.6.2-alpha pre-OSS hardening: added Current Release section with C-1/C-2 + 9 High fixes, the reviewer's 10-task hardening checklist, `/api/trust-audit` wrapper shape breaking change, systemd `-H 127.0.0.1` binding change, 4 deferred High findings (H-4/H-5/H-13), updated roadmap table with v0.7.0 scheduling for H-4/H-5/H-13. |
 | 1.17 | 2026-05-05 | ClawNex Engineering | Added 4 new release entries: v0.10.0-alpha (Configurable Rule & Policy Framework v1) with full metadata; v0.11.0-alpha (Token Cost FinOps Reporting v1) with full metadata; v0.11.1-alpha (Alert → Evidence backlink v1); v0.11.2-alpha (Alert → Evidence deep-link refinement, currently LIVE on https://<qa-host>). Removed stale "In Development" block; replaced with brief unreleased placeholder noting v0.11.2-alpha is the current shipped release with no work staged for the next release yet. |
-| 1.20 | 2026-06-12 | ClawNex Engineering | Led the v0.15.0-alpha Current Release with the 2026-06-12 veracity-audit milestone (no version bump): F1 trust-audit 14→15, F2 panel count→26, F3 shared `reconcilePosture` reconciliation with "Fleet est. (N)" fallback, F4 public `/api/v1/fleet` production-origin filter parity, F5 `TokenCostPanel` fetch-failure surfacing, F6 stale "155 shield rules"→163; V-B1 behavioral fix (ANY HIGH detection floors to REVIEW; verified live `webhook.site` exfil ALLOW→REVIEW + hermetic); behavioral proofs (shield 26/26+live, all 10 correlation rules 23/23+live, audit `verify-audit-completeness` 15/15+208 live mirror lines); 6 new verifiers (full suite 59 green); macOS `next build` blocker resolved on Next 16; de-identification sweep (personas→implementation-agent/internal-reviewer, org→clawnexai/clawnex). Demoted the 2026-05-17 chat-relay hardening to a within-release sub-section. Evidence: `docs/qa/veracity-audit-2026-05-19/VERACITY-AUDIT.md`. |
+| 1.20 | 2026-06-12 | ClawNex Engineering | Led the v0.15.0-alpha Current Release with the 2026-06-12 veracity-audit milestone (no version bump): trust-audit, panel-count, posture reconciliation, production-origin filter parity, Token & Cost Intel fetch-failure surfacing, shield-rule count, and behavioral verification updates. Demoted the 2026-05-17 chat-relay hardening to a within-release sub-section. |
 
 ---
 
@@ -2069,4 +2022,3 @@ Historic addendum for the v0.5.2 release window covering fresh-install hardening
 - **WALKTHROUGH.md** — added macOS deployment section (scp, rsync, manual options)
 - **ClawNex maintainers branding** — added to sidebar, scripts, docs, slide deck
 - **Version bumped to 0.5.2-alpha**
-

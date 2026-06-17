@@ -33,12 +33,14 @@ All 14 policies below are signed off by the maintainer as Owner & Maintainer. Ap
 ## Related governance artifacts
 
 - [Governance Index](../governance-index.md)
-- [Risk Register](../registers/risk-register.md)
+- [Public Risk Posture Summary](../registers/risk-register.md)
+- [Security Validation Summary](../security-validation-summary.md)
+- [Security Roadmap](../security-roadmap.md)
 - [Vendor Inventory Register](../registers/vendor-inventory-register.md)
 - [Policy Evidence Checklist](../policy-evidence-checklist.md)
 - [Governance One-Pager](../governance-one-pager.md)
-- [OSS Release Readiness Checklist](../oss-release-readiness-checklist-2026-04-22.md)
-- [Security Audit 2026-04-22](../security-audit-2026-04-22.md)
+- [Security Roadmap](../security-roadmap.md)
+- [Security Assessment Summary](../security-assessment-summary.md)
 
 ## Operational templates in use
 

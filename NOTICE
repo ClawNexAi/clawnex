@@ -16,7 +16,7 @@ distributed under `node_modules/<package>/LICENSE` (Node) and the corresponding
 reference here per Apache 2.0 §4(d).
 
 The dependency inventory was generated 2026-05-15 against
-`v0.14.5-alpha` (commit `944216e`). See `docs/qa/oss-license-audit-2026-05-15.md`
+`v0.14.5-alpha` (commit `944216e`). License methodology is maintained in the internal release evidence set.
 for the full audit methodology, per-license breakdown, and the live verifier
 that re-runs this analysis. SBOM artifact: `sbom.json` (CycloneDX, prod only).
 
@@ -151,7 +151,7 @@ SUPPORTING DATA
 --------------------------------------------------------------------------------
 
   Repo license file:                        LICENSE
-  Full audit methodology:                   docs/qa/oss-license-audit-2026-05-15.md
+  Full audit methodology:                   Internal release evidence set
   Machine-readable inventory (Node):        sbom.json (CycloneDX, regenerated
                                             via `npm run sbom`)
   Machine-readable inventory (Python):      regenerable via
