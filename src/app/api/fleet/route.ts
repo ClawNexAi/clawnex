@@ -183,7 +183,7 @@ export async function GET(request: NextRequest) {
   } catch {}
 
   // Posture (Phase 3): the Fleet table column previously called "Posture"
-  // is now sourced from the canonical Clawkeeper hardening score in
+  // is now sourced from the canonical Host Security hardening score in
   // posture-service.ts. The composite threat-pressure score from
   // threat-score.ts is a different concept and is not used as the
   // fleet-row "posture" anymore. This change makes the Fleet row, the

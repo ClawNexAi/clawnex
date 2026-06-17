@@ -1015,9 +1015,9 @@ The **Security Posture** tab provides an overall security health score based on:
 - Operational health
 - Detection rates
 
-### 10.2 Clawkeeper Scans
+### 10.2 Host Security Scans
 
-Clawkeeper runs automated security scans every hour, checking:
+Host Security runs automated security scans every hour, checking:
 - System configuration against security baselines
 - Known vulnerability patterns
 - Configuration drift

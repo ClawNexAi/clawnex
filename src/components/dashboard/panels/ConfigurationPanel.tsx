@@ -3090,7 +3090,7 @@ function ScheduledReportsCard() {
 
       {showAdd ? (
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <Tooltip placement="top" variant="detail" content={<span>Which canned report to generate. <strong>Executive summary</strong> = high-level KPIs, <strong>Security posture</strong> = Clawkeeper grade, <strong>Cost analysis</strong> = spend by agent, <strong>Compliance evidence</strong> = audit log bundle, <strong>Incident report</strong> = open alerts + correlations.</span>}>
+          <Tooltip placement="top" variant="detail" content={<span>Which canned report to generate. <strong>Executive summary</strong> = high-level KPIs, <strong>Security posture</strong> = Host Security grade, <strong>Cost analysis</strong> = spend by agent, <strong>Compliance evidence</strong> = audit log bundle, <strong>Incident report</strong> = open alerts + correlations.</span>}>
             <select value={newJob.report_type} onChange={e => setNewJob({ ...newJob, report_type: e.target.value })} style={selectStyle}>
               <option value="executive_summary">Executive Summary</option>
               <option value="security_posture">Security Posture</option>
@@ -3977,7 +3977,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
     lastChecked: string;
   } | null>(null);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
-  const [updatingClawkeeper, setUpdatingClawkeeper] = useState(false);
+  const [checkingHostSecurity, setCheckingHostSecurity] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
 
   const checkForUpdates = useCallback(async () => {
@@ -3997,15 +3997,15 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
     setCheckingUpdates(false);
   }, []);
 
-  const triggerClawkeeperUpdate = useCallback(async () => {
-    setUpdatingClawkeeper(true); setUpdateMessage(null);
+  const refreshHostSecurity = useCallback(async () => {
+    setCheckingHostSecurity(true); setUpdateMessage(null);
     try {
       const res = await fetch("/api/config/updates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "clawkeeper" }) });
       const data = await res.json();
       if (data.status === "updated") { setUpdateMessage(`Host security scanner ready (${data.newVersion})`); checkForUpdates(); }
       else { setUpdateMessage(data.error || "Scanner check failed"); }
     } catch { setUpdateMessage("Scanner check failed"); }
-    setUpdatingClawkeeper(false);
+    setCheckingHostSecurity(false);
   }, [checkForUpdates]);
 
   // Fetch updates on mount
@@ -4027,14 +4027,14 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
 
   const updatesCard = (
       <CollapsibleCard title="UPDATES" accent={C.brand} defaultOpen={false} focusKey="updates" focusedCard={focusCard}>
-        <div style={{ fontSize: 13, color: C.txS, marginBottom: 12 }}>Check DefenseClaw shield rules, bundled host security scanner, OpenClaw, and model pricing.</div>
+        <div style={{ fontSize: 13, color: C.txS, marginBottom: 12 }}>Check ClawNex Shield Rules drift, bundled host security scanner, OpenClaw, and model pricing.</div>
 
-        {/* DefenseClaw Rules */}
+        {/* ClawNex Shield Rules */}
         <div style={{ padding: "12px 14px", marginBottom: 8, background: C.glassSurfTrans, borderRadius: 8, border: `1px solid ${C.glassBorderSubtle}`, borderLeft: `3px solid ${C.cyan}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <Tooltip placement="right" variant="detail" content={<span><strong>DefenseClaw</strong> — the rule pack that powers the Prompt Shield. 163+ built-in patterns covering jailbreaks, leaked secrets, command injection, data exfiltration, steganography, encoding tricks, financial PII, and Pliny-family attacks. Versioned and maintained by the ClawNex team. <strong>Check All</strong> below polls for new rule releases; when a new version lands it&apos;s applied immediately, no restart needed.</span>}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: C.tx, borderBottom: `1px dotted ${C.txT}`, cursor: "help" }}>DefenseClaw Rules</span>
+              <Tooltip placement="right" variant="detail" content={<span><strong>ClawNex Shield Rules</strong> — the bundled rule engine behind Prompt Shield. 163+ built-in patterns cover jailbreaks, leaked secrets, command injection, data exfiltration, steganography, encoding tricks, financial PII, and Pliny-family attacks. Rules are versioned, reviewed, and shipped with ClawNex releases. <strong>Check All</strong> polls upstream sources only for informational drift; rule changes are not downloaded or applied at runtime.</span>}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: C.tx, borderBottom: `1px dotted ${C.txT}`, cursor: "help" }}>ClawNex Shield Rules</span>
               </Tooltip>
               {updateStatus && (
                 <span style={{ fontSize: 12, color: C.txT, fontFamily: F.mono }}>
@@ -4042,7 +4042,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
                 </span>
               )}
             </div>
-            {/* No "Update Available" badge here — DefenseClaw rules ship bundled
+            {/* No "Update Available" badge here — ClawNex Shield Rules ship bundled
                 with ClawNex versions, so the only update path is "update ClawNex
                 itself". Surfacing that as a per-row badge with no click target
                 was a false affordance (operators clicked it expecting an
@@ -4083,10 +4083,10 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
                 </Tooltip>
               ) : updateStatus?.clawkeeper.updateAvailable ? (
                 <Tooltip placement="left" variant="compact" content="Refresh the bundled scanner state. No service restart needed.">
-                  <button onClick={triggerClawkeeperUpdate} disabled={updatingClawkeeper} style={{
-                    padding: "4px 12px", background: C.brand, color: C.bg, border: "none", borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: updatingClawkeeper ? "wait" : "pointer",
+                  <button onClick={refreshHostSecurity} disabled={checkingHostSecurity} style={{
+                    padding: "4px 12px", background: C.brand, color: C.bg, border: "none", borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: checkingHostSecurity ? "wait" : "pointer",
                   }}>
-                    {updatingClawkeeper ? "Checking..." : "Refresh"}
+                    {checkingHostSecurity ? "Checking..." : "Refresh"}
                   </button>
                 </Tooltip>
               ) : (
@@ -4133,7 +4133,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
             Last checked: {updateStatus?.lastChecked ? timeAgo(updateStatus.lastChecked) : "never"}
           </span>
           {updateMessage && <span style={{ fontSize: 12, color: updateMessage.includes("failed") || updateMessage.includes("Failed") ? C.danger : C.brand, fontFamily: F.mono }}>{updateMessage}</span>}
-          <Tooltip placement="left" variant="detail" content={<span>Re-poll GitHub for fresh DefenseClaw, OpenClaw, and Model Pricing versions; host scanner availability is checked locally. Bypasses the local cache so you always see the latest tags. Result populates the rows above.</span>}>
+          <Tooltip placement="left" variant="detail" content={<span>Re-poll for ClawNex Shield Rules upstream drift, OpenClaw releases, and Model Pricing versions; host scanner availability is checked locally. Bypasses the local cache so you always see the latest source state. Result populates the rows above.</span>}>
             <button onClick={checkForUpdates} disabled={checkingUpdates} style={{
               padding: "5px 14px", background: checkingUpdates ? C.glassSurfTrans : `${C.brand}18`, border: `1px solid ${C.brand}44`, borderRadius: 6,
               color: C.brand, fontSize: 12, fontWeight: 600, cursor: checkingUpdates ? "wait" : "pointer", fontFamily: F.sans,

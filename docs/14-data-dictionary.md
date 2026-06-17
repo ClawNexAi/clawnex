@@ -57,7 +57,7 @@ The 22-table schema is grouped into four functional categories. Every row in the
 | 5 | alerts | EVT | Security alerts | id (UUID) | ~1 row per distinct alert (5-min dedup window) | Configurable (default: 90d) | Restricted |
 | 6 | incidents | EVT | Correlated multi-alert incidents | id (UUID) | ~1 row per incident (low) | Configurable (default: 90d) | Restricted |
 | 7 | audit_log | SEC | Immutable action log | id (UUID) | ~1 row per mutating action (append-only) | Configurable (default: 365d, 0=unlimited) | Restricted |
-| 8 | security_scans | OPS | Clawkeeper security scanner results | id (UUID) | ~1 row per scanner run (low) | None (kept indefinitely) | Internal |
+| 8 | security_scans | OPS | Host Security Scanner results | id (UUID) | ~1 row per scanner run (low) | None (kept indefinitely) | Internal |
 | 9 | security_check_results | OPS | Individual check outcomes | id (UUID) | ~N rows per scan (bounded by check count) | Cascade from security_scans | Internal |
 | 10 | maintenance_items | OPS | Maintenance checklists | id (UUID) | Static; only changes on edit | None | Internal |
 | 11 | access_lists | CFG | IP/domain access control lists | id (UUID) | Low (operator-managed) | None | Internal |
@@ -354,7 +354,7 @@ the header ribbon.
 
 ### 3.8 security_scans
 
-**Purpose:** Results from security scanner (Clawkeeper) runs.
+**Purpose:** Results from security scanner (Host Security Scanner) runs.
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|

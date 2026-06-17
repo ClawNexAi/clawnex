@@ -10,7 +10,7 @@
  *
  * v1 sources (already polled by /api/config/updates):
  *   - OpenClaw      (semver-based; live GitHub release tag)
- *   - DefenseClaw   (commit-date-based; rule pack ships bundled with ClawNex)
+ *   - Shield Rules  (commit-date-based; rule pack ships bundled with ClawNex)
  *   - Host scanner  (local bundled scanner availability)
  *
  * ClawNex itself isn't tracked yet — there's no published release source
@@ -141,7 +141,7 @@ export function UpdateBadge({ navigate }: Props) {
   //                    - The host scanner is bundled with ClawNex.
   //                    - OpenClaw upgrades happen outside ClawNex (the
   //                      "never touch OpenClaw" rule).
-  //                    - DefenseClaw rules ship bundled with ClawNex
+  //                    - ClawNex Shield Rules ship bundled with ClawNex
   //                      releases; only changing on a ClawNex version bump.
   const sources: Array<{
     key: string;
@@ -151,7 +151,7 @@ export function UpdateBadge({ navigate }: Props) {
   }> = [
     { key: "clawnex-clawkeeper", src: data.clawkeeper,  label: "Host Security Scanner", kind: "info" },
     { key: "clawnex-openclaw",   src: data.openclaw,    label: "OpenClaw",            kind: "info" },
-    { key: "clawnex-defenseclaw", src: data.defenseclaw, label: "DefenseClaw rules",  kind: "info" },
+    { key: "clawnex-defenseclaw", src: data.defenseclaw, label: "ClawNex Shield Rules",  kind: "info" },
   ];
   const actionableUpdates = sources.filter(s => s.kind === "actionable" && s.src?.updateAvailable);
   const count = actionableUpdates.length;
@@ -227,7 +227,7 @@ export function UpdateBadge({ navigate }: Props) {
             const available = src.updateAvailable;
             // Only actionable sources contribute to the badge count and get
             // the bright "update available" treatment. Informational rows
-            // (OpenClaw, DefenseClaw rules) display the version delta but
+            // (OpenClaw, ClawNex Shield Rules) display the version delta but
             // are visually muted with an "INFO" tag so the operator
             // understands there's no in-app button to clear them.
             const isActionableUpdate = kind === "actionable" && available;

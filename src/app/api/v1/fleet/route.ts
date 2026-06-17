@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
 
     const ocVersion = (ocConfig?.meta as { lastTouchedVersion?: string })?.lastTouchedVersion || 'unknown';
 
-    // Posture score (Phase 3): canonical Clawkeeper hardening score.
+    // Posture score (Phase 3): canonical Host Security hardening score.
     // Returns null when no scan has been run yet — public API consumers
     // get an explicit `null` instead of a fake placeholder so they can
     // render "unscanned" rather than "50%".

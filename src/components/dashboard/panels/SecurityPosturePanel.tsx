@@ -16,6 +16,7 @@ import { Tooltip } from '../tooltip';
 import { INST, POSTURE_DEMO } from '../mock-data';
 import { CveCard } from './CveCard';
 import { MissionControlBreadcrumb } from './mission-control/MissionControlBreadcrumb';
+import { formatHostSecurityCheckId } from '@/lib/host-security-display';
 
 // Posture scans older than 24h surface a staleness warning on the state bar.
 const POSTURE_STALE_MS = 24 * 60 * 60 * 1000;
@@ -55,7 +56,7 @@ export function SecurityPosturePanel({ fleetApi, demoMode, onNavigate, filters, 
 
   const fetchScan = useCallback(async () => {
     if (demoMode) {
-      // Demo: substitute the seeded Clawkeeper scan (B+ / 87, 145 checks
+      // Demo: substitute the seeded Host Security scan (B+ / 87, 145 checks
       // with 12 failed) plus hardening category breakdown. Cross-refs the
       // posture narrative — fleet-level posture (61% Pinnacle AI) and
       // host-level hardening (B+) are intentionally distinct concepts
@@ -112,7 +113,7 @@ export function SecurityPosturePanel({ fleetApi, demoMode, onNavigate, filters, 
   const hasScan = scanData?.scan != null;
   const scan = scanData?.scan;
   const hardening = scanData?.hardening;
-  // Real vs. placeholder posture. On a fresh install with no Clawkeeper scan AND
+  // Real vs. placeholder posture. On a fresh install with no Host Security scan AND
   // no real fleet posture data, we previously fell back to averaging the fleet
   // placeholder value (`posture: 100` from the threat-score null case) which made
   // the gauge read "100" while the category bullets showed hardcoded demo numbers
@@ -170,7 +171,7 @@ export function SecurityPosturePanel({ fleetApi, demoMode, onNavigate, filters, 
           title="Posture Scan Error"
           error={fetchError || "Security scan request failed"}
           onRetry={fetchScan}
-          hint="The Clawkeeper scanner may not be installed yet. Open Configuration → Updates to install it."
+          hint="The Host Security Scanner may not be ready yet. Open Configuration → Updates to verify it."
         />
       </div>
     );
@@ -184,7 +185,7 @@ export function SecurityPosturePanel({ fleetApi, demoMode, onNavigate, filters, 
         </div>
         <PanelEmptyState
           title="No posture scan yet"
-          description="Clawkeeper checks file permissions, firewall rules, package versions, and vulnerable dependencies on this host. Run a scan to grade your security posture — nothing is assessed until you do."
+          description="ClawNex Host Security checks file permissions, firewall rules, package versions, and vulnerable dependencies on this host. Run a scan to grade your security posture — nothing is assessed until you do."
           actionLabel={scanning ? "Running…" : "Run Posture Scan"}
           onAction={() => { if (!scanning) triggerScan(); }}
         />
@@ -236,7 +237,7 @@ export function SecurityPosturePanel({ fleetApi, demoMode, onNavigate, filters, 
       )}
       {filters.selectedInstance !== "all" && (
         <div style={{ fontSize: 12, color: C.txS, padding: "8px 12px", background: `${C.info}38`, border: `1px solid ${C.info}8c`, borderRadius: 6, marginBottom: 12 }}>
-          <strong style={{ color: C.info }}>&#x2139;</strong> Security posture is assessed at the host level — Clawkeeper scans apply to the entire machine, not individual agent instances.
+          <strong style={{ color: C.info }}>&#x2139;</strong> Security posture is assessed at the host level — Host Security scans apply to the entire machine, not individual agent instances.
         </div>
       )}
       {/* Top stats bar */}
@@ -258,7 +259,7 @@ export function SecurityPosturePanel({ fleetApi, demoMode, onNavigate, filters, 
         {scan && scan.warnedChecks != null && <Stat label="Warned" value={scan.warnedChecks} color={scan.warnedChecks > 0 ? C.warn : C.green} small />}
         {scan && <Stat label="Total Checks" value={scan.totalChecks} color={C.info} small />}
         {scan && <Stat label="Last Scan" value={timeAgo(scan.scannedAt)} color={C.txS} small />}
-        <Stat label="Source" value={reconciled.source === 'clawkeeper' ? "Clawkeeper" : reconciled.source === 'unscanned' ? "Unscanned" : `Fleet est. (${reconciled.instanceCount})`} color={C.purp} small />
+        <Stat label="Source" value={reconciled.source === 'clawkeeper' ? "Host Security" : reconciled.source === 'unscanned' ? "Unscanned" : `Fleet est. (${reconciled.instanceCount})`} color={C.purp} small />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 16 }}>
@@ -294,7 +295,7 @@ export function SecurityPosturePanel({ fleetApi, demoMode, onNavigate, filters, 
               </div>
             ) : (
               // Empty state: honest "no scan yet" message instead of hardcoded demo values.
-              // Clicking Run Scan (below) populates real Clawkeeper categories.
+              // Clicking Run Scan (below) populates real Host Security categories.
               <div style={{
                 marginTop: 12, padding: "14px 12px",
                 background: C.glassSurfTrans, border: `1px dashed ${C.glassBorderCyan}`, borderRadius: 6,
@@ -305,14 +306,14 @@ export function SecurityPosturePanel({ fleetApi, demoMode, onNavigate, filters, 
                 </div>
                 <div style={{ fontSize: 11, color: C.txT, marginTop: 4, lineHeight: 1.5 }}>
                   Click <strong>Run Scan</strong> below to grade this host across prompt safety,
-                  agent control, network security, data protection, and compliance via Clawkeeper.
+                  agent control, network security, data protection, and compliance via ClawNex Host Security.
                 </div>
               </div>
             )}
 
             {/* Run Scan button */}
             <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
-              <Tooltip placement="top" variant="detail" content={<span>Run a fresh <strong>Clawkeeper</strong> security audit against this host. Grades you A&ndash;F across prerequisites, installation, host hardening, network, and security audit categories. Typical run: ~30s. Result is persisted and feeds the Fleet Command grade tile too.</span>}>
+              <Tooltip placement="top" variant="detail" content={<span>Run a fresh <strong>Host Security</strong> audit against this host. Grades you A&ndash;F across prerequisites, installation, host hardening, network, and security audit categories. Typical run: ~30s. Result is persisted and feeds the Fleet Command grade tile too.</span>}>
                 <button onClick={triggerScan} disabled={scanning} style={{
                   padding: "8px 16px", borderRadius: 6, fontSize: 13, fontFamily: F.mono, cursor: scanning ? "wait" : "pointer",
                   background: scanning ? C.glassSurfTrans : `linear-gradient(135deg, ${C.cyan} 0%, ${C.green} 100%)`,
@@ -331,7 +332,7 @@ export function SecurityPosturePanel({ fleetApi, demoMode, onNavigate, filters, 
         <div>
           {/* Scan checks detail */}
           {hasScan && scan && scan.checks.length > 0 && (
-            <Card title={`Clawkeeper Checks (${scan.checks.length})`} accent={C.cyan} actions={
+            <Card title={`Host Security Checks (${scan.checks.length})`} accent={C.cyan} actions={
               <Tooltip placement="left" variant="compact" content="Toggle the per-check breakdown table. Collapsed shows just pass/fail/warn counts.">
                 <button onClick={() => setShowChecks(p => !p)} style={{ background: "none", border: "none", color: C.brand, cursor: "pointer", fontSize: 12, fontFamily: F.mono }}>
                   {showChecks ? "Collapse" : "Expand"}
@@ -346,7 +347,7 @@ export function SecurityPosturePanel({ fleetApi, demoMode, onNavigate, filters, 
                   <Table
                     headers={["ID", "Check", "Status", "Severity", "Category"]}
                     rows={pagedChecks.map((c, i) => [
-                      <span key={`id-${i}`} style={{ fontFamily: F.mono, fontSize: 11, whiteSpace: "nowrap" }}>{c.checkId}</span>,
+                      <span key={`id-${i}`} style={{ fontFamily: F.mono, fontSize: 11, whiteSpace: "nowrap" }}>{formatHostSecurityCheckId(c.checkId)}</span>,
                       <span key={`n-${i}`} style={{ fontSize: 12, minWidth: 180 }}>{c.name}</span>,
                       <Badge key={`s-${i}`} label={c.status} color={stColor(c.status)} />,
                       <span key={`sv-${i}`} style={{ whiteSpace: "nowrap" }}><Badge label={c.severity} color={sevColor(c.severity)} /></span>,
@@ -391,7 +392,7 @@ export function SecurityPosturePanel({ fleetApi, demoMode, onNavigate, filters, 
                     </div>
                     {tierItems.filter(i => i.status !== "PASS").slice(0, 5).map((item, j) => (
                       <div key={j} style={{ fontSize: 12, color: C.txS, padding: "3px 0 3px 16px", borderLeft: `2px solid ${sevColor(item.severity)}44` }}>
-                        <span style={{ fontFamily: F.mono, color: C.txT }}>{item.checkId}</span> {item.name}
+                        <span style={{ fontFamily: F.mono, color: C.txT }}>{formatHostSecurityCheckId(item.checkId)}</span> {item.name}
                         {item.remediation && <span style={{ color: C.txT, fontSize: 11 }}> - {item.remediation}</span>}
                       </div>
                     ))}
@@ -412,7 +413,7 @@ export function SecurityPosturePanel({ fleetApi, demoMode, onNavigate, filters, 
                 {paged.map((r, i) => (
                   <div key={i} style={{ padding: "6px 0", borderBottom: `1px solid ${C.glassBorderSubtle}`, display: "flex", gap: 8, alignItems: "baseline" }}>
                     <Badge label={r.severity} color={sevColor(r.severity)} />
-                    <span style={{ fontSize: 12, fontFamily: F.mono, color: C.txT }}>{r.checkId}</span>
+                    <span style={{ fontSize: 12, fontFamily: F.mono, color: C.txT }}>{formatHostSecurityCheckId(r.checkId)}</span>
                     <span style={{ fontSize: 12, color: C.txS, flex: 1 }}>{r.suggestion}</span>
                   </div>
                 ))}
@@ -470,7 +471,7 @@ export function SecurityPosturePanel({ fleetApi, demoMode, onNavigate, filters, 
           })()}
 
           {!hasScan && instances.length === 0 && (
-            <EmptyState message="No scan data available. Click 'Run Scan' to perform a Clawkeeper security scan." />
+            <EmptyState message="No scan data available. Click 'Run Scan' to perform a Host Security scan." />
           )}
         </div>
       </div>

@@ -1691,16 +1691,16 @@ echo ""
 echo -e "  ${CYAN}Next steps:${NC}"
 if [ "$INSTALL_TOPOLOGY" = "2" ]; then
     echo -e "    1. Open the magic URL above to create your admin account"
-    echo -e "    2. Walk the Welcome Wizard (Configuration → providers → Clawkeeper → CVE → routing → shield test)"
+    echo -e "    2. Walk the Welcome Wizard (Configuration → providers → Host Security → CVE → routing → shield test)"
     echo -e "    3. Run ./deploy/install-prod.sh ${PUBLIC_DOMAIN:-yourdomain.com} for Caddy + systemd + HTTPS"
     echo -e "    4. Configuration → Authentication Methods — turn on GitHub OAuth / Magic Link as desired"
 else
     echo -e "    1. Open the dashboard at ${DEFAULT_RP_ORIGIN}"
     if [ "$RBAC_ENABLED_VAL" = "true" ]; then
         echo -e "    2. Create the first admin from the setup URL printed by install.sh"
-        echo -e "    3. Walk the Welcome Wizard (Configuration → providers → Clawkeeper → CVE → routing → shield test)"
+        echo -e "    3. Walk the Welcome Wizard (Configuration → providers → Host Security → CVE → routing → shield test)"
     else
-        echo -e "    2. Walk the Welcome Wizard (Configuration → providers → Clawkeeper → CVE → routing → shield test)"
+        echo -e "    2. Walk the Welcome Wizard (Configuration → providers → Host Security → CVE → routing → shield test)"
     fi
 fi
 echo ""

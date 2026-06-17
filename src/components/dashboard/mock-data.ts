@@ -341,7 +341,7 @@ export const INFRA_DEMO = {
   services: [
     { id: "openclaw", name: "OpenClaw Gateway", status: "online", port: 8200, version: "1.4.2", latency_ms: 12, uptime: 1843200 },
     { id: "litellm", name: "LiteLLM Proxy", status: "online", port: 4001, version: "1.83.0", latency_ms: 8, uptime: 1843200 },
-    { id: "clawkeeper", name: "Clawkeeper Hardening", status: "online", port: null, version: "0.6.1", latency_ms: 0, uptime: 7200 },
+    { id: "clawkeeper", name: "Host Security Scanner", status: "online", port: null, version: "0.6.1", latency_ms: 0, uptime: 7200 },
     { id: "dashboard", name: "ClawNex Dashboard", status: "online", port: 5001, version: "0.10.0-alpha", latency_ms: 4, uptime: 7200 },
     { id: "shield", name: "Prompt Shield Engine", status: "online", port: null, version: "0.10.0-alpha", latency_ms: 0, uptime: 7200 },
     { id: "watcher", name: "Session Watcher", status: "online", port: null, version: "0.10.0-alpha", latency_ms: 0, uptime: 7200 },
@@ -495,7 +495,7 @@ export const RISK_ACCEPTANCES_DEMO = {
 };
 
 // ---------------------------------------------------------------------------
-// Clawkeeper hardening posture
+// Host Security hardening posture
 // ---------------------------------------------------------------------------
 
 export const POSTURE_DEMO = {
@@ -571,7 +571,7 @@ export const TIMELINE_DEMO = [
   { ts: "2026-04-29T13:38:47Z", source: "shield", severity: "CRITICAL", category: "block", title: "Fake system tag injection blocked", actor: "pentest-agent", resource: "scn-d-014", link: { tab: "shield" as TabId, id: "scn-d-014" } },
   { ts: "2026-04-29T13:30:18Z", source: "shield", severity: "HIGH", category: "block", title: "L33tspeak evasion blocked", actor: "pentest-agent", resource: "scn-d-016", link: { tab: "shield" as TabId, id: "scn-d-016" } },
   { ts: "2026-04-29T13:14:33Z", source: "shield", severity: "HIGH", category: "block", title: "Role hijack claim blocked", actor: "pentest-agent", resource: "scn-d-019", link: { tab: "shield" as TabId, id: "scn-d-019" } },
-  { ts: "2026-04-29T13:00:00Z", source: "clawkeeper", severity: "HIGH", category: "scan", title: "Clawkeeper hardening scan complete (B+)", actor: "system", resource: "scan-d-001", link: { tab: "securityPosture" as TabId, id: "scan-d-001" } },
+  { ts: "2026-04-29T13:00:00Z", source: "clawkeeper", severity: "HIGH", category: "scan", title: "Host Security hardening scan complete (B+)", actor: "system", resource: "scan-d-001", link: { tab: "securityPosture" as TabId, id: "scan-d-001" } },
   { ts: "2026-04-29T11:14:22Z", source: "cve", severity: "INFO", category: "sync", title: "CVE feed synced (12 entries)", actor: "scheduler", resource: "cve-sync", link: { tab: "configuration" as TabId, id: "cve" } },
   { ts: "2026-04-29T10:30:00Z", source: "audit", severity: "MEDIUM", category: "config", title: "Configuration drift outside maintenance window", actor: "admin@gw-srv", resource: "ALT-005", link: { tab: "alertsIncidents" as TabId, id: "ALT-005" } },
   { ts: "2026-04-29T09:14:08Z", source: "infra", severity: "HIGH", category: "alert", title: "TLS cert renewal failed for *.clawnexai.com", actor: "cert-monitor", resource: "ALT-004", link: { tab: "alertsIncidents" as TabId, id: "ALT-004" } },

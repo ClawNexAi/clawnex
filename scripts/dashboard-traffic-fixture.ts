@@ -362,7 +362,7 @@ function insertSecurityScan(runId: string, now: Date): { scans: number; checks: 
       checks.length,
       3,
       3,
-      `Synthetic Clawkeeper fixture run ${runId}`,
+      `Synthetic Host Security fixture run ${runId}`,
       json({ simulation: true, simulation_run_id: runId, score: 52, grade: "D" }),
       isoAt(now, 4),
     ],

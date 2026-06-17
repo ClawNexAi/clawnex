@@ -2,7 +2,7 @@
  * Config Updates API
  * GET  /api/config/updates           -- check for available updates
  * POST /api/config/updates/clawkeeper   -- compatibility no-op for built-in scanner
- * POST /api/config/updates/defenseclaw  -- check DefenseClaw rules status
+ * POST /api/config/updates/defenseclaw  -- check upstream shield-rule drift
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
   try {
     const now = new Date().toISOString();
 
-    // --- DefenseClaw Rules ---
+    // --- ClawNex Shield Rules ---
     const lastRulesUpdate = getConfigValue("defenseclaw_rules_last_update") || "2026-03-31";
     const rulesVersion = getConfigValue("defenseclaw_rules_version") || "v2026-03-31";
     const rulesCount = getConfigValue("defenseclaw_rules_count") || "163";
@@ -211,7 +211,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       defenseclaw: {
-        name: "DefenseClaw Rules",
+        name: "ClawNex Shield Rules",
         currentVersion: rulesVersion,
         ruleCount: parseInt(rulesCount, 10),
         lastUpdate: lastRulesUpdate,
@@ -280,7 +280,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         status: "checked",
         latestCommitDate: latestCommit,
-        message: "DefenseClaw rules check complete. Manual rule porting required for updates.",
+        message: "Upstream DefenseClaw changed; review for possible future ClawNex Shield Rules updates.",
       });
     }
 

@@ -170,7 +170,7 @@ PLATFORM OVERVIEW (v${CLAWNEX_VERSION_SHORT}):
 - **Tooltip System** (new in v0.5.4, copy refresh 2026-05-01): Most stats, badges, column headers, and controls carry hover tooltips for contextual help. Inline text anchors (column headers, labels, badges) have a dotted cyan underline at rest that brightens on hover. Stat tiles and cards show a small cyan corner pip in the top-right — hover to see the explanation. A global **TIPS** button in the header (next to the \`?\` help button) toggles the entire tooltip system on/off; the preference persists via \`config_defaults.tooltips_enabled\`. The 2026-05-01 sweep rewrote ~92 tooltips into plain English (no internal jargon, no TipCode shorthand). If an operator asks "what are these cyan dots?" or "why is this underlined?" — explain that those are discoverability hints for the tooltip system.
 - **Collapsible Sections** (new in v0.5.4): Four high-density sections can now collapse to save vertical space — Recent Shield Events on [Prompt Shield], Live Traffic on [Traffic Monitor], Agents on [Agents & Sessions], Cost by Agent on [Token & Cost Intel]. Each shows a count pill in the collapsed header so the data stays discoverable.
 - **Sticky Collapse on Configuration** (added 2026-05-01): Inside Configuration → Fleet Connectors / Updates / OpenClaw Routing, every subsection's expand/collapse state persists in localStorage. If an operator collapses a connector once, it stays collapsed across reloads.
-- **UPDATES Pill in the Header** (added 2026-05-01): A small pill next to the version chip aggregates "you should update X" notifications. Sources today: Clawkeeper (actionable, counted in the badge), OpenClaw and DefenseClaw rules (informational, shown in dropdown with INFO tag — drift is reported but not counted because there's no in-app updater for them). The pill polls /api/config/updates every 15 minutes and refreshes immediately when an in-app update completes (via a \`clawnex:updates-refreshed\` window event). When operators ask about updates, point them at the pill first; it's the single source of truth across the dashboard.
+- **UPDATES Pill in the Header** (added 2026-05-01): A small pill next to the version chip aggregates "you should update X" notifications. Sources today: Host Security Scanner, OpenClaw, and ClawNex Shield Rules. ClawNex Shield Rules are informational only: drift is reported but not counted because rule changes ship through reviewed ClawNex releases, never runtime downloads. The pill polls /api/config/updates every 15 minutes and refreshes immediately when an in-app update completes (via a \`clawnex:updates-refreshed\` window event). When operators ask about updates, point them at the pill first; it's the single source of truth across the dashboard.
 - **Theme Toggle** (rewritten 2026-05-01): The header's sun/moon icon is now a brand-orange SVG (16px) instead of Unicode glyphs that disappeared on certain font fallbacks. Click flips dark ↔ light; persists across reloads.
 - **Agent Roles** (added 2026-05-01): The Agent Workspace tab now shows a ROLE description box for each agent. Roles live in ClawNex source (\`src/lib/services/agent-roles.ts\` → \`KNOWN_AGENT_ROLES\`) because the OpenClaw 4.12 schema rejects the \`role\` field on identity. Today's mapping: main = "Default OpenClaw operator workspace", neo = "End-to-end investigator and pivot generalist", trinity = "Infiltration specialist — recon and controlled pen-testing", morpheus = "Strategic advisor and orchestration mentor", oracle = "Pattern recognition and longitudinal forecasting", agent-smith = "Adversarial simulation and red-team validation". Agent names are Title-Cased on the tab strip (\`main\` → "Main", \`agent-smith\` → "Agent Smith"). Main is pinned to slot 0 with a DEFAULT chip.
 - **OpenClaw 4.12 Device-Identity Handshake** (added 2026-05-01): When connecting to OpenClaw 4.12+ gateways, ClawNex signs a v2 device-auth payload with a per-install Ed25519 keypair stored in \`config_defaults\`. Backwards-compatible with 3.28 / 4.10 / 4.11 (skips the device payload when the challenge has no nonce). If an operator reports "OpenClaw says device identity required", it usually means a stale build before commit ff77ee9 (2026-05-01) — point them at \`scripts/deploy-prod.sh\` for the redeploy and \`docs/17-troubleshooting-guide.md §2 Cause G\` for the SQL to regenerate the keypair.
@@ -179,7 +179,7 @@ PLATFORM OVERVIEW (v${CLAWNEX_VERSION_SHORT}):
 - [Infrastructure] shows four service states: ONLINE / DEGRADED / OFFLINE / NOT_CONFIGURED, every state now has a hover tooltip explaining what it means. Only NOT_CONFIGURED rows are clickable (jump to Configuration). Offline/degraded LiteLLM has an inline Restart button that calls the restart API in place — never direct operators to "go to Configuration" to restart LiteLLM.
 - On [Instance Detail], a red LiteLLM Proxy badge is clickable and jumps to Infrastructure so the operator can Restart from there.
 - [Configuration] → OpenClaw Routing distinguishes "openclaw.json missing" (warning) from "config found, zero LLM providers registered" (friendly info). The fleet client name defaults to the machine's hostname; operators can override it in Configuration → UI Preferences → Display Name.
-- Clawkeeper can be installed from the Welcome Wizard's Install Now button OR from [Configuration] → Updates → Clawkeeper → Install.
+- The bundled Host Security Scanner is verified from the Welcome Wizard or from [Configuration] → Updates → Host Security Scanner.
 
 FORMATTING RULES:
 - Use **bold** for emphasis on severity levels and key terms
@@ -201,7 +201,7 @@ When asked about priorities, threats, or status:
 
 When asked about setup, first-run, or installation:
 - Point the operator to the Welcome Wizard on [Fleet]
-- For a specific step, name the button they should click (e.g. "Install Now" for Clawkeeper)
+- For a specific step, name the button they should click (e.g. "Verify Now" for Host Security)
 - Remind them the wizard stays visible until all ${ONBOARDING_STEP_COUNT} steps are green and they click Get Started`;
 }
 
@@ -235,7 +235,7 @@ const KEYWORD_RESPONSES: Array<{ keywords: string[]; response: string }> = [
     response: "Check [Models] for the full model inventory across every configured provider (OpenClaw Gateway, OpenRouter, Anthropic, OpenAI, LM Studio, local Ollama, etc.). Add or edit providers in [Configuration] → Model Providers.",
   },
   {
-    keywords: ["welcome", "wizard", "setup", "first run", "install clawkeeper", "get started", "onboarding"],
+    keywords: ["welcome", "wizard", "setup", "first run", "host security", "install clawkeeper", "get started", "onboarding"],
     response: `Fresh installs open the Welcome Wizard on [Fleet] with a ${ONBOARDING_STEP_COUNT}-step checklist:\n\n${renderOnboardingStepsMarkdown()}\n\nThe wizard stays until every step is green AND you click Get Started on the Setup Complete screen.`,
   },
   {
@@ -260,7 +260,7 @@ const KEYWORD_RESPONSES: Array<{ keywords: string[]; response: string }> = [
   },
   {
     keywords: ["update", "updates", "update available", "update pill", "updates pill", "new version"],
-    response: "**UPDATES pill** (in the header, next to the version chip).\n\nClick it to see every source ClawNex tracks:\n\n1. **Clawkeeper** — actionable. Counted in the badge. Click an in-app **Update** button from [Configuration] → Updates → Clawkeeper to clear it.\n2. **OpenClaw** — informational only (INFO tag). ClawNex never installs/updates OpenClaw, so drift is reported but not counted.\n3. **DefenseClaw rules** — informational only (INFO tag). Rules ship bundled with ClawNex releases; they update when you take a new ClawNex release.\n\nThe pill polls every 15 minutes; the **REFRESH** button in the dropdown forces a re-poll. After running an Update from Configuration, the pill updates within seconds (via a `clawnex:updates-refreshed` window event).",
+    response: "**UPDATES pill** (in the header, next to the version chip).\n\nClick it to see every source ClawNex tracks:\n\n1. **Host Security Scanner** — bundled with ClawNex. The row verifies the scanner is present on this host.\n2. **OpenClaw** — informational only (INFO tag). ClawNex never installs/updates OpenClaw, so drift is reported but not counted.\n3. **ClawNex Shield Rules** — informational only (INFO tag). Rules ship bundled with ClawNex releases; upstream drift is a review signal for future releases, not a runtime download.\n\nThe pill polls every 15 minutes; the **REFRESH** button in the dropdown forces a re-poll. After running an Update from Configuration, the pill updates within seconds (via a `clawnex:updates-refreshed` window event).",
   },
   {
     keywords: ["device identity", "device-identity", "ed25519", "device pairing", "device required", "openclaw 4.12"],

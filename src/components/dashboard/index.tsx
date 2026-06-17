@@ -753,7 +753,7 @@ function SentinelDashboardInner() {
               <span style={{ fontSize: 9, fontWeight: 700, fontFamily: F.mono, color: C.cyan, background: `${C.cyan}18`, border: `1px solid ${C.cyan}44`, borderRadius: 3, padding: "1px 5px", letterSpacing: "0.05em" }}>{CLAWNEX_CHANNEL.toUpperCase()}</span>
             )}
             {/* Update notifier — aggregates /api/config/updates flags
-                across OpenClaw / Clawkeeper / DefenseClaw and surfaces a
+                across OpenClaw, Host Security, and ClawNex Shield Rules and surfaces a
                 single click target. Click expands a dropdown with
                 installed→latest version pairs; "View details" deep-links
                 to Configuration → Updates section. */}

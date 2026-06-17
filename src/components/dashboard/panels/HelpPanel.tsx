@@ -27,7 +27,7 @@ const PANEL_GUIDE: Array<{
   {
     group: "SECURITY",
     panels: [
-      { id: "securityPosture", label: "Security Posture", oneLiner: "Clawkeeper hardening grade (A–F). Prerequisites, host hardening, network, and audit checks with remediation guidance.", doc: "07-advanced-user-manual.md" },
+      { id: "securityPosture", label: "Security Posture", oneLiner: "ClawNex Host Security hardening grade (A–F). Prerequisites, host hardening, network, and audit checks with remediation guidance.", doc: "07-advanced-user-manual.md" },
       { id: "trustAudit", label: "Trust Audit", oneLiner: "Trust Boundary and Blast Radius Audit — 15 rules across 5 evidence levels. Confidence pills, expandable evidence, sandboxed flag. v0.7.1+ consumes permissiveness lib for comm-surface dangerous-combo + posture-lint findings.", doc: "07-advanced-user-manual.md" },
       { id: "shield", label: "Prompt Shield", oneLiner: "163-detection inbound content scanner (plus enabled system + custom policy rules from the framework matching scan direction; live wire runs both directions). Manual inbound scanner, recent events (collapsible), verdict/score/detections stats, rule whitelist.", doc: "07-advanced-user-manual.md" },
       { id: "shieldTests", label: "Shield Tests", oneLiner: "27 test payloads — jailbreaks, steganography, encoding, C2, financial, Pliny techniques. Run All or individual.", doc: "07-advanced-user-manual.md" },

@@ -33,7 +33,6 @@ const ATTRIBUTION: Array<{
 
 const THREAT_INTEL: Array<{ name: string; handle: string; url: string; contribution: string }> = [
   { name: "Elder Pliny", handle: "elder-plinius", url: "https://github.com/elder-plinius", contribution: "L1B3RT4S, ST3GG, G0DM0D3, P4RS3LT0NGV3 — jailbreak, steganography, GODMODE, and encoding obfuscation repos that informed 16 shield detection rules" },
-  { name: "DefenseClaw", handle: "defenseclaw", url: "https://github.com/defenseclaw", contribution: "Original Go-based shield rule set (Cisco origin) that was ported to TypeScript regex and became the foundation of ClawNex's 163-detection built-in rule engine" },
   { name: "MITRE", handle: "mitre", url: "https://cve.mitre.org", contribution: "CVE database and CWE classification system — powers the CVE correlation engine that maps known vulnerabilities to shield rule categories (108 CVEs tracked)" },
 ];
 

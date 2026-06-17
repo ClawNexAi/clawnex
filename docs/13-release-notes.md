@@ -179,7 +179,7 @@ the latest tarball to pick up these changes.
   returning to operators
 - Rate limiter persists timestamps to SQLite (`rate_limit_buckets`
   table) — survives process restart
-- Clawkeeper install pins to a specific upstream commit + verifies
+- Host Security install pins to a specific upstream commit + verifies
   SHA-256 of downloaded bytes
 - SMTP enforces TLSv1.2+ regardless of `smtpTls` config
 - Setup endpoint requires localhost when `SETUP_SECRET` is unset
@@ -444,7 +444,7 @@ Full evidence (commit chain, verifier output, live verification table, explicit 
 - About/Credits panel restructure: Inner Circle / Development Team / AI Tooling disclosure.
 - OpenClaw 4.12 device-identity handshake via Ed25519 keypair.
 - Capitalized agent names + role descriptions sourced from `KNOWN_AGENT_ROLES`.
-- Status-bar update notifier pill aggregating updates across OpenClaw / Clawkeeper / DefenseClaw (actionable-only count).
+- Status-bar update notifier pill aggregating updates across OpenClaw / Host Security / ClawNex Shield Rules (actionable-only count).
 - `scripts/deploy-prod.sh` durable parameterized production deploy.
 - Governance docs bundled in deploy tarball (governance-index, one-pager, evidence checklist, 14 policies + README, both registers).
 - ~92 plain-English tooltip rewrites.
@@ -476,7 +476,7 @@ A follow-up sweep landed 2026-05-01 covering the OpenClaw 4.12 transition + dash
 
 3. **OpenClaw 4.12 connector device-identity handshake.** OpenClaw 2026.4.x added a separate device-pairing layer on top of the legacy `?token=` URL parameter. ClawNex's connector now generates an Ed25519 keypair on first run (PEMs persisted to `config_defaults`), derives `deviceId = sha256(rawPubkey).hex()` (matches OpenClaw's own `fingerprintPublicKey`), and signs the V2 device-auth payload that 4.12 expects. Backwards-compatible with 3.28 via an `if (nonce)` guard — older gateways that don't send a nonce in their challenge keep working unchanged.
 
-4. **Status-bar update notifier**. New pill next to the version chip aggregating updates across OpenClaw / Clawkeeper / DefenseClaw via `/api/config/updates`. Count is *actionable-only* (only Clawkeeper has an in-app update path; OpenClaw upgrades happen outside per the never-touch-OpenClaw rule, and DefenseClaw rules ship bundled with ClawNex versions). Dropdown shows all three sources with an `INFO` tag on the non-actionable ones for awareness without misleading the count. Polls every 15 minutes; a `clawnex:updates-refreshed` window event triggers immediate re-fetch when an in-app update completes.
+4. **Status-bar update notifier**. New pill next to the version chip aggregating updates across OpenClaw / Host Security / ClawNex Shield Rules via `/api/config/updates`. Count is *actionable-only* (only Host Security has an in-app update path; OpenClaw upgrades happen outside per the never-touch-OpenClaw rule, and ClawNex Shield Rules rules ship bundled with ClawNex versions). Dropdown shows all three sources with an `INFO` tag on the non-actionable ones for awareness without misleading the count. Polls every 15 minutes; a `clawnex:updates-refreshed` window event triggers immediate re-fetch when an in-app update completes.
 
 5. **Capitalized agent names + role descriptions** on Agent Workspace tabs and Agents & Sessions cards. Names live in openclaw.json (the `name` field is schema-allowed); role descriptions live in `src/lib/services/agent-roles.ts` (`KNOWN_AGENT_ROLES`) since OpenClaw 4.12's strict schema rejects `role`. Today's seed: Main, Neo, Trinity, Morpheus, Oracle, Agent Smith. `main` is pinned to position 0 in the tab bar with a green `DEFAULT` chip.
 
@@ -488,7 +488,7 @@ A follow-up sweep landed 2026-05-01 covering the OpenClaw 4.12 transition + dash
 
 9. **Seed Test Correlation gated behind Developer Tools.** Consistent with the existing `/api/dev/*` and seedtraffic gating pattern. Hidden by default; expose via Configuration → Developer Tools.
 
-10. **Misc UX fixes**: empty ROLE box on Agent Workspace panel (now sourced from `KNOWN_AGENT_ROLES`); `[object Object]` rendering when the gateway returns structured `role`/`model` (defensive `coerceToString`); update pill stuck at "X UPDATES" forever (Clawkeeper version comparison was string-vs-semver — now mtime-vs-release-date); update pill green dot overlapping the "S" (Tooltip's `BlockAnchorIndicator` corner pip); Token Cost panel "Connected" indicator was OR'd with `health.status` (always true) — now reflects actual connector state; Agent Workspace showed `main`'s files for every agent (`workspace-reader` layout-convention drift); theme toggle SVG icon (orange sun / cyan moon) replaced fragile Unicode glyphs.
+10. **Misc UX fixes**: empty ROLE box on Agent Workspace panel (now sourced from `KNOWN_AGENT_ROLES`); `[object Object]` rendering when the gateway returns structured `role`/`model` (defensive `coerceToString`); update pill stuck at "X UPDATES" forever (Host Security version comparison was string-vs-semver — now mtime-vs-release-date); update pill green dot overlapping the "S" (Tooltip's `BlockAnchorIndicator` corner pip); Token Cost panel "Connected" indicator was OR'd with `health.status` (always true) — now reflects actual connector state; Agent Workspace showed `main`'s files for every agent (`workspace-reader` layout-convention drift); theme toggle SVG icon (orange sun / cyan moon) replaced fragile Unicode glyphs.
 
 11. **Configurable Rule & Policy Framework v1 (`policy-framework-v1` branch).** A starter policy framework with operator-authoring built in. Two starter policies ship by default with **different runtime semantics**: `ClawNex Default` (`source = curated`, `lifecycle = starter`) — a 163-rule operator-visible **wire-inert mirror** of the inbound jailbreak / cognitive-tampering / secret / path detections the built-in shield runs from source (audit-visible reference data, NOT wire-active in v1); and `Generic Egress Starter` (`source = system`, `lifecycle = starter`) — **12 enabled outbound starter rules running on the wire**, comprising 7 PII families (email, phone, SSN, credit card, IPv4, date of birth, passport) and 5 outbound families (private key material, password assignment, env var leak, internal IP, database URI), plus **2 lab held drafts visible but disabled** (`JAIL-CREDENTIAL-EXTRACTION-REQUEST` and `OUT-GENERIC-API-KEY-SHAPE`) that operators can review the visible pattern and clone/copy into a custom policy after review (vendor rules can't be edited or enabled in place — clone-then-customize is the path). Three of the 12 enabled rules (PHONE_US, CREDIT_CARD, IPv4) and both held drafts route through `createReviewedSeedRule` with a hardcoded 5-key allow-list because their bounded patterns false-positive on `safe-regex2`'s static heuristic — explicit per-rule code-reviewed exemptions, not a generic bypass. Operator-authored DLP rules support literal substring (default) or opt-in regex with a 3-layer ReDoS defense (save-time `safe-regex2` static AST gate + 1024-char length cap + runtime `ITERATION_CAP = 1000` with auto-disable after 5 consecutive cap hits). Per-rule actions (`score` / `block` / `review` / `redact` / `allow`) with redact-span resolution that physically separates full match data from the truncated `samples` field. Per-rule literal exceptions with `rule_match_suppressed` audit events. RBAC: `policies:read` for all 5 roles, `policies:write` and `policies:test` for Admin + Security Manager only. 11 REST endpoints under `/api/policies/*` with full CRUD + the test endpoint. Disabling a vendor-shipped policy (`source IN ('curated', 'system')`) requires a typed-phrase confirmation plus a reason and lights an amber header warning ribbon across all dashboard tabs. Outbound-leak verdict semantics preserved across the OUT-* in-source-to-policy cutover via `OUTBOUND_LEAK_RULE_KEYS` allow-list at the scanner wire boundary. Migration is dual-key idempotent (`policy_framework_schema_version` + `policy_framework_seed_version`). **Enterprise EDM / DCM / OCR remain deferred** — those are enterprise-tier scope outside the OSS surface. Spec: `docs/superpowers/specs/2026-05-03-policy-framework-design.md`. Operator docs: `docs/06-basic-user-manual.md` Configuration → Policies & Rules. Engineer authoring guide: `docs/07-advanced-user-manual.md` §20. Architecture: `docs/18-developer-manual.md` §8 Policy framework subsection.
 
@@ -1282,7 +1282,7 @@ No external CVEs were disclosed against ClawNex in this release window.
 
 | ID | Area | Description | Workaround | Target Fix |
 |----|------|-------------|------------|------------|
-| H-4 | Installer | `curl \| bash` install pattern in docs is deferred pending Clawkeeper updater vendoring | Operators can download `install-vps.sh` and review before running | v0.7.0 |
+| H-4 | Installer | `curl \| bash` install pattern in docs is deferred pending Host Security updater vendoring | Operators can download `install-vps.sh` and review before running | v0.7.0 |
 | H-5 | Dependencies | Next.js 14.2.33 pin — 14.2.x has known low-severity advisories; upgrade pending stability review | None required (advisories are low-severity); pin will move to 14.2.latest in v0.7.0 | v0.7.0 |
 | H-13 | Supply chain | Shield rule source files not HMAC-signed; `/api/health` upstream probe is slow (>2s on cold path) | Health endpoint behind cache; shield rules protected by file permissions | v0.7.0 |
 
@@ -1638,9 +1638,9 @@ Previously deferred findings (resolved in v0.6.0 RBAC):
 
 ### First-Run Experience
 
-- **Welcome Wizard** — Fleet Command now renders a 6-step setup checklist on fresh installs: Install ClawNex → Add AI model provider → Install Clawkeeper → Sync CVE database → Configure OpenClaw routing → Run first shield test. The shield-test step is intentionally last so the wizard keeps reappearing on every browser refresh until all prior steps are complete.
+- **Welcome Wizard** — Fleet Command now renders a 6-step setup checklist on fresh installs: Install ClawNex → Add AI model provider → Install Host Security → Sync CVE database → Configure OpenClaw routing → Run first shield test. The shield-test step is intentionally last so the wizard keeps reappearing on every browser refresh until all prior steps are complete.
 - **Setup Complete screen** — When every step passes, the wizard transitions to a green "You're all set!" state with a single **Get Started →** button. Clicking it writes `wizard_dismissed=1` to `config_defaults`, so the wizard never reappears on subsequent refreshes for that operator.
-- **In-wizard Clawkeeper install** — The Install Clawkeeper step now has an **Install Now** button that POSTs to `/api/system/install-clawkeeper` directly. No more copy-paste bash commands. A secondary "Open Updates panel" link jumps to Configuration → Updates if the operator prefers the manual path.
+- **In-wizard Host Security install** — The Install Host Security step now has an **Install Now** button that POSTs to `/api/system/install-clawkeeper` directly. No more copy-paste bash commands. A secondary "Open Updates panel" link jumps to Configuration → Updates if the operator prefers the manual path.
 - **Navigate-with-focus** — Wizard action buttons deep-link into specific Configuration cards (Model Providers, OpenClaw Routing, Updates). Target cards auto-expand and scroll into view so the operator lands on the right control without hunting.
 
 ### Infrastructure Panel Hardening
@@ -1805,7 +1805,7 @@ Previously deferred findings (resolved in v0.6.0 RBAC):
 
 ### Fixes
 
-- **Clawkeeper detection** — Was running `clawkeeper.sh --version` which doesn't exist. Now checks file existence and reports installation date.
+- **Host Security detection** — Was running `clawkeeper.sh --version` which doesn't exist. Now checks file existence and reports installation date.
 - **delivery-mirror noise** — Session watcher now skips `delivery-mirror` and `delivery` model entries. Existing 11,824 noise records deleted from database.
 - **Old Node.js proxy data** — 10 legacy proxy records cleaned from database.
 - **Proxy ingest source field** — `/api/proxy/ingest` now accepts caller-specified `source` field (for break-glass traffic tracking).
@@ -2007,7 +2007,7 @@ Previously deferred findings (resolved in v0.6.0 RBAC):
 | Pre-OSS hardening pass (audit C-1/C-2 + 9 Highs + the reviewer's 10 tasks) | P1 | Shipped (v0.6.2) |
 | Next.js upgrade (H-5) | P1 | Scheduled (v0.7.0) |
 | HMAC shield rule source-signing (H-13) | P1 | Scheduled (v0.7.0) |
-| Clawkeeper updater vendoring / replace `curl \| bash` (H-4) | P2 | Scheduled (v0.7.0) |
+| Host Security updater vendoring / replace `curl \| bash` (H-4) | P2 | Scheduled (v0.7.0) |
 | External SIEM Integration | P2 | Planned |
 | Webhook Notifications | P2 | Planned |
 | ML-Based Threat Detection | P3 | Planned |
@@ -2061,7 +2061,7 @@ Historic addendum for the v0.5.2 release window covering fresh-install hardening
 - **Purge DB** — each table DELETE wrapped individually so missing tables don't stop the purge
 - **Migration API** — error details now propagated to the UI
 - **Infrastructure** — Paperclip/Autensa only shown when explicitly configured (not default localhost)
-- **Clawkeeper update** — fallback to GitHub direct download when clawkeeper.dev is unreachable
+- **Host Security update** — fallback to GitHub direct download when clawkeeper.dev is unreachable
 - **Agent Ignore List** — no longer pre-populated with "Skill Installer" on fresh install
 - **Local Model Cost Rates** — Add button disabled when input is empty
 - **LiteLLM config** — cleaned of personal routes; ships with template config

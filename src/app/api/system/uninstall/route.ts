@@ -97,9 +97,8 @@ export async function POST(request: NextRequest) {
       // Things ClawNex installs (all removable here):
       //   - The install dir (~/sentinel) and its build artifacts
       //   - LiteLLM (Python package, optional, installed by setup.sh)
-      //   - Clawkeeper at ~/.local/bin/clawkeeper.sh
-      //   - DefenseClaw wherever it lands (~/.local/bin/defenseclaw* or
-      //     ~/.defenseclaw — the binary path is undecided pre-OSS)
+      //   - legacy host-security scanner artifacts at ~/.local/bin/clawkeeper.sh
+      //   - legacy third-party scanner artifacts wherever they landed
       //   - systemd unit /etc/systemd/system/clawnex-dashboard.service
       //   - /etc/caddy/Caddyfile (only the file ClawNex wrote — the Caddy
       //     package itself stays for any other site that might use it)
@@ -180,9 +179,9 @@ elif command -v pip &>/dev/null; then
 fi
 rm -f "\${HOME_DIR}/.local/bin/litellm" 2>/dev/null
 
-# ---- 5. Remove Clawkeeper + DefenseClaw ----
+# ---- 5. Remove legacy scanner artifacts ----
 echo ""
-echo "[5/8] Removing Clawkeeper + DefenseClaw..."
+echo "[5/8] Removing legacy scanner artifacts..."
 for f in "\${HOME_DIR}/.local/bin/clawkeeper.sh" "\${HOME_DIR}/.local/bin/clawkeeper" "\${HOME_DIR}/.local/bin/defenseclaw" "\${HOME_DIR}/.local/bin/defenseclaw.sh"; do
     if [ -e "$f" ]; then rm -f "$f" && echo "  ✓ removed $f"; fi
 done
@@ -243,7 +242,7 @@ echo "  rm -rf \${INSTALL_DIR}"
       return NextResponse.json({
         ok: true,
         step: 3,
-        message: "Uninstall script generated. Run it from a terminal — it removes ClawNex (incl. systemd unit, Caddyfile, Clawkeeper, DefenseClaw, LiteLLM, ClawNex tarballs) and preserves backups + docs.",
+        message: "Uninstall script generated. Run it from a terminal — it removes ClawNex (incl. systemd unit, Caddyfile, Host Security scanner artifacts, LiteLLM, ClawNex tarballs) and preserves backups + docs.",
         script: uninstallScript,
         command: `bash ${uninstallScript}`,
         note: "Backups and docs are preserved. Sudo is required to remove the systemd unit + Caddyfile — the script will prompt. Adjacent products (OpenClaw, Hermes) are NOT touched.",

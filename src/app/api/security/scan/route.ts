@@ -1,7 +1,7 @@
 /**
  * Security Scan API
  * GET  /api/security/scan — get last scan results with hardening report
- * POST /api/security/scan — trigger a new Clawkeeper scan
+ * POST /api/security/scan — trigger a new host security scan
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -11,6 +11,7 @@ import { runScan, getLastScan, isScanRunning } from '@/lib/services/clawkeeper-r
 import { buildHardeningReport, getRemediationSuggestions } from '@/lib/services/clawkeeper-mapper';
 import { logEvent } from '@/lib/services/audit-logger';
 import { createAlert } from '@/lib/services/alert-manager';
+import { formatHostSecurityCheckId } from '@/lib/host-security-display';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Log the scan initiation
-    logEvent('system', 'security.scan.start', 'security', undefined, 'Manual Clawkeeper scan triggered via API', 'clawkeeper');
+    logEvent('system', 'security.scan.start', 'security', undefined, 'Manual host security scan triggered via API', 'clawkeeper');
 
     // Run scan (may take 30-60 seconds)
     const result = await runScan();
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
     for (const check of criticalFails) {
       try {
         createAlert(
-          `Clawkeeper: ${check.checkId} ${check.name}`,
+          `Host Security: ${formatHostSecurityCheckId(check.checkId)} ${check.name}`,
           `Security check failed: ${check.name}. Category: ${check.category}. ${check.remediation || ''}`.trim(),
           check.severity as 'CRITICAL' | 'HIGH',
           'clawkeeper',

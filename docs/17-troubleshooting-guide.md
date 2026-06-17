@@ -735,7 +735,7 @@ curl -X POST http://127.0.0.1:5001/api/shield/scan \
 - [ ] Watchdog cron installed (check with `crontab -l | grep watchdog`)
 - [ ] Daily backup cron installed (if enabled)
 - [ ] CVE database synced (check Security Posture tab)
-- [ ] Clawkeeper installed (check with `ls ~/.local/bin/clawkeeper.sh`)
+- [ ] Host Security verified (check with `ls ~/.local/bin/clawkeeper.sh`)
 
 ---
 
@@ -1386,7 +1386,7 @@ The CLI fixture (`scripts/dashboard-traffic-fixture.ts`) bypasses the API entire
 
 **Symptoms:**
 
-- The header **UPDATES** pill keeps showing `1 UPDATE` (or higher) even after you ran the in-app updater from Configuration → Updates.
+- The header **UPDATES** pill keeps showing `1 UPDATE` (or higher) even after you refreshed update state from Configuration → Updates.
 - A row in the dropdown shows the literal string `[object Object]` where the version number should be.
 - The dot/count refuses to clear for hours.
 
@@ -1397,9 +1397,9 @@ The 2026-05-01 sweep replaced two known bugs in the update notifier. Most instal
 | Cause | Hint | Fix |
 |-------|------|-----|
 | Build predates `ff77ee9` on `main` (commit landed 2026-05-01) | `git log -1 --format='%h %ci' src/components/dashboard/UpdateBadge.tsx` is older than 2026-05-01 | Pull `main`, rebuild, redeploy via `scripts/deploy-prod.sh` |
-| Clawkeeper version comparison was string-vs-semver | Old badge stuck saying "Clawkeeper update available" forever, even on a fresh install | Already fixed — the API now compares the binary's mtime against the latest GitHub release timestamp (see `getInstalledClawkeeperState` in `src/app/api/config/updates/route.ts`). Confirm via `curl http://127.0.0.1:5001/api/config/updates \| jq '.clawkeeper'`. |
+| Host Security Scanner version comparison was string-vs-semver | Old badge stuck saying "Host Security Scanner update available" forever, even on a fresh install | Already fixed — the API now checks the bundled scanner state and reports it as informational. Confirm via `curl http://127.0.0.1:5001/api/config/updates \| jq '.clawkeeper'`. |
 | `[object Object]` rendered for an installed/latest version field | The API returned an object where the UI expected a string | Already fixed — the UI runs every version field through `coerceToString(raw, "version", "tag", "name")` before display. If you're still seeing the literal string, your build is old. |
-| The pill didn't refresh after you ran an update from Configuration | The badge polls every 15 minutes; the in-app updater must dispatch the `clawnex:updates-refreshed` window event | Already fixed — every Update button now dispatches the event so the badge re-polls within seconds. If you're still on a stale build, click the **REFRESH** button inside the dropdown to force a re-poll. |
+| The pill didn't refresh after you checked updates from Configuration | The badge polls every 15 minutes; Configuration must dispatch the `clawnex:updates-refreshed` window event | Already fixed — update checks dispatch the event so the badge re-polls within seconds. If you're still on a stale build, click the **REFRESH** button inside the dropdown to force a re-poll. |
 
 **Last resort.** Stop ClawNex, wipe the per-source cache, restart:
 
@@ -1621,7 +1621,7 @@ If the issue is not covered in this guide:
 | 0.6.4 | 2026-04-22 | ClawNex Engineering | v0.6.2-alpha: Added new section 22 "LiteLLM Proxy Fails to Start / Port 4001 Already in Use" covering the fork-bomb triple-guard (lsof in start.sh, socket check in run.py, `num_workers: 1` in config.yaml) and where to read the clean-exit log line on macOS vs Linux. Renumbered Unknown State Recovery to section 23; updated TOC and Quick Reference. |
 | 0.9.0 | 2026-04-24 | ClawNex Engineering | v0.9.0-alpha multi-auth: added section 24 "Passkey Enrollment Just Doesn't Work" covering AUTH_RP_ID / AUTH_EXPECTED_ORIGIN / HTTPS-or-localhost causes and section 25 "Sign In With GitHub Doesn't Work" with a `?error=` decoder table for github_state_mismatch / github_signin_failed / github_not_linked / github_not_configured / github_not_enabled / github_rate_limited plus the GitHub-callback URL-mismatch failure mode. |
 | 0.9.2 | 2026-04-24 | ClawNex Engineering | v0.9.1 / v0.9.2 update. Section 25 GitHub table reframed — codes are now shown as what the ADMIN sees in `audit_log` rather than what the user sees in the URL, per v0.9.1 adversarial-review finding #A3 (login page collapses all `?error=` codes into a single generic message). Added section 26 "Magic Link — I Enabled It But No Email Arrives" covering double-gate button visibility, email-on-profile mismatch, provider deliverability, single-use invariant explanations, expired-token diagnosis, and SQL for live token-state inspection. |
-| 0.9.3 | 2026-05-01 | ClawNex Engineering | 2026-05-01 sweep. Section 2 gains Cause G "OpenClaw 4.12+ device-identity rejection" — diagnoses `device identity required` loops and walks operator through Ed25519 keypair regeneration; backwards-compat with 3.28 / 4.10 / 4.11 documented. Section 28 (new) "UPDATES Pill Stuck or Showing `[object Object]`" covers the build-staleness triage table (Clawkeeper mtime vs. semver fix, `coerceToString` fix, `clawnex:updates-refreshed` window-event refresh signal) plus a `kv_cache` last-resort wipe. |
+| 0.9.3 | 2026-05-01 | ClawNex Engineering | 2026-05-01 sweep. Section 2 gains Cause G "OpenClaw 4.12+ device-identity rejection" — diagnoses `device identity required` loops and walks operator through Ed25519 keypair regeneration; backwards-compat with 3.28 / 4.10 / 4.11 documented. Section 28 (new) "UPDATES Pill Stuck or Showing `[object Object]`" covers the build-staleness triage table (Host Security Scanner mtime vs. semver fix, `coerceToString` fix, `clawnex:updates-refreshed` window-event refresh signal) plus a `kv_cache` last-resort wipe. |
 | 0.11.2 | 2026-05-05 | ClawNex Engineering | v0.11.x catchup. Added §30 "View Evidence Shows NOT IN WINDOW" (widen-the-filter fix for the panel time-window edge case; legacy-alert manual session_id lookup SQL). Added §31 "Token Cost FinOps — Instance Filter / Source Status / Dev Cache" (instance-dropdown stale-cache restart, Paperclip/OpenClaw/Hermes `sourceStatus.unavailable` diagnosis, stale `.next` cache rm-rf workflow, two-listeners-on-:5001 white-screen pattern). Added §32 "Policy Framework — Vendor Rule Edit Disabled / Iteration Cap Auto-Disable" (clone-then-customize path, `rule_auto_disabled` alert remediation, schema migration verification). |
 | 0.14.5 | 2026-05-17 | Internal reviewer | Added §34 "Chat API returns 400 'Unsupported message/history shape'" — generic pointer to the positive API contract in `docs/10-api-reference.md` after the Codex r5 / internal reviewer r4 BLOCKER closure landed the strict `{role, content}` allowlist on both chat routes. Recon-min by design: §34 deliberately does NOT enumerate which sibling fields trip the validator; that information lives only in the positive contract operators need to match. |
 

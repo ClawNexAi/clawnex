@@ -19,6 +19,7 @@ import { PanelFilters } from "../PanelFilters";
 import { MissionControlBreadcrumb } from "./mission-control/MissionControlBreadcrumb";
 import { TriageGraphCard } from "../triage/TriageGraphCard";
 import { resolveAlertTriageGraph } from "../triage/alert-resolver";
+import { formatHostSecuritySource, formatHostSecurityTitle } from "@/lib/host-security-display";
 
 // v0.8.2+: onNavigate accepts the v0.8.2 opts shape so backlinks (correlation
 // alerts → Correlations panel; source-aware backlinks → Shield / Audit /
@@ -373,7 +374,7 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
         if (!ageSel.some((bucket) => matchesAgeBucket(ageMs, bucket))) return false;
       }
       if (qFilter) {
-        const haystack = `${a.title} ${a.description ?? ""} ${a.source} ${a.severity}`.toLowerCase();
+        const haystack = `${formatHostSecurityTitle(a.title)} ${a.description ?? ""} ${formatHostSecuritySource(a.source)} ${a.severity}`.toLowerCase();
         if (!haystack.includes(qFilter)) return false;
       }
       return true;
@@ -561,6 +562,8 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
       {pagedAlerts.length > 0 && !demoMode && (
         <>
           {pagedAlerts.map(a => {
+            const displayTitle = formatHostSecurityTitle(a.title);
+            const displaySource = formatHostSecuritySource(a.source);
             const sc = sevColor(a.severity);
             const isCritical = a.severity === "CRITICAL";
             const stC = statusColor(a.status);
@@ -602,7 +605,7 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
                 }}>
                   <span style={{ fontSize: 10, color: C.txT, transform: isOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s", flexShrink: 0 }}>{"\u25B6"}</span>
                   <Badge label={a.severity} color={sc} />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: C.tx, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{a.title}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: C.tx, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{displayTitle}</span>
                   <span style={{ padding: "2px 8px", borderRadius: 999, background: `${ageColor}22`, border: `1px solid ${ageColor}55`, fontSize: 11, fontFamily: F.mono, color: ageColor, fontWeight: 700, flexShrink: 0 }}>{ageStr}</span>
                   <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 9, fontWeight: 700, fontFamily: F.mono, background: `${stC}22`, color: stC, border: `1px solid ${stC}55`, textTransform: "uppercase" as const, letterSpacing: "0.05em", flexShrink: 0 }}>{a.status}</span>
                 </div>
@@ -611,12 +614,12 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
                 {isOpen && (
                   <div style={{ padding: "0 14px 12px 32px" }}>
                     {/* Description */}
-                    <div style={{ fontSize: 12, color: C.txS, marginBottom: 10, lineHeight: 1.5 }}>{a.description || a.title}</div>
+                    <div style={{ fontSize: 12, color: C.txS, marginBottom: 10, lineHeight: 1.5 }}>{a.description || displayTitle}</div>
 
                     {/* Source + actions + backlink */}
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 11, color: C.txT }}>Source: <span style={{ fontWeight: 600, color: C.txS }}>{a.source}</span></span>
+                        <span style={{ fontSize: 11, color: C.txT }}>Source: <span style={{ fontWeight: 600, color: C.txS }}>{displaySource}</span></span>
                         <span style={{ fontFamily: F.mono, fontSize: 10, color: C.txT }}>openclaw-local</span>
                         {/* v0.8.4 workflow buttons: ACK → Investigate → Resolve.
                             ACK shows when open. Investigate shows when open or
@@ -664,7 +667,7 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
                             <AcceptRiskButton
                               query={{
                                 source_panel: "alerts",
-                                rule_id: a.title,
+                                rule_id: displayTitle,
                                 agent_id: null,
                                 surface_id: null,
                                 evidence: [a.severity, a.source],
@@ -715,7 +718,7 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
                             evidence data in the red box?"). */}
                         <Tooltip placement="top" variant="detail" content={<span><strong>Investigate ▸</strong> — open the triage graph for this alert. Shows evidence, source event, affected object, related activity, and recommended controls inline — without leaving the panel.</span>}>
                           <button
-                            aria-label={`Investigate ${a.title}`}
+                            aria-label={`Investigate ${displayTitle}`}
                             aria-pressed={investigatingAlertId === a.id}
                             aria-expanded={investigatingAlertId === a.id}
                             onClick={(e) => {
@@ -750,7 +753,7 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
                       ) : (
                         // Source-aware backlink: shield / session-watcher / etc.
                         // Will pick up id filtering as those panels adopt URL-state in v0.8.3+.
-                        <button onClick={(e) => { e.stopPropagation(); onNavigate(a.source === "session-watcher" ? "trafficMonitor" : a.source === "shield" ? "shield" : "auditEvidence"); }} style={{ background: "none", border: "none", color: C.info, fontSize: 11, fontWeight: 600, fontFamily: F.sans, cursor: "pointer", padding: 0 }}>{a.source} {"\u2192"}</button>
+                        <button onClick={(e) => { e.stopPropagation(); onNavigate(a.source === "session-watcher" ? "trafficMonitor" : a.source === "shield" ? "shield" : a.source === "clawkeeper" ? "securityPosture" : "auditEvidence"); }} style={{ background: "none", border: "none", color: C.info, fontSize: 11, fontWeight: 600, fontFamily: F.sans, cursor: "pointer", padding: 0 }}>{displaySource} {"\u2192"}</button>
                       )}
                     </div>
                     {/* Inline evidence panel \u2014 only rendered after View Evidence

@@ -72,7 +72,7 @@ export function FleetCommandPanel({ fleetApi, filters, demoMode, threatTrend, on
         let hasProvider = false;
         let hasScans = false;
         let hasCve = false;
-        let hasClawkeeper = false;
+        let hasHostSecurity = false;
         let routingOk = false;
         let dismissed = false;
         let pricingSynced = false;
@@ -110,7 +110,7 @@ export function FleetCommandPanel({ fleetApi, filters, demoMode, threatTrend, on
           try {
             const d = await clawRes.value.json();
             // /api/config/updates returns { clawkeeper: { installedVersion: "not installed" | "installed (YYYY-MM-DD)" } }
-            hasClawkeeper = Boolean(d.clawkeeper && d.clawkeeper.installedVersion && d.clawkeeper.installedVersion !== "not installed");
+            hasHostSecurity = Boolean(d.clawkeeper && d.clawkeeper.installedVersion && d.clawkeeper.installedVersion !== "not installed");
           } catch {}
         }
         if (routeRes.status === "fulfilled" && routeRes.value.ok) {
@@ -120,7 +120,7 @@ export function FleetCommandPanel({ fleetApi, filters, demoMode, threatTrend, on
             routingOk = Boolean(d.found) && (!(d.providers && d.providers.length) || d.providers.every((p: { routed: boolean }) => p.routed));
           } catch {}
         }
-        let skipProvider = false, skipClawkeeper = false, skipCve = false, skipRouting = false, skipShield = false, skipPricing = false;
+        let skipProvider = false, skipHostSecurity = false, skipCve = false, skipRouting = false, skipShield = false, skipPricing = false;
         if (defRes.status === "fulfilled" && defRes.value.ok) {
           try {
             const d = await defRes.value.json();
@@ -129,7 +129,7 @@ export function FleetCommandPanel({ fleetApi, filters, demoMode, threatTrend, on
             // Skip flags: any non-empty "1"/"true" value counts as skipped.
             const isSkip = (v: string | undefined) => v === "1" || v === "true";
             skipProvider = isSkip(s.wizard_skip_provider);
-            skipClawkeeper = isSkip(s.wizard_skip_clawkeeper);
+            skipHostSecurity = isSkip(s.wizard_skip_clawkeeper);
             skipCve = isSkip(s.wizard_skip_cve);
             skipRouting = isSkip(s.wizard_skip_routing);
             skipShield = isSkip(s.wizard_skip_shield);
@@ -149,7 +149,7 @@ export function FleetCommandPanel({ fleetApi, filters, demoMode, threatTrend, on
         }
         // A step counts as "done" for wizard-completion purposes if its real check passes OR the operator explicitly skipped it.
         const allDone = (hasProvider || skipProvider)
-          && (hasClawkeeper || skipClawkeeper)
+          && (hasHostSecurity || skipHostSecurity)
           && (hasCve || skipCve)
           && (pricingSynced || skipPricing)
           && (routingOk || skipRouting)
@@ -400,7 +400,7 @@ export function FleetCommandPanel({ fleetApi, filters, demoMode, threatTrend, on
             </Tooltip>,
             <Tooltip key="h-post" placement="top" variant="detail" content={
               <span>
-                <strong style={{ color: C.tx }}>Hardening score (0–100)</strong> — the latest Clawkeeper security scan result. Same number as the Readiness Banner&apos;s Hardening Scan row and the Security Posture panel. Shows a dash until a real scan runs (a fresh install is <em>unknown</em>, not 100%). To populate it, click <strong>Security Posture</strong> in the sidebar then <strong>Run Scan</strong>. Distinct from the dynamic <em>Threat Pressure</em> score (alerts + shield + infra) which has its own column.
+                <strong style={{ color: C.tx }}>Hardening score (0–100)</strong> — the latest Host Security scan result. Same number as the Readiness Banner&apos;s Hardening Scan row and the Security Posture panel. Shows a dash until a real scan runs (a fresh install is <em>unknown</em>, not 100%). To populate it, click <strong>Security Posture</strong> in the sidebar then <strong>Run Scan</strong>. Distinct from the dynamic <em>Threat Pressure</em> score (alerts + shield + infra) which has its own column.
               </span>
             }>
               <span style={{ borderBottom: `1px dotted ${C.txT}`, cursor: "help" }}>Hardening</span>
@@ -637,13 +637,13 @@ function WelcomeWizard({ onNavigate, onReload, allComplete, onAllCompleteChange 
   // reloads the wizard or moves past the step.
   const [routingMessage, setRoutingMessage] = useState<string | null>(null);
   const [cveSynced, setCveSynced] = useState<boolean>(false);
-  const [clawkeeperInstalled, setClawkeeperInstalled] = useState<boolean>(false);
+  const [hostSecurityInstalled, setHostSecurityInstalled] = useState<boolean>(false);
   const [shieldTested, setShieldTested] = useState<boolean>(false);
   const [pricingSynced, setPricingSynced] = useState<boolean>(false);
   const [pricingSyncMessage, setPricingSyncMessage] = useState<string | null>(null);
   const [syncing, setSyncing] = useState<boolean>(false);
   const [syncingPricing, setSyncingPricing] = useState<boolean>(false);
-  const [installingClawkeeper, setInstallingClawkeeper] = useState<boolean>(false);
+  const [verifyingHostSecurity, setVerifyingHostSecurity] = useState<boolean>(false);
   const [installError, setInstallError] = useState<string | null>(null);
   // Skip flags, loaded from config_defaults.wizard_skip_<key>. Skipping is persistent
   // so the operator can dismiss the wizard even when a step can't complete organically
@@ -719,7 +719,7 @@ function WelcomeWizard({ onNavigate, onReload, allComplete, onAllCompleteChange 
       const res = await fetch("/api/config/updates");
       if (res.ok) {
         const data = await res.json();
-        setClawkeeperInstalled(Boolean(data.clawkeeper && data.clawkeeper.installedVersion && data.clawkeeper.installedVersion !== "not installed"));
+        setHostSecurityInstalled(Boolean(data.clawkeeper && data.clawkeeper.installedVersion && data.clawkeeper.installedVersion !== "not installed"));
       }
     } catch { /* silent */ }
 
@@ -894,14 +894,14 @@ function WelcomeWizard({ onNavigate, onReload, allComplete, onAllCompleteChange 
     }
   };
 
-  const installClawkeeper = async () => {
-    setInstallingClawkeeper(true);
+  const verifyHostSecurity = async () => {
+    setVerifyingHostSecurity(true);
     setInstallError(null);
     try {
       const res = await fetch("/api/system/install-clawkeeper", { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok !== false) {
-        setClawkeeperInstalled(true);
+        setHostSecurityInstalled(true);
         await refreshStatus();
         onReload?.();
       } else {
@@ -910,7 +910,7 @@ function WelcomeWizard({ onNavigate, onReload, allComplete, onAllCompleteChange 
     } catch (e) {
       setInstallError(e instanceof Error ? e.message : "Scanner check failed");
     } finally {
-      setInstallingClawkeeper(false);
+      setVerifyingHostSecurity(false);
     }
   };
 
@@ -978,10 +978,10 @@ function WelcomeWizard({ onNavigate, onReload, allComplete, onAllCompleteChange 
       key: "clawkeeper",
       label: "Enable Host Security",
       description: "ClawNex Host Security runs host-level audits from the bundled scanner and powers the Security Posture panel.",
-      realDone: clawkeeperInstalled,
+      realDone: hostSecurityInstalled,
       isSkipped: skipped.clawkeeper,
       skippable: true,
-      action: { label: installingClawkeeper ? "Checking..." : "Verify Now", run: installClawkeeper },
+      action: { label: verifyingHostSecurity ? "Checking..." : "Verify Now", run: verifyHostSecurity },
       secondary: { label: "Open Updates panel", run: () => onNavigate("configuration", "updates") },
     },
     {

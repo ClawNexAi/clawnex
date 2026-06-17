@@ -199,7 +199,7 @@ Open `http://127.0.0.1:5001` (or your VPS address) in a browser. On a fresh inst
 |---|------|----------------------|
 | 1 | Install ClawNex | Auto-ticked |
 | 2 | Add an AI model provider | **Open Configuration** → Model Providers card opens and scrolls into view |
-| 3 | Install Clawkeeper | **Install Now** (POSTs to `/api/system/install-clawkeeper`) or **Open Updates panel** for the manual path |
+| 3 | Enable Host Security | **Verify Now** (POSTs to `/api/system/install-clawkeeper`) or **Open Updates panel** for the manual path |
 | 4 | Sync CVE database | **Sync Now** (POSTs to `/api/cve/sync`) |
 | 5 | Configure OpenClaw routing | **Open Configuration** → OpenClaw Routing card opens and scrolls into view. A blue info box appears if `openclaw.json` has zero LLM providers registered — register one in OpenClaw first. |
 | 6 | Run first shield test | **Open Shield Tests** → run the 27-payload suite to confirm rules are firing |

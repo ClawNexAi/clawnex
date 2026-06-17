@@ -175,7 +175,7 @@ Open `http://YOUR_VPS_IP:5001` in your browser. Fleet Command opens directly int
 
 1. **Install ClawNex** — auto-ticked (dashboard is already running)
 2. **Add an AI model provider** — click Open Configuration; the Model Providers card auto-expands
-3. **Install Clawkeeper** — click **Install Now** right inside the wizard (or use Open Updates panel for the manual path)
+3. **Enable Host Security** — click **Verify Now** right inside the wizard (or use Open Updates panel for the manual path)
 4. **Sync CVE database** — click **Sync Now** to pull the feed in place
 5. **Configure OpenClaw routing** — click Open Configuration; the OpenClaw Routing card auto-expands. If `openclaw.json` has zero LLM providers registered yet, you'll see a blue info box explaining that — register a provider in OpenClaw first.
 6. **Run first shield test** — click Open Shield Tests; run the suite to verify the 163 built-in detections are firing (plus any operator-authored custom rules you've added through the starter Shield/DLP policy framework).
