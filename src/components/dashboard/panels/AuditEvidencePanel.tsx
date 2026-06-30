@@ -15,6 +15,8 @@ import { PanelFilters } from "../PanelFilters";
 import { useHashState } from "../url-state";
 import { MissionControlBreadcrumb } from "./mission-control/MissionControlBreadcrumb";
 
+const AUDIT_FETCH_LIMIT = "100";
+
 // v0.11.x+: `focusedAuditId` + `onConsumed` enable cross-panel deep-links to
 // land on a specific audit row (e.g. clicking "View Evidence" on an alert
 // in Alerts & Incidents). When `focusedAuditId` is set we clear filters that
@@ -92,7 +94,7 @@ export function AuditEvidencePanel({
   const fetchAudit = useCallback(async () => {
     try {
       const params: Record<string, string> = {
-        limit: "500",
+        limit: AUDIT_FETCH_LIMIT,
         since: filters.since,
         exclude_actions: "agent_event,chat_event",
       };
