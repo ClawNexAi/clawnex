@@ -93,15 +93,6 @@ export function AccessListsPanel({ demoMode, filters }: { demoMode: boolean; fil
           background: `${C.danger}18`, border: `1px solid ${C.danger}`, color: C.danger, cursor: "default",
         }}>Deny</button>
 
-        {/* Allow mode — enterprise badge */}
-        <button style={{
-          padding: "6px 14px", borderRadius: 6, fontSize: 12, fontFamily: F.sans, fontWeight: 700, cursor: "not-allowed",
-          background: "transparent", border: `1px solid ${C.glassBorderSubtle}`, color: C.txT,
-          display: "flex", alignItems: "center", gap: 6, opacity: 0.5,
-        }}>
-          Allow
-          <span style={{ fontSize: 8, fontWeight: 700, color: C.purp, background: `${C.purp}18`, border: `1px solid ${C.purp}44`, borderRadius: 3, padding: "1px 4px", letterSpacing: "0.05em" }}>ENT</span>
-        </button>
       </div>
 
       {/* Enterprise overlay for USER tab */}
@@ -156,14 +147,6 @@ export function AccessListsPanel({ demoMode, filters }: { demoMode: boolean; fil
           </div>
         </Card>
       )}
-
-      {/* Enterprise upsell for allow lists */}
-      <div style={{ marginTop: isEnterprise ? 0 : 16 }}>
-        <EnterpriseCard
-          feature="Network Allow Lists"
-          description="Restrict LLM traffic to approved domains and IP ranges only. Everything not on the allow list is automatically blocked. Available in ClawNex Enterprise."
-        />
-      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { C, F } from '../constants';
-import { Badge, Card, CollapsibleCard, EmptyState, EnterpriseCard, Fresh, LoadingSpinner, PaginationFooter, Stat, Table } from '../shared';
+import { Badge, Card, CollapsibleCard, EmptyState, Fresh, LoadingSpinner, PaginationFooter, Stat, Table } from '../shared';
 import { Tooltip } from '../tooltip';
 import { stColor } from '../utils';
 import type { TabId, DashboardFilters, AgentData } from '../types';
@@ -88,12 +88,6 @@ export function AgentsSessionsPanel({ filters, demoMode, onNavigate }: { filters
           <Stat label="API Source" value={source} color={source === "openclaw" ? C.green : C.txT} small />
         </Tooltip>
       </div>
-
-      {/* Agent Fleet Deployment — Enterprise */}
-      <EnterpriseCard
-        feature="Agent Fleet Deployment"
-        description="Deploy, start, stop, and update agents across your fleet from a single pane. Push configurations, manage agent lifecycle, and perform rolling updates. Available in ClawNex Enterprise."
-      />
 
       {/* Live API agents */}
       {apiAgents === null && !demoMode && <LoadingSpinner />}

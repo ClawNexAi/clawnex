@@ -627,7 +627,7 @@ export function CorrelationsPanel({ filters, demoMode, onNavigate }: { filters: 
 
     const getRecommendation = (c: CorrelationData): string => {
       const rule = c.correlation_rule.toLowerCase();
-      if (rule.includes("attack_chain") || rule.includes("coordinated")) return `Investigate the correlated events for coordinated attack activity. Review source agents and block attacker IPs via Access Lists. Consider enabling Block Mode if not already active.`;
+      if (rule.includes("attack_chain") || rule.includes("coordinated")) return `Investigate the correlated events for coordinated attack activity. Review source agents and add attacker IPs to the deny list via Access Lists. Consider enabling Block Mode if not already active.`;
       if (rule.includes("token_burn") || rule.includes("runaway")) return `Token burn detected — check for stuck agent loops or denial-of-wallet attacks. Review agent health and consider rate limiting.`;
       return `Review the ${c.event_count} correlated events. Check if the pattern indicates a genuine threat or a false positive from automated processes.`;
     };

@@ -167,7 +167,7 @@ export const PANEL_HELP: Record<TabId, { title: string; desc: string; metrics: s
   },
   accessLists: {
     title: "Access Lists",
-    desc: "Manage domain and IP deny/allow lists. Deny lists are enforced in real-time by the Prompt Shield scanner. Any content referencing a denied domain or IP triggers a HIGH severity detection.",
+    desc: "Manage domain and IP deny lists. Deny entries are evaluated by the Prompt Shield scanner. Any LLM traffic referencing a denied domain or IP triggers a HIGH severity detection.",
     metrics: ["Deny Entries — total blocked domains/IPs", "Hit Count — deny rule trigger count"],
     actions: ["Add suspicious domains or IPs to the deny list", "Review and remove false positives"],
     related: ["shield", "accessControl"],

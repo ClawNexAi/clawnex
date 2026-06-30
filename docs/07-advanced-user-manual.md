@@ -414,8 +414,7 @@ The following capabilities are badged as **Enterprise** in the ClawNex UI. They 
 | **Custom Roles** | Define custom permission sets beyond the 5 built-in roles (Admin, Security Manager, Operator, Viewer, Auditor) |
 | **Session IP Binding** | Lock sessions to the originating IP address — session tokens cannot be used from a different network |
 | **Two-Person Break-Glass Authorization** | Require a second administrator to approve break-glass activation before it takes effect |
-| **Agent Fleet Deployment** | Deploy and manage agents remotely across your infrastructure from the ClawNex dashboard |
-| **User Access Control + Network Allow Lists** | Define IP allow lists and user-level access restrictions in the Access Lists panel |
+| **User Access Control + IP/Domain Deny Lists** | Define denied IPs/domains in the Access Lists panel and manage user-level access restrictions where available |
 | **SOC2 / ISO27001 Compliance Reports** | Generate compliance-ready reports in the Executive Reports panel for audit and certification purposes |
 
 Enterprise features are visible in the UI with an "Enterprise" badge. Contact ClawNex for licensing.

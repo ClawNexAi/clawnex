@@ -73,7 +73,7 @@ const PANEL_GUIDE: Array<{
     panels: [
       { id: "auditEvidence", label: "Audit & Evidence", oneLiner: "Immutable audit trail — every config change, break-glass action, whitelist edit, shield block. Searchable + filterable.", doc: "14-data-dictionary.md" },
       { id: "executiveReports", label: "Executive Reports", oneLiner: "12 report types — executive summary, traffic analysis, shield breakdown, break-glass audit, CSV export.", doc: "07-advanced-user-manual.md" },
-      { id: "accessLists", label: "Access Lists", oneLiner: "Manage domain and IP deny/allow lists enforced in real-time by the shield scanner.", doc: "07-advanced-user-manual.md" },
+      { id: "accessLists", label: "Access Lists", oneLiner: "Manage domain and IP deny lists evaluated by the shield scanner.", doc: "07-advanced-user-manual.md" },
       { id: "governance", label: "Governance", oneLiner: "Read governance docs inline — 14 policies, risk + vendor registers, one-pager, policy evidence checklist. Enterprise/audit-facing.", doc: "governance-index.md" },
     ],
   },
