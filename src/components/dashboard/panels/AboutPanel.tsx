@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { C, F } from "../constants";
-import { Card, CollapsibleCard, Badge } from "../shared";
+import { CollapsibleCard, Badge } from "../shared";
 
 // ---------------------------------------------------------------------------
 // Upstream attribution — projects whose licenses require acknowledgment

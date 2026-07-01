@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { C, F } from '../constants';
 import { Badge, Card, CollapsibleCard, EmptyState, Fresh, LoadingSpinner, PaginationFooter, Stat, Table } from '../shared';
 import { Tooltip } from '../tooltip';

@@ -728,7 +728,6 @@ export function ChatPanel({ onNavigate, sharedSessionRef, sharedConnected, onSha
         <div style={{ flex: 1, overflowY: "auto", padding: "8px 10px" }}>
           {messages.map((m, i) => {
             const isUser = m.role === "user";
-            const isSystem = m.role === "system";
             return (
               <div key={i} style={{
                 display: "flex", justifyContent: isUser ? "flex-end" : "flex-start",

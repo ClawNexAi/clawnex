@@ -88,14 +88,6 @@ export function discoverAgents(): Agent[] {
     base_url: string;
   }>("SELECT id, name, type, base_url FROM config_providers");
 
-  const gateways = queryAll<{
-    id: string;
-    name: string;
-  }>("SELECT id, name FROM config_gateways");
-
-  // Determine which providers are routed vs direct
-  const hasLiteLLM = providers.some(p => p.base_url?.includes('localhost') || p.base_url?.includes('127.0.0.1'));
-
   // Get agents from traffic data (using session_id as proxy for agent identity)
   const trafficSessions = queryAll<{
     session_id: string;

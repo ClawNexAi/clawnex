@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { C, F } from "../constants";
 import { CollapsibleCard } from "../shared";
-import { Tooltip } from "../tooltip";
 import type { DashboardFilters } from "../types";
 
 function escapeHtml(str: string): string {

@@ -241,28 +241,6 @@ function readRegularFileNoFollow(filePath: string): { raw: string; stat: fs.Stat
   }
 }
 
-function isPathSafe(workspaceRoot: string, requestedPath: string): boolean {
-  const resolved = path.resolve(workspaceRoot, requestedPath);
-  // Must be within workspace root (lexical)
-  if (!resolved.startsWith(workspaceRoot + path.sep) && resolved !== workspaceRoot) {
-    return false;
-  }
-  // Check denied paths
-  const segments = requestedPath.split(path.sep);
-  for (const segment of segments) {
-    const lower = segment.toLowerCase();
-    if (DENIED_PATHS.some(d => lower === d.toLowerCase() || lower.startsWith(d.toLowerCase()))) {
-      return false;
-    }
-  }
-  // Symlink-escape guard: if the target exists, follow symlinks and confirm
-  // the canonical target still lives under the canonical root.
-  if (fs.existsSync(resolved) && !realpathContainsSync(workspaceRoot, resolved)) {
-    return false;
-  }
-  return true;
-}
-
 /**
  * Resolve a workspace-reader relative path to an absolute file path.
  * Supports both the legacy shared layout and the new per-agent layout.
@@ -369,7 +347,7 @@ export function listWorkspaceFiles(agentId?: string): WorkspaceFileInfo[] {
 export function readWorkspaceFile(relativePath: string, agentId?: string): { content: string; info: WorkspaceFileInfo } | null {
   const fullPath = resolveWorkspaceReadPath(relativePath, agentId);
   if (!fullPath) {
-    console.warn("[WORKSPACE] Blocked path traversal attempt", sanitizeLogField(relativePath));
+    console.warn("[WORKSPACE] Blocked path traversal attempt");
     return null;
   }
 
@@ -685,7 +663,7 @@ export function readHermesFile(relativePath: string): { content: string; info: W
   for (const segment of segments) {
     const lower = segment.toLowerCase();
     if (DENIED_PATHS.some(d => lower === d.toLowerCase() || lower.startsWith(d.toLowerCase()))) {
-      console.warn("[WORKSPACE] Blocked Hermes path traversal attempt", sanitizeLogField(relativePath));
+      console.warn("[WORKSPACE] Blocked Hermes path traversal attempt");
       return null;
     }
     if (lower === '..') return null;

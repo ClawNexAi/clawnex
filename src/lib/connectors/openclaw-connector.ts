@@ -554,7 +554,8 @@ class OpenClawConnector {
               });
             }
           } catch (err) {
-            console.error('[ClawNex/OpenClaw] Shield scan error:', err);
+            const detail = err instanceof Error ? err.message : String(err);
+            console.error(`[ClawNex/OpenClaw] Shield scan error: ${sanitizeLogField(detail)}`);
           }
         }
       }

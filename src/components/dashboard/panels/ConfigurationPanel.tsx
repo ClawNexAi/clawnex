@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { C, F, PANEL_HELP } from "../constants";
+import { C, F } from "../constants";
 import { Badge, Dot, CollapsibleCard, CategorySection, LoadingSpinner, PaginationFooter, formatTimeAgo, useStickyBoolean } from "../shared";
 import { Tooltip } from "../tooltip";
 import { timeAgo } from "../utils";
@@ -1179,7 +1179,7 @@ function SystemManagementCard() {
               try {
                 const check = await fetch("/api/system/archive", { method: "POST" }); // test the endpoint
                 if (!check.ok) { setArchiveResult("Archive endpoint not ready"); return; }
-                const res = await fetch("/api/config/defaults", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "backup_cron_toggle", value: "toggle" }) });
+                await fetch("/api/config/defaults", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "backup_cron_toggle", value: "toggle" }) });
                 // Install or remove cron
                 const installCron = `(crontab -l 2>/dev/null | grep -v "system/archive"; echo "0 3 * * * curl -s -X POST http://127.0.0.1:${window.location.port || '5001'}/api/system/archive > /dev/null 2>&1") | crontab -`;
                 const removeCron = `crontab -l 2>/dev/null | grep -v "system/archive" | crontab -`;
@@ -3821,16 +3821,6 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   }, []);
 
   useEffect(() => { fetchConfig(); const iv = setInterval(fetchConfig, 30000); return () => clearInterval(iv); }, [fetchConfig]);
-
-  const allModels = useMemo(() => {
-    const models: Array<{ model: string; provider: string; providerName: string }> = [];
-    for (const p of providers) {
-      for (const m of p.models) {
-        models.push({ model: m, provider: p.id, providerName: p.name });
-      }
-    }
-    return models;
-  }, [providers]);
 
   const [defaultSaved, setDefaultSaved] = useState<string | null>(null);
   const saveDefault = useCallback(async (model: string, provider: string) => {

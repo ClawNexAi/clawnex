@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/guard';
 import { requireLocalhost } from "@/lib/middleware/localhost-guard";
-import { getSetting, setSetting, getAllSettings } from "@/lib/services/config-service";
+import { setSetting, getAllSettings } from "@/lib/services/config-service";
 import { logEvent } from "@/lib/services/audit-logger";
 
 export const runtime = "nodejs";

@@ -14,7 +14,6 @@ import { AcceptRiskButton } from "../risk-acceptance/AcceptRiskWidget";
 // exact alert and the matching row gets a brief pulse animation. Operator
 // can clear via the inline banner.
 import { useHashState, type NavigateOpts } from "../url-state";
-import { useHighlightPulse } from "../useHighlightPulse";
 import { PanelFilters } from "../PanelFilters";
 import { MissionControlBreadcrumb } from "./mission-control/MissionControlBreadcrumb";
 import { TriageGraphCard } from "../triage/TriageGraphCard";

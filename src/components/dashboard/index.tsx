@@ -20,7 +20,7 @@ import { useSetupComplete } from "./useSetupComplete";
 // Foundation
 import type { TabId, DashboardFilters, HealthData, InfraData, FleetInstance, NavItem } from "./types";
 import { useHashState, pushHashState, type NavigateOpts, type UrlState } from "./url-state";
-import { C, F, G, NAV, PANEL_HELP, setPerfMode, setTheme, getTheme, applyHighContrast, isHighContrast } from "./constants";
+import { C, F, G, NAV, PANEL_HELP, setPerfMode, setTheme, applyHighContrast } from "./constants";
 import { getTimeSince, sevColor } from "./utils";
 import { INST } from "./mock-data";
 import { Dot, CountBadge, Fresh, EmptyState, Badge } from "./shared";
@@ -118,7 +118,7 @@ function SentinelDashboardInner() {
   // --- Global state ---
   // v0.8.2+: tab + filter + deep-link state lives in window.location.hash so
   // refresh, back-button, and share-via-paste all work.
-  const [urlState, updateUrlState] = useHashState();
+  const [urlState] = useHashState();
   const activeTab: TabId = (urlState.tab as TabId | undefined) ?? "missionControl";
   // Ref to the main content scroll container — reset scrollTop on tab
   // change below so panels always open at the top, not inheriting the
@@ -738,11 +738,7 @@ function SentinelDashboardInner() {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {mounted ? (
-              <img src={theme === "light" ? "/clawnex-icon-light.png" : "/clawnex-icon-dark.png"} alt="ClawNex" width={20} height={20} style={{ flexShrink: 0, objectFit: "contain", borderRadius: 4 }} />
-            ) : (
-              <img src="/clawnex-icon-dark.png" alt="ClawNex" width={20} height={20} style={{ flexShrink: 0, objectFit: "contain", borderRadius: 4 }} />
-            )}
+            <img src={mounted && theme === "light" ? "/clawnex-icon-light.png" : "/clawnex-icon-dark.png"} alt="ClawNex" width={20} height={20} style={{ flexShrink: 0, objectFit: "contain", borderRadius: 4 }} />
             <a href="https://clawnexai.com" target="_blank" rel="noopener noreferrer" title="clawnexai.com" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
               {/* SVG wordmark — see BrandWordmark.tsx for why we ditched the
                  CSS background-clip:text approach. */}

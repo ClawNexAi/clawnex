@@ -48,7 +48,6 @@ export function SkillsPluginsSection() {
   const paperclipPlugins = skills.filter(s => s.source === 'paperclip');
 
   const riskColor = (r: string) => r === 'HIGH' ? C.danger : r === 'MEDIUM' ? C.warn : C.green;
-  const sourceColor = (s: string) => s === 'system' ? C.cyan : s === 'workspace' ? C.brand : C.purp;
 
   return (
     <>

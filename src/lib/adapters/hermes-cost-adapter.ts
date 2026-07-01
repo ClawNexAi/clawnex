@@ -133,7 +133,7 @@ export const hermesCostAdapter = {
 
         // cost_status mapping per spec's trust map. Orchestrator may demote
         // further on the recompute pass.
-        let cost_status: NormalizedRow['cost_status'] = 'unknown';
+        let cost_status: NormalizedRow['cost_status'];
         let actual_cost_usd: number | null = null;
         let actual_cost_source: NormalizedRow['actual_cost_source'] = null;
         let estimated_cost_usd: number | null = null;

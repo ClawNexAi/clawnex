@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/guard';
 import { requireLocalhost } from '@/lib/middleware/localhost-guard';
 import { v4 as uuid } from 'uuid';
-import { addClient, removeClient, getClientCount } from '@/lib/events';
+import { addClient, removeClient } from '@/lib/events';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

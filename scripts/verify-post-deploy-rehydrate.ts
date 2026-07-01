@@ -123,7 +123,6 @@ console.log("\n[4] rehydrate ownership is in deploy-prod.sh (post DB-restore), N
   // 4a — install-prod.sh must NOT call post-deploy-rehydrate.ts anymore.
   // (Comments/notes referencing "post-deploy-rehydrate" for documentation
   // are fine; the executable invocation must be gone.)
-  const installCallMatches = installSrc.match(/(?<!#[^\n]*)\bpost-deploy-rehydrate\.ts\b/g) || [];
   // Also forbid an executable tsx invocation referencing the script.
   const installLines = installSrc.split("\n").filter((l) => !/^\s*#/.test(l));
   const installCodeOnly = installLines.join("\n");

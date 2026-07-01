@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { C, F } from '../constants';
 import { Badge, Card, CollapsibleCard, EmptyState, Fresh, Spark, Stat, Table, TokenRateBadge } from '../shared';
 import { Tooltip } from '../tooltip';
-import { sevColor, timeAgo } from '../utils';
+import { sevColor } from '../utils';
 import type { DashboardFilters, HealthData, TokenData } from '../types';
 import { AGENTS_DATA, TOKEN_ALERTS } from '../mock-data';
 import { RecentTokenEventsFiltered } from './RecentTokenEventsFiltered';

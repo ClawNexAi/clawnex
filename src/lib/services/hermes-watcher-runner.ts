@@ -13,7 +13,6 @@ import {
   initializeHermesWatcher,
   pollHermesMessages,
   getHermesWatcherStats,
-  resetHermesWatcher,
 } from './hermes-watcher';
 import { logEvent } from './audit-logger';
 

@@ -32,19 +32,10 @@
  * @module shield/scanner
  */
 
-import { v4 as uuid } from "uuid";
 import {
   ALL_RULES,
   secretRules,
-  commandRules,
   sensitivePathRules,
-  c2Rules,
-  cognitiveFileRules,
-  trustExploitRules,
-  jailbreakRules,
-  steganographyRules,
-  encodingRules,
-  financialRules,
   type PatternRule,
 } from "./rules";
 import type { ShieldScanResult, ShieldDetection } from "../types";

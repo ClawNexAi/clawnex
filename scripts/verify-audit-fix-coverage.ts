@@ -185,7 +185,7 @@ section("6. Governance copy reflects current public posture");
   check("risk register copy uses current active and closed counts", /P0:? 0 active/.test(combined) && /P1:? 10 active/.test(combined) && /P2:? 10 active/.test(combined) && /Closed:? 16/.test(combined));
   check("stale SOC/ISO percentages are absent from current panel/constants", !/~42|~38/.test(combined));
   check("stale risk priority summary is absent from current panel/constants", !/23 active \+ 2 closed|P0:\s*3|P1:\s*12|P2:\s*5/.test(combined));
-  check("public one-pager uses current panel count and public repo", /26 operator panels/.test(onePager) && /github\.com\/ClawNexAi\/clawnex/.test(onePager));
+  check("public one-pager uses current panel count and public repo", onePager.includes("26 operator panels") && onePager.includes("github.com/ClawNexAi/clawnex"));
   check("public one-pager has no stale QA placeholders or old alpha versions", !/25 operator panels|<qa-host>|github\.com\/operator|v0\.11\.6-alpha/.test(onePager));
 }
 

@@ -5,7 +5,7 @@ import type { TabId } from '../types';
 import { C, F } from '../constants';
 import { Badge, Stat, CollapsibleCard, PaginationFooter } from '../shared';
 import { Tooltip } from '../tooltip';
-import { sevColor, timeAgo } from '../utils';
+import { timeAgo } from '../utils';
 
 // ---------------------------------------------------------------------------
 // CveCard

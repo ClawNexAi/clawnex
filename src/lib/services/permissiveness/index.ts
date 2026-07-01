@@ -434,7 +434,7 @@ function deriveOpenClawCommReachability(
     const allowlist: AllowlistState = ocPosture ? deriveAllowlist(ocPosture) : "unknown" as unknown as AllowlistState;
     const allowlistFallback: AllowlistState = ocPosture ? allowlist : "missing";
 
-    const lintCount = (evaluateLints([surface]) ?? []).length;
+    const lintCount = evaluateLints([surface]).length;
     const combos = evaluateAllCombos(`openclaw:${agent.id}`, agent.toolIds).filter((c) => c.evaluable).length;
 
     const toolsConf = agent.toolsDeclared ? "verified_config" : "unknown";
@@ -549,7 +549,7 @@ function deriveCommReachability(
     const { risks: toolRisks, dangerousCount: dangerousToolCount } = classifyTools(toolIds);
     const skillsConfidence: EvidenceLevel = toolIds.length > 0 ? "heuristic_inference" : "unknown";
 
-    const lintCount = (evaluateLints([surface]) ?? []).length;
+    const lintCount = evaluateLints([surface]).length;
     const combos = evaluateAllCombos(
       `hermes-${surface.id}@${profile.id}`,
       toolIds,

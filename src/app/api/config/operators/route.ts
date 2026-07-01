@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { isRbacEnabled, requireSession, requirePermission, getOperatorFromRequest } from '@/lib/rbac/guard';
-import { queryAll, queryOne, run } from '@/lib/db/index';
+import { queryAll, run } from '@/lib/db/index';
 import { createOperator, getOperatorByUsername } from '@/lib/services/operator-service';
 import { logEvent } from '@/lib/services/audit-logger';
 import type { Role } from '@/lib/rbac/types';

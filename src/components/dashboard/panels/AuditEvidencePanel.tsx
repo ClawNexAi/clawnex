@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { C, F } from "../constants";
 import { Card, Table, LoadingSpinner, EmptyState } from "../shared";
 import { Tooltip } from "../tooltip";
-import { sevColor } from "../utils";
 import type { DashboardFilters, AuditData, TabId } from "../types";
 import { AUDIT_LOG } from "../mock-data";
 // v0.8.3+: PanelFilters + URL-state-driven filters. Audit & Evidence keeps

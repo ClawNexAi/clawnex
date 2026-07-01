@@ -10,7 +10,6 @@ import {
   initializeOffsets,
   pollFiles,
   getStats,
-  reset,
 } from './session-watcher';
 import { sanitizeLogField } from '../security/log-sanitize';
 

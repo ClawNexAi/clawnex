@@ -14,7 +14,7 @@ import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/gua
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execSync } from "node:child_process";
-import { run, getDbPath } from "@/lib/db/index";
+import { getDbPath } from "@/lib/db/index";
 import { resolveVacuumBackupPath, vacuumIntoResolved } from "@/lib/db/vacuum-into";
 import { requireLocalhost } from "@/lib/middleware/localhost-guard";
 

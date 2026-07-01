@@ -5,7 +5,7 @@
  * Jobs are stored in config_defaults and executed by an in-process timer.
  */
 
-import { queryAll, queryOne, run } from '../db/index';
+import { run } from '../db/index';
 import { getSetting } from './config-service';
 import { sanitizeLogField } from '../security/log-sanitize';
 

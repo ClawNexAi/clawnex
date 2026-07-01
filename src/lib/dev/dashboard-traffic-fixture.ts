@@ -31,7 +31,7 @@
  *   that opts in.
  */
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { queryOne, run, transaction } from "../db/index";
 import { ORIGIN_SIMULATION, ORIGIN_PRODUCTION, type Origin } from "../dashboard/metric-semantics";
 
@@ -110,7 +110,6 @@ type TrafficSummary = {
   };
 };
 
-const ACTIVE_STATUSES = ["open", "acknowledged", "investigating"];
 const TERMINAL_STATUSES = ["resolved", "suppressed", "false_positive"];
 
 function isoAt(base: Date, minutesAgo: number): string {

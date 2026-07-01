@@ -16,7 +16,7 @@
  * @module services/threat-score
  */
 
-import { queryOne, queryAll } from '../db/index';
+import { queryOne } from '../db/index';
 import { getSetting } from './config-service';
 import { activeAlertSqlClause } from '../dashboard/metric-semantics';
 

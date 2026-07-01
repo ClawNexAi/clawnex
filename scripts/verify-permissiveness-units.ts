@@ -13,7 +13,6 @@
 import {
   computeEdgeScore,
   aggregateMax,
-  extractDrivers,
   MIN_CONFIDENCE,
   reduceConfidence,
   AUDIENCE_FACTOR,

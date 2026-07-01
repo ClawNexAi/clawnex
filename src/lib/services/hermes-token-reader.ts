@@ -132,7 +132,7 @@ export function readHermesTokenUsage(since: string | number): HermesTokenResult 
 
     // Resolve cost via waterfall
     let cost = 0;
-    let costSource = 'computed';
+    let costSource: string;
 
     if (row.cost_status === 'actual' && row.actual_cost_usd != null && row.actual_cost_usd > 0) {
       cost = row.actual_cost_usd;

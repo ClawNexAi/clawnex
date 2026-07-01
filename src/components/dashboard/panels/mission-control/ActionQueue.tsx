@@ -1511,27 +1511,6 @@ function deriveTrustAuditIncidentType(f: TrustAuditFinding): string {
 
 
 // ---------------------------------------------------------------------------
-// Navigation helper
-// ---------------------------------------------------------------------------
-
-/**
- * Translate a row's NavTarget into the onNavigate union signature.
- * NavTarget.opts is a Record<string,string>; the live onNavigate union
- * accepts { id?, focus?, filter?, ... } — map explicitly rather than
- * spreading opts directly.
- */
-function navigateForRow(row: ActionRow, onNavigate: Props["onNavigate"]) {
-  const opts = row.clickTarget.opts;
-  if (opts?.id) {
-    onNavigate(row.clickTarget.tab, { id: opts.id, fromMissionControl: true });
-  } else if (opts?.focus) {
-    onNavigate(row.clickTarget.tab, { focus: opts.focus, fromMissionControl: true });
-  } else {
-    onNavigate(row.clickTarget.tab, { fromMissionControl: true });
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Severity / action helpers
 // ---------------------------------------------------------------------------
 

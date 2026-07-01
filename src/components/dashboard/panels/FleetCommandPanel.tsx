@@ -52,7 +52,7 @@ export function FleetCommandPanel({ fleetApi, filters, demoMode, threatTrend, on
     if (demoMode) { setWizardNeeded(false); return; }
     (async () => {
       try {
-        const [provRes, scanRes, cveRes, clawRes, routeRes, defRes, pricingRes, ocStateRes] = await Promise.allSettled([
+        const [provRes, scanRes, cveRes, clawRes, routeRes, defRes, pricingRes] = await Promise.allSettled([
           fetch("/api/config/providers"),
           // Phase 2a-fix: wizard's "Run first shield test" signal explicitly
           // opts in to test-generated scans. Without this, an operator on a
@@ -67,7 +67,6 @@ export function FleetCommandPanel({ fleetApi, filters, demoMode, threatTrend, on
           fetch("/api/openclaw/routing"),
           fetch("/api/config/defaults"),
           fetch("/api/config/model-pricing"),
-          fetch("/api/setup/openclaw-state"),
         ]);
         let hasProvider = false;
         let hasScans = false;

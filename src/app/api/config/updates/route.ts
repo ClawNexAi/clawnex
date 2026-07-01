@@ -183,14 +183,11 @@ export async function GET(request: NextRequest) {
     const clawkeeperReleaseUrl: string | null = null;
 
     // --- OpenClaw ---
-    let openclawInstalled = "unknown";
+    const openclawInstalled = getOpenClawInstalledVersion() || "unknown";
     let openclawLatestVersion: string | null = null;
     let openclawLatestDate: string | null = null;
     let openclawReleaseUrl: string | null = null;
     let openclawUpdateAvailable = false;
-
-    openclawInstalled = getOpenClawInstalledVersion() || "unknown";
-
     const cachedOpenclawVersion = getConfigValue("openclaw_latest_version");
     if (cacheValid && cachedOpenclawVersion) {
       openclawLatestVersion = cachedOpenclawVersion;

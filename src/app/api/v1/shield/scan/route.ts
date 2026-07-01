@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { authenticateRequest } from '@/lib/middleware/api-auth';
 import { shieldScan } from '@/lib/shield/scanner';
+import { sanitizeLogField } from '@/lib/security/log-sanitize';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -65,7 +66,8 @@ export async function POST(request: NextRequest) {
     }
     return res;
   } catch (err) {
-    console.error('[Shield Scan v1] Error:', err);
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error(`[Shield Scan v1] Error: ${sanitizeLogField(detail)}`);
     return NextResponse.json(
       { ok: false, error: 'Internal server error', meta: { requestId, timestamp } },
       { status: 500 },

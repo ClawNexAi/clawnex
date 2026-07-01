@@ -157,7 +157,7 @@ export function updateRule(id: string, params: Partial<{
 
 export function deleteRule(id: string): boolean {
   ensureSchema();
-  const result = run("DELETE FROM custom_correlation_rules WHERE id = ?", [id]);
+  run("DELETE FROM custom_correlation_rules WHERE id = ?", [id]);
   return true;
 }
 

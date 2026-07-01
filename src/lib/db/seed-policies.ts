@@ -21,7 +21,7 @@ import { ALL_RULES } from '../shield/rules';
 // is used for the 5 explicitly named false-positive rule_keys with a
 // required justification parameter. All other (safe-regex2-clean) seed
 // rules go through createRule with the full safety gate.
-import { createPolicy, createRule, createCuratedMirrorRule, createReviewedSeedRule, getPolicyByName, countRulesForPolicy } from './policy-store';
+import { createPolicy, createRule, createCuratedMirrorRule, createReviewedSeedRule, getPolicyByName } from './policy-store';
 import type { RuleDirection } from '../shield/types';
 import { v4 as uuid } from 'uuid';
 

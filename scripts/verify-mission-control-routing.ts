@@ -13,7 +13,7 @@
  *
  * Implementation note — indirect dispatch patterns:
  *   OperationalPosture and ActionQueue route via helper functions
- *   (handleRowClick / navigateForRow) that read clickTarget from row data
+ *   (handleRowClick / targetForSource) that read clickTarget from row data
  *   rather than passing literal tab strings directly to onNavigate.
  *   For those files, patterns verify BOTH:
  *     (a) the clickTarget data definition (confirming the correct tab literal
@@ -39,8 +39,8 @@ const CHECKS: Check[] = [
   // §5.1 Active Incidents — inline call in KpiRow
   {
     file: "src/components/dashboard/panels/mission-control/KpiRow.tsx",
-    pattern: /onNavigate\(\s*"alertsIncidents"\s*,\s*\{[\s\S]{0,200}?status:\s*\[\s*"open"\s*\][\s\S]{0,80}?fromMissionControl:\s*true/,
-    label: "§5.1 Active Incidents → alertsIncidents { filter: { status: ['open'] }, fromMissionControl: true }",
+    pattern: /onNavigate\(\s*"alertsIncidents"\s*,\s*\{[\s\S]{0,200}?status:\s*ACTIVE_STATUS_FILTER[\s\S]{0,120}?productionOnly:\s*"true"[\s\S]{0,80}?fromMissionControl:\s*true/,
+    label: "§5.1 Active Incidents → alertsIncidents { filter: { status: ACTIVE_STATUS_FILTER, productionOnly: true }, fromMissionControl: true }",
   },
   // §5.2 Evidence Confidence — inline call in KpiRow
   {
@@ -115,9 +115,9 @@ const CHECKS: Check[] = [
     label: "§6 handleRowClick dispatch attaches fromMissionControl: true",
   },
 
-  // §7 Action Queue — indirect dispatch via navigateForRow().
+  // §7 Action Queue — indirect dispatch via targetForSource().
   // Pattern (a): clickTarget data definition confirms correct tab literal + opts.
-  // Pattern (b): navigateForRow attaches fromMissionControl: true on every branch.
+  // Pattern (b): targetForSource attaches fromMissionControl: true on every branch.
 
   // §7.4 Alert action row — clickTarget: { tab: "auditEvidence", opts: { id: ... } }
   {
@@ -137,11 +137,11 @@ const CHECKS: Check[] = [
     pattern: /clickTarget:\s*\{[\s\S]{0,40}?tab:\s*"infrastructure"/,
     label: "§7.4 Health action row → clickTarget.tab = infrastructure",
   },
-  // §7 dispatch breadcrumb — navigateForRow attaches fromMissionControl: true on every branch
+  // §7 dispatch breadcrumb — targetForSource attaches fromMissionControl: true on every branch
   {
     file: "src/components/dashboard/panels/mission-control/ActionQueue.tsx",
-    pattern: /function navigateForRow[\s\S]{0,600}?fromMissionControl:\s*true/,
-    label: "§7 navigateForRow dispatch attaches fromMissionControl: true",
+    pattern: /function targetForSource[\s\S]{0,600}?fromMissionControl:\s*true/,
+    label: "§7 targetForSource dispatch attaches fromMissionControl: true",
   },
 
   // §8.1 Incident Aging buckets — inline call with age filter (v0.13.0+)

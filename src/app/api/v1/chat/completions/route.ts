@@ -12,7 +12,6 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createHash } from "node:crypto";
 import { v4 as uuid } from "uuid";
 import { shieldScan, outboundScan } from "@/lib/shield/scanner";
 import { extractAssistantOutput } from "@/lib/shield/extract-assistant-output";
@@ -21,6 +20,7 @@ import { run } from "@/lib/db/index";
 import { getSetting } from "@/lib/services/config-service";
 import { broadcast } from "@/lib/events";
 import { authenticateRequest } from "@/lib/middleware/api-auth";
+import { sanitizeLogField } from "@/lib/security/log-sanitize";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -293,17 +293,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const promptText = extractText(safeMessages);
 
   // --- 3. Inbound shield scan ---
-  let inboundVerdict: "BLOCK" | "REVIEW" | "ALLOW" = "ALLOW";
-  let inboundScore = 0;
-  let inboundDetections: unknown[] = [];
+  let inboundResult: ReturnType<typeof shieldScan>;
 
   try {
-    const inboundResult = shieldScan(promptText);
-    inboundVerdict = inboundResult.verdict;
-    inboundScore = inboundResult.score;
-    inboundDetections = inboundResult.detections;
+    inboundResult = shieldScan(promptText);
 
-    if (inboundVerdict === "BLOCK") {
+    if (inboundResult.verdict === "BLOCK") {
       // Safe-default: if the row is missing for any reason, treat as 'on'
       // so the shield refuses BLOCK verdicts rather than silently passing.
       // Seed writes 'on' on fresh installs; this is the belt-and-braces.
@@ -323,8 +318,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             costUsd: null,
             latencyMs: Math.round(performance.now() - requestStart),
             shieldVerdict: "BLOCK",
-            shieldScore: inboundScore,
-            shieldDetections: inboundDetections,
+            shieldScore: inboundResult.score,
+            shieldDetections: inboundResult.detections,
             blocked: true,
             blockReason: `Inbound shield: ${inboundResult.stats.critical} critical, ${inboundResult.stats.high} high detections`,
             statusCode: 400,
@@ -333,7 +328,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         } catch { /* best-effort logging */ }
 
         return errorResponse(
-          `Request blocked by ClawNex Shield. Score: ${inboundScore}/100. ` +
+          `Request blocked by ClawNex Shield. Score: ${inboundResult.score}/100. ` +
             `Detections: ${inboundResult.stats.total} (${inboundResult.stats.critical} critical, ` +
             `${inboundResult.stats.high} high). Contact your administrator if you believe this is an error.`,
           "shield_block",
@@ -350,7 +345,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // would previously slip through as inboundVerdict=ALLOW. We now flip to
     // BLOCK and refuse the request with 503 (Service Unavailable — scanner
     // unhealthy, retry / report).
-    console.error("[Chat Completions] Inbound shield error — failing CLOSED:", err);
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error(`[Chat Completions] Inbound shield error — failing CLOSED: ${sanitizeLogField(detail)}`);
     try {
       logTraffic({
         id: trafficId,
@@ -378,6 +374,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       503
     );
   }
+  const inboundVerdict = inboundResult.verdict;
+  const inboundScore = inboundResult.score;
+  const inboundDetections = inboundResult.detections;
 
   // --- 4. Forward to LiteLLM ---
   // internal reviewer round-4 BLOCKER: forward `safeMessages` (rebuilt from validated
@@ -535,7 +534,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // response that crashes outboundScan() (deeply nested JSON, binary
     // in text fields, overlong Unicode) would have slipped through with
     // ALLOW. Now: set verdict to BLOCK, log the traffic row, return 503.
-    console.error("[Chat Completions] Outbound shield error — failing CLOSED:", err);
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error(`[Chat Completions] Outbound shield error — failing CLOSED: ${sanitizeLogField(detail)}`);
     try {
       logTraffic({
         id: trafficId,

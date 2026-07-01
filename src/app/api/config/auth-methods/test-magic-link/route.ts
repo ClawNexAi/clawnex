@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   // Mirror the dual-gate used by the rest of /api/config/auth-methods.
   // RBAC on → session + config:write; RBAC off → localhost-only fallback.
   let actorOperatorId: string | null = null;
-  let actorUsername = "admin";
+  let actorUsername: string;
   if (isRbacEnabled()) {
     const session = requireSession(request);
     if (session instanceof NextResponse) return session;
