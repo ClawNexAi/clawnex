@@ -597,7 +597,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   {
     term: "LiteLLM",
     category: "Infrastructure & deployment",
-    definition: "Open-source proxy that normalizes calls to many LLM providers behind a single OpenAI-compatible API. ClawNex uses it as the data plane that LLM traffic flows through. Pinned to version 1.83.0 globally.",
+    definition: "Open-source proxy that normalizes calls to many LLM providers behind a single OpenAI-compatible API. ClawNex uses it as the data plane that LLM traffic flows through. Pinned to version 1.84.10 globally.",
     appearsIn: ["modelsCost", "trafficMonitor", "configuration"],
   },
   {

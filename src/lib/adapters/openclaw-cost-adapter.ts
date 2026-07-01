@@ -17,7 +17,7 @@
  * Spec: docs/superpowers/specs/2026-05-04-token-cost-finops-reporting-design.md
  */
 
-import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
+import { closeSync, constants, existsSync, fstatSync, openSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveOpenClawPaths } from '@/lib/openclaw-paths';
 import type { NormalizedRow, AdapterResult, AdapterWarning } from '@/lib/types/cost-reporting';
@@ -61,10 +61,18 @@ export const openClawCostAdapter = {
         const files = readdirSync(sessionsDir).filter(f => f.endsWith('.jsonl'));
         for (const file of files) {
           const filePath = join(sessionsDir, file);
-          const stat = statSync(filePath);
-          if (stat.mtimeMs < sinceMs) continue;
+          let fd: number | null = null;
+          let content = '';
+          try {
+            fd = openSync(filePath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+            const stat = fstatSync(fd);
+            if (!stat.isFile() || stat.mtimeMs < sinceMs) continue;
+            content = readFileSync(fd, 'utf8');
+          } finally {
+            if (fd !== null) closeSync(fd);
+          }
           const sessionFileSansJsonl = file.slice(0, -'.jsonl'.length);
-          const lines = readFileSync(filePath, 'utf8').split('\n').filter(Boolean);
+          const lines = content.split('\n').filter(Boolean);
           for (let i = 0; i < lines.length; i++) {
             try {
               const entry = JSON.parse(lines[i]);

@@ -62,7 +62,7 @@ Each release entry below is structured against a fixed metadata contract so that
 
 **De-identification sweep (ahead of OSS release):**
 
-- Named personas replaced with neutral roles (`implementation-agent` / `internal-reviewer`); GitHub org references normalized to `clawnexai/clawnex`. Live QA confirmed the running build is persona-clean.
+- Named personas replaced with neutral roles (`implementation-agent` / `internal-reviewer`); GitHub org references normalized to `ClawNexAi/clawnex`. Live QA confirmed the running build is persona-clean.
 
 ---
 
@@ -1252,7 +1252,7 @@ No external CVEs were disclosed against ClawNex in this release window.
 | Windows (WSL2) | WSL2 Ubuntu 22.04 | 22.11.x | 3.12.x | Best-effort |
 
 **Dependency Pins (v0.6.2):**
-- `litellm==1.83.0` (supply-chain pin — see `reference_litellm_compromise.md`)
+- `litellm==1.84.10` (supply-chain pin — see `reference_litellm_compromise.md`)
 - `better-sqlite3==12.8.0`
 - `bcryptjs==3.0.0` (exact pin, pure-JS, 12 rounds)
 - `next==14.2.33` (H-5 deferred to v0.7.0)
@@ -1373,7 +1373,7 @@ Hotfix release addressing findings from the first full QA test battery (157 test
 | CX-44 | Held-back internal docs reachable via direct API call | Medium | Allowlist enforcement in docs API |
 | CX-45 | Password strength heuristic under-weighted numeric-only passwords | Low | Requires 2+ character classes for diversity credit |
 
-No external CVEs were disclosed against ClawNex in this release window. Upstream supply-chain exposure is tracked via the LiteLLM 1.83.0 pin (see `11-security-architecture.md`).
+No external CVEs were disclosed against ClawNex in this release window. Upstream supply-chain exposure is tracked via the LiteLLM 1.84.10 pin (see `11-security-architecture.md`).
 
 **Known Issues (v0.6.1):**
 
@@ -1398,7 +1398,7 @@ No external CVEs were disclosed against ClawNex in this release window. Upstream
 | Windows (WSL2) | WSL2 Ubuntu 22.04 | 22.11.x | 3.12.x | Best-effort |
 
 **Dependency Pins (v0.6.1):**
-- `litellm==1.83.0` (supply-chain pin — see `reference_litellm_compromise.md`)
+- `litellm==1.84.10` (supply-chain pin — see `reference_litellm_compromise.md`)
 - `better-sqlite3==12.8.0`
 - `bcryptjs==3.0.0` (exact pin, pure-JS, 12 rounds)
 - `next==14.2.33`

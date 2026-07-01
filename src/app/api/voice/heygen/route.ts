@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/guard';
 import { requireLocalhost } from "@/lib/middleware/localhost-guard";
 import { getSetting } from "@/lib/services/config-service";
+import { sanitizeLogField } from "@/lib/security/log-sanitize";
 
 export const runtime = "nodejs";
 export const dynamic = 'force-dynamic';
@@ -62,8 +63,9 @@ export async function POST(request: NextRequest) {
 
         if (!res.ok) {
           const err = await res.text();
-          console.error("[HeyGen] Create token failed:", res.status, err);
-          return NextResponse.json({ error: `HeyGen error: ${res.status}`, detail: err }, { status: 502 });
+          const detail = sanitizeLogField(err, 500);
+          console.error("[HeyGen] Create token failed", { status: res.status, detail });
+          return NextResponse.json({ error: `HeyGen error: ${res.status}`, detail }, { status: 502 });
         }
 
         const data = await res.json();
@@ -98,7 +100,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
     }
   } catch (err) {
-    console.error("[HeyGen API] Error:", err);
+    console.error("[HeyGen API] Error", {
+      error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+    });
     return NextResponse.json({ error: "HeyGen proxy error" }, { status: 500 });
   }
 }

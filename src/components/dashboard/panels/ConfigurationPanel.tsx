@@ -2887,7 +2887,7 @@ function ModelPricingRow() {
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <Tooltip placement="top" variant="detail" content={
             <span>
-              Pricing is a <strong style={{ color: C.tx }}>version-locked snapshot</strong> of LiteLLM&apos;s public model database, pulled at the tag matching your pinned LiteLLM version (currently <strong>v{status?.pinnedLiteLLMVersion || "1.83.0"}</strong>) — never the unverified upstream tip. Model names use <strong>fuzzy family matching</strong>: an exact name is preferred, but if a model isn&apos;t listed yet, the closest version in the same family is used (e.g. a brand-new <strong>claude-sonnet-4-6</strong> falls back to <strong>claude-sonnet-4-5</strong>, then to the family anchor <strong>claude-sonnet-4</strong>) so cost numbers stay reasonable until the snapshot catches up.
+              Pricing is a <strong style={{ color: C.tx }}>version-locked snapshot</strong> of LiteLLM&apos;s public model database, pulled at the tag matching your pinned LiteLLM version (currently <strong>v{status?.pinnedLiteLLMVersion || "1.84.10"}</strong>) — never the unverified upstream tip. Model names use <strong>fuzzy family matching</strong>: an exact name is preferred, but if a model isn&apos;t listed yet, the closest version in the same family is used (e.g. a brand-new <strong>claude-sonnet-4-6</strong> falls back to <strong>claude-sonnet-4-5</strong>, then to the family anchor <strong>claude-sonnet-4</strong>) so cost numbers stay reasonable until the snapshot catches up.
             </span>
           }>
             <span style={{ fontSize: 14, fontWeight: 700, color: C.tx, borderBottom: `1px dotted ${C.txT}`, cursor: "help" }}>Model Pricing</span>
@@ -2927,7 +2927,7 @@ function ModelPricingRow() {
 
       <div style={{ marginTop: 6, fontSize: 11, color: C.txT, lineHeight: 1.5 }}>
         Pricing data powers the Token &amp; Cost Intel panel. Bundled snapshot seeds the DB on first boot; updates pull from LiteLLM&apos;s GitHub at the pinned tag{" "}
-        <span style={{ fontFamily: F.mono, color: C.cyan }}>v{status?.pinnedLiteLLMVersion || "1.83.0"}-nightly</span>.
+        <span style={{ fontFamily: F.mono, color: C.cyan }}>v{status?.pinnedLiteLLMVersion || "1.84.10"}-nightly</span>.
       </div>
 
       {message && (

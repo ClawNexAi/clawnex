@@ -47,18 +47,18 @@ const MAX_TAIL_BYTES = 4 * 1024 * 1024;  // 4 MB — comfortable headroom over 5
 function readLastLines(filePath: string, maxLines: number): string[] {
   let fd: number | null = null;
   try {
-    if (!fs.existsSync(filePath)) return [];
-    const stat = fs.statSync(filePath);
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile()) return [];
     const size = stat.size;
 
     if (size <= MAX_TAIL_BYTES) {
-      const content = fs.readFileSync(filePath, "utf-8");
+      const content = fs.readFileSync(fd, "utf-8");
       const lines = content.split("\n").filter((l) => l.trim().length > 0);
       return lines.slice(-maxLines);
     }
 
     // Large file — read only the trailing window.
-    fd = fs.openSync(filePath, "r");
     const buf = Buffer.alloc(MAX_TAIL_BYTES);
     const start = size - MAX_TAIL_BYTES;
     fs.readSync(fd, buf, 0, MAX_TAIL_BYTES, start);

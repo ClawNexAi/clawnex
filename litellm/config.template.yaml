@@ -1,5 +1,5 @@
 # ClawNex LiteLLM Proxy Configuration — TEMPLATE
-# Version: litellm==1.83.0 (PINNED — do not upgrade without ClawNex team verification)
+# Version: litellm==1.84.10 (PINNED — do not upgrade without ClawNex team verification)
 # Port: 4001
 #
 # This is a template for fresh installations.

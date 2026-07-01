@@ -68,7 +68,7 @@ The following components are in scope for the security program:
 The following are **out of scope**:
 
 - Third-party dependencies (report upstream — we'll bump the pinned version when a patched release is available)
-- Vulnerabilities in LiteLLM itself (pinned to v1.83.0 — report to BerriAI/litellm)
+- Vulnerabilities in LiteLLM itself (pinned to v1.84.10 — report to BerriAI/litellm)
 - Self-inflicted configuration errors (e.g. exposing the dashboard to the public internet without a reverse proxy)
 - Social engineering of ClawNex users or maintainers
 - DoS via resource exhaustion on a single-node deployment (this is the operator's scaling responsibility, not a vulnerability)

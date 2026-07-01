@@ -123,7 +123,7 @@ bash install-vps.sh
 | 2 | **Install system packages** | Node.js 20, Python 3.12, build-essential, git via apt |
 | 3 | **Detect OpenClaw** | Searches `~/.openclaw/`, `~/.config/openclaw/`, `$OPENCLAW_HOME` for `openclaw.json` |
 | 4 | **Install ClawNex** | Copies files to `~/sentinel/`, archives existing DB if upgrading |
-| 5 | **Install dependencies** | `npm install` (exact pinned) + `pip install litellm==1.83.0` |
+| 5 | **Install dependencies** | `npm install` (exact pinned) + `pip install litellm==1.84.10` |
 | 6 | **Generate configuration** | Creates `.env` with detected OpenClaw paths, ports, session watcher settings. Includes `RBAC_ENABLED` (default `true`) and `SETUP_SECRET` (auto-generated, used to guard the `/setup` endpoint) |
 | 7 | **Production build** | Runs `npx next build` for optimized production output |
 | 8 | **Create systemd services** | `clawnex.service` (dashboard, binds `-H 127.0.0.1` as of v0.6.2) + `clawnex-litellm.service` (proxy) — auto-start on boot, auto-restart on crash |

@@ -289,7 +289,7 @@ export function AboutPanel() {
             <strong style={{ color: C.tx }}>Cost accuracy.</strong> Token cost calculations use rates from the LiteLLM model pricing table, refreshed from GitHub at the pinned version tag. Actual provider billing may differ due to rate changes, promotional pricing, or metering discrepancies. Use ClawNex cost data for trend analysis and anomaly detection, not as a substitute for your provider invoices.
           </p>
           <p style={{ margin: "0 0 10px" }}>
-            <strong style={{ color: C.tx }}>LiteLLM dependency.</strong> ClawNex pins LiteLLM to v1.83.0 due to a supply chain incident affecting versions after v1.82.6. Do not upgrade LiteLLM without explicit verification. See the LiteLLM pinning note in SECURITY.md for details.
+            <strong style={{ color: C.tx }}>LiteLLM dependency.</strong> ClawNex pins LiteLLM to v1.84.10 as the verified patched 1.84.x line for current LiteLLM proxy advisories. Do not upgrade LiteLLM without explicit verification. See the LiteLLM pinning note in SECURITY.md for details.
           </p>
           <p style={{ margin: 0 }}>
             <strong style={{ color: C.tx }}>No warranty.</strong> ClawNex is provided &ldquo;as is&rdquo; under the Apache License 2.0, without warranties or conditions of any kind.

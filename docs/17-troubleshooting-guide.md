@@ -1201,7 +1201,7 @@ Escalate to Tier 2 immediately if:
 Escalate to Tier 3 immediately if:
 - Evidence of tampering (modified binaries, unexpected cron entries, unknown users)
 - Data exfiltration suspected
-- LiteLLM version changed from 1.83.0
+- LiteLLM version changed from 1.84.10
 
 ---
 

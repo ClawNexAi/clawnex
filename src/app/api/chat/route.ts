@@ -20,6 +20,7 @@ import { shieldScan } from "@/lib/shield/scanner";
 import { outboundShieldGate } from "@/lib/shield/outbound-gate";
 import { extractAssistantOutput } from "@/lib/shield/extract-assistant-output";
 import { sanitizeMessageArray } from "@/lib/shield/sanitize-chat-payload";
+import { sanitizeLogField } from "@/lib/security/log-sanitize";
 
 export const runtime = "nodejs";
 export const dynamic = 'force-dynamic';
@@ -404,11 +405,17 @@ export async function POST(request: NextRequest) {
               { status: 400 },
             );
           }
-          console.warn(`[chat] shield BLOCK (monitor-only) at ${target.label}: score=${scan.score} detections=${scan.stats.total}`);
+          console.warn("[chat] shield BLOCK monitor-only", {
+            target: sanitizeLogField(target.label),
+            score: scan.score,
+            detections: scan.stats.total,
+          });
         }
       }
     } catch (err) {
-      console.error("[chat] shield scan error — failing CLOSED:", err);
+      console.error("[chat] shield scan error — failing CLOSED", {
+        error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+      });
       return NextResponse.json(
         { error: "Shield scanner unavailable. Retry shortly." },
         { status: 503 },
@@ -457,7 +464,9 @@ export async function POST(request: NextRequest) {
       }
       console.warn(`[Chat API] LiteLLM returned ${res.status}, trying direct`);
     } catch (err) {
-      console.warn("[Chat API] LiteLLM unreachable:", err instanceof Error ? err.message : "unknown");
+      console.warn("[Chat API] LiteLLM unreachable", {
+        error: err instanceof Error ? sanitizeLogField(err.message) : "unknown",
+      });
     }
 
     // Route to LM Studio directly if a local model is selected
@@ -475,13 +484,26 @@ export async function POST(request: NextRequest) {
         baseUrl = config.lmstudio.fleet.url; // fallback
       }
       try {
+        const completionsUrl = configService.providerEndpointUrl(baseUrl, "chat/completions");
+        const safety = await configService.assertSafeProviderHttpFetchTarget(
+          completionsUrl,
+          `chat provider ${dbProvider?.name || provider || "lmstudio"}`,
+        );
+        if (safety.blocked) {
+          console.warn("[Chat API] Refused unsafe provider URL", {
+            provider: sanitizeLogField(provider),
+            reason: sanitizeLogField(safety.reason || "blocked provider target"),
+          });
+          return NextResponse.json({ error: "Provider target blocked by SSRF guard" }, { status: 400 });
+        }
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 60000);
-        const res = await fetch(`${baseUrl}/chat/completions`, {
+        const res = await fetch(completionsUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ model: model || "qwen/qwen3-coder-next", messages, max_tokens: 2048, temperature: 0.7 }),
           signal: controller.signal,
+          redirect: "error",
         });
         clearTimeout(timeout);
         if (res.ok) {
@@ -495,9 +517,15 @@ export async function POST(request: NextRequest) {
           const content = data.choices?.[0]?.message?.content || "No response from model.";
           return NextResponse.json({ role: "assistant", content, source: provider, model: data.model || model });
         }
-        console.warn(`[Chat API] LM Studio ${provider} returned ${res.status}, falling back`);
+        console.warn("[Chat API] LM Studio returned non-OK status; falling back", {
+          provider: sanitizeLogField(provider),
+          status: res.status,
+        });
       } catch (err) {
-        console.warn(`[Chat API] LM Studio ${provider} unreachable:`, err instanceof Error ? err.message : "unknown");
+        console.warn("[Chat API] LM Studio unreachable", {
+          provider: sanitizeLogField(provider),
+          error: err instanceof Error ? sanitizeLogField(err.message) : "unknown",
+        });
       }
     }
 
@@ -534,14 +562,18 @@ export async function POST(request: NextRequest) {
 
       console.warn(`[Chat API] Gateway returned ${res.status}, falling back to keyword matching`);
     } catch (err) {
-      console.warn("[Chat API] Gateway unreachable, using keyword fallback:", err instanceof Error ? err.message : "unknown");
+      console.warn("[Chat API] Gateway unreachable, using keyword fallback", {
+        error: err instanceof Error ? sanitizeLogField(err.message) : "unknown",
+      });
     }
 
     // Fallback: keyword matching
     const fallbackResponse = keywordFallback(message);
     return NextResponse.json({ role: "assistant", content: fallbackResponse, source: "fallback", model: "keyword-matcher" });
   } catch (error) {
-    console.error("[Chat API] Error:", error);
+    console.error("[Chat API] Error", {
+      error: error instanceof Error ? sanitizeLogField(error.message) : sanitizeLogField(error),
+    });
     return NextResponse.json({ error: "Internal chat error" }, { status: 500 });
   }
 }

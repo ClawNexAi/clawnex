@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/guard';
 import { requireLocalhost } from "@/lib/middleware/localhost-guard";
 import { getSetting } from "@/lib/services/config-service";
+import { sanitizeLogField } from "@/lib/security/log-sanitize";
 
 export const runtime = "nodejs";
 export const dynamic = 'force-dynamic';
@@ -85,7 +86,10 @@ export async function POST(request: NextRequest) {
 
     if (!res.ok) {
       const errText = await res.text().catch(() => "Unknown error");
-      console.error(`[Voice/Speak] ElevenLabs returned ${res.status}:`, errText);
+      console.error("[Voice/Speak] ElevenLabs returned non-OK status", {
+        status: res.status,
+        error: sanitizeLogField(errText, 500),
+      });
       return NextResponse.json({ error: `ElevenLabs error: ${res.status}`, provider: "elevenlabs" }, { status: 502 });
     }
 
@@ -99,7 +103,9 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (err) {
-    console.error("[Voice/Speak] Error:", err);
+    console.error("[Voice/Speak] Error", {
+      error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+    });
     return NextResponse.json({ error: "TTS failed" }, { status: 500 });
   }
 }

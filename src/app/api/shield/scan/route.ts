@@ -14,6 +14,7 @@ import { run } from "@/lib/db/index";
 import { createAlert } from "@/lib/services/alert-manager";
 import { logEvent } from "@/lib/services/audit-logger";
 import { ingestEvent } from "@/lib/services/correlation-engine";
+import { sanitizeLogField } from "@/lib/security/log-sanitize";
 import { createHash } from "node:crypto";
 import {
   type Origin,
@@ -153,7 +154,11 @@ export async function POST(request: NextRequest) {
         if (blockMode !== "on") auditVerdict = "observed";
       } catch { /* default to verdict */ }
     }
-    logEvent("api", `shield_scan_${auditVerdict}`, "shield", scanId, `Score: ${result.score}, Detections: ${result.detections.slice(0, 3).map((d: { name: string }) => d.name).join(', ')}`, "api");
+    const detectionSummary = result.detections
+      .slice(0, 3)
+      .map((d: { name: string }) => sanitizeLogField(d.name, 80))
+      .join(', ');
+    logEvent("api", `shield_scan_${auditVerdict}`, "shield", scanId, `Score: ${result.score}, Detections: ${detectionSummary}`, "api");
 
     return NextResponse.json({
       ...result,

@@ -34,6 +34,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { readOpenClawConfig, normalizeOpenClawModel } from '@/lib/openclaw-paths';
+import { sanitizeLogField } from '@/lib/security/log-sanitize';
 import { getAgentRole } from './agent-roles';
 
 // ---------------------------------------------------------------------------
@@ -222,6 +223,24 @@ function realpathContainsSync(root: string, target: string): boolean {
   }
 }
 
+function readRegularFileNoFollow(filePath: string): { raw: string; stat: fs.Stats } | null {
+  let fd: number | null = null;
+  try {
+    const noFollow = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile()) return null;
+    const raw = fs.readFileSync(fd, 'utf-8');
+    return { raw, stat };
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch {}
+    }
+  }
+}
+
 function isPathSafe(workspaceRoot: string, requestedPath: string): boolean {
   const resolved = path.resolve(workspaceRoot, requestedPath);
   // Must be within workspace root (lexical)
@@ -350,26 +369,25 @@ export function listWorkspaceFiles(agentId?: string): WorkspaceFileInfo[] {
 export function readWorkspaceFile(relativePath: string, agentId?: string): { content: string; info: WorkspaceFileInfo } | null {
   const fullPath = resolveWorkspaceReadPath(relativePath, agentId);
   if (!fullPath) {
-    console.warn(`[WORKSPACE] Blocked path traversal attempt: ${relativePath}`);
+    console.warn("[WORKSPACE] Blocked path traversal attempt", sanitizeLogField(relativePath));
     return null;
   }
 
   try {
-    const stat = fs.statSync(fullPath);
-    if (stat.isDirectory()) return null;
+    const opened = readRegularFileNoFollow(fullPath);
+    if (!opened) return null;
 
-    const raw = fs.readFileSync(fullPath, 'utf-8');
     // Mask provider/gateway/token secrets before returning to the caller.
     // `workspace:read` is granted broadly; operators must not see plaintext
     // credentials embedded in openclaw.json or similar config files.
-    const content = redactSecrets(raw);
+    const content = redactSecrets(opened.raw);
     return {
       content,
       info: {
         name: path.basename(fullPath),
         relativePath,
-        size: stat.size,
-        modified: stat.mtime.toISOString(),
+        size: opened.stat.size,
+        modified: opened.stat.mtime.toISOString(),
         isDirectory: false,
       },
     };
@@ -667,7 +685,7 @@ export function readHermesFile(relativePath: string): { content: string; info: W
   for (const segment of segments) {
     const lower = segment.toLowerCase();
     if (DENIED_PATHS.some(d => lower === d.toLowerCase() || lower.startsWith(d.toLowerCase()))) {
-      console.warn(`[WORKSPACE] Blocked Hermes path traversal attempt: ${relativePath}`);
+      console.warn("[WORKSPACE] Blocked Hermes path traversal attempt", sanitizeLogField(relativePath));
       return null;
     }
     if (lower === '..') return null;
@@ -681,18 +699,17 @@ export function readHermesFile(relativePath: string): { content: string; info: W
   if (fs.existsSync(resolved) && !realpathContainsSync(root, resolved)) return null;
 
   try {
-    const stat = fs.statSync(resolved);
-    if (stat.isDirectory()) return null;
-    const raw = fs.readFileSync(resolved, 'utf-8');
+    const opened = readRegularFileNoFollow(resolved);
+    if (!opened) return null;
     // See workspace-side rationale: mask secrets before return.
-    const content = redactSecrets(raw);
+    const content = redactSecrets(opened.raw);
     return {
       content,
       info: {
         name: path.basename(resolved),
         relativePath,
-        size: stat.size,
-        modified: stat.mtime.toISOString(),
+        size: opened.stat.size,
+        modified: opened.stat.mtime.toISOString(),
         isDirectory: false,
       },
     };

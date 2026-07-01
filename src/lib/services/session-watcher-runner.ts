@@ -12,6 +12,7 @@ import {
   getStats,
   reset,
 } from './session-watcher';
+import { sanitizeLogField } from '../security/log-sanitize';
 
 // ---------------------------------------------------------------------------
 // State
@@ -45,7 +46,9 @@ export function startWatcher(): void {
   try {
     initializeOffsets();
   } catch (err) {
-    console.error('[SessionWatcher] Failed to initialize offsets:', err);
+    console.error('[SessionWatcher] Failed to initialize offsets', {
+      error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+    });
   }
 
   running = true;
@@ -56,7 +59,9 @@ export function startWatcher(): void {
     try {
       pollFiles();
     } catch (err) {
-      console.error('[SessionWatcher] Poll error:', err);
+      console.error('[SessionWatcher] Poll error', {
+        error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+      });
     }
   }, config.sessionWatcher.pollIntervalMs);
 
@@ -71,7 +76,9 @@ export function pollNow(): void {
   try {
     pollFiles();
   } catch (err) {
-    console.error('[SessionWatcher] Manual poll error:', err);
+    console.error('[SessionWatcher] Manual poll error', {
+      error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+    });
   }
 }
 
@@ -82,9 +89,15 @@ export function setPollInterval(ms: number): void {
   if (!running || !pollInterval) return;
   clearInterval(pollInterval);
   pollInterval = setInterval(() => {
-    try { pollFiles(); } catch (err) { console.error('[SessionWatcher] Poll error:', err); }
+    try {
+      pollFiles();
+    } catch (err) {
+      console.error('[SessionWatcher] Poll error', {
+        error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+      });
+    }
   }, ms);
-  console.log(`[SessionWatcher] Interval changed to ${ms}ms`);
+  console.log("[SessionWatcher] Interval changed", { intervalMs: ms });
 }
 
 /**
@@ -149,7 +162,9 @@ export function ensureWatcherStarted(): void {
   try {
     startWatcher();
   } catch (err) {
-    console.error('[SessionWatcher] Failed to auto-start:', err);
+    console.error('[SessionWatcher] Failed to auto-start', {
+      error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+    });
     initDone = false;
   }
 }

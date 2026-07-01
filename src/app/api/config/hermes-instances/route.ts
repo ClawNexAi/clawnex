@@ -30,8 +30,45 @@ interface HermesInstanceRow {
   updated_at: string;
 }
 
+function resolveHermesHomePath(homePath: string): { ok: true; path: string } | { ok: false; error: string } {
+  const trimmed = homePath.trim();
+  if (!trimmed) return { ok: false, error: "Home path is required" };
+
+  const expanded = trimmed === "~"
+    ? os.homedir()
+    : trimmed.startsWith("~/")
+      ? path.join(os.homedir(), trimmed.slice(2))
+      : trimmed;
+  const resolved = path.resolve(expanded);
+  const home = path.resolve(os.homedir());
+
+  if (resolved !== home && !resolved.startsWith(home + path.sep)) {
+    return { ok: false, error: "Hermes home path must be inside this user's home directory" };
+  }
+
+  return { ok: true, path: resolved };
+}
+
+function resolveRealHermesHomePath(homePath: string): { ok: true; path: string } | { ok: false; error: string } {
+  const pathResult = resolveHermesHomePath(homePath);
+  if (!pathResult.ok) return pathResult;
+
+  try {
+    const realPath = fs.realpathSync(pathResult.path);
+    const realHome = fs.realpathSync(os.homedir());
+    if (realPath !== realHome && !realPath.startsWith(realHome + path.sep)) {
+      return { ok: false, error: "Hermes home path must resolve inside this user's home directory" };
+    }
+    return { ok: true, path: realPath };
+  } catch {
+    return { ok: true, path: pathResult.path };
+  }
+}
+
 function checkHermesPath(homePath: string): { available: boolean; error?: string } {
-  const resolved = path.resolve(homePath.replace(/^~/, os.homedir()));
+  const pathResult = resolveRealHermesHomePath(homePath);
+  if (!pathResult.ok) return { available: false, error: pathResult.error };
+  const resolved = pathResult.path;
   const stateDb = path.join(resolved, "state.db");
   if (!fs.existsSync(resolved)) return { available: false, error: "Directory does not exist" };
   if (!fs.existsSync(stateDb)) return { available: false, error: "state.db not found in directory" };
@@ -90,7 +127,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Name and home path are required" }, { status: 400 });
     }
 
-    const resolved = path.resolve(homePath.trim().replace(/^~/, os.homedir()));
+    const pathResult = resolveHermesHomePath(homePath);
+    if (!pathResult.ok) {
+      return NextResponse.json({ error: pathResult.error }, { status: 400 });
+    }
+    const resolved = pathResult.path;
     const check = checkHermesPath(resolved);
     const id = `hermes-${Date.now()}`;
 

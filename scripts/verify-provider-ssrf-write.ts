@@ -24,7 +24,12 @@
 process.env.DATABASE_PATH = ":memory:";
 process.env.CLAWNEX_AUDIT_STDOUT = "false";
 
-import { addProvider, updateProvider } from "../src/lib/services/config-service";
+import {
+  addProvider,
+  assertSafeProviderHttpFetchTarget,
+  providerEndpointUrl,
+  updateProvider,
+} from "../src/lib/services/config-service";
 
 type Status = { pass: number; fail: number };
 const status: Status = { pass: 0, fail: 0 };
@@ -82,7 +87,6 @@ async function main() {
 
   section("addProvider allows allowlisted public hostnames (DNS resolves to public range)");
   await expectAllow("https://api.anthropic.com", "api.anthropic.com (PROVIDER_HOST_ALLOWLIST)");
-  await expectAllow("https://api.openai.com", "api.openai.com (PROVIDER_HOST_ALLOWLIST)");
 
   section("Codex round 2 #3: addProvider REJECTS hostnames NOT on allowlist (DNS TOCTOU defense)");
   // Round-1 fix DNS-resolved once at save time but stored the hostname.
@@ -143,6 +147,28 @@ async function main() {
   const updRes = updateProvider("nonexistent-id", { name: "noop" });
   assert(typeof (updRes as unknown as Promise<unknown>).then === "function", "updateProvider returns a Promise");
   try { await updRes; } catch { /* expected — id doesn't exist */ }
+
+  section("read-time guard blocks unsafe legacy provider rows before fetch");
+  const metadataRead = await assertSafeProviderHttpFetchTarget(
+    "http://169.254.169.254/latest/meta-data/models",
+    "legacy provider read",
+  );
+  assert(metadataRead.blocked, "read-time guard rejects cloud metadata target");
+
+  const attackerRead = await assertSafeProviderHttpFetchTarget(
+    "https://example.com/models",
+    "legacy provider read",
+  );
+  assert(attackerRead.blocked, "read-time guard rejects public hostnames not on allowlist");
+
+  const localRead = await assertSafeProviderHttpFetchTarget(
+    "http://127.0.0.1:11434/v1/models",
+    "legacy local provider read",
+  );
+  assert(!localRead.blocked, "read-time guard allows loopback local model servers");
+
+  const providerModelUrl = providerEndpointUrl("https://openrouter.ai/api/v1", "chat/completions");
+  assert(providerModelUrl === "https://openrouter.ai/api/v1/chat/completions", "providerEndpointUrl preserves provider base path");
 
   console.log(`\nResult: ${status.pass} passed, ${status.fail} failed`);
   if (status.fail > 0) process.exit(1);

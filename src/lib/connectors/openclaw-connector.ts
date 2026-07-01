@@ -41,6 +41,7 @@ import { config } from '../config';
 import { broadcast } from '../events';
 import { run } from '../db';
 import { shieldScan } from '../shield/scanner';
+import { sanitizeLogField } from '../security/log-sanitize';
 
 // ---------------------------------------------------------------------------
 // Device Identity (OpenClaw 4.12+ silent-local-pairing handshake)
@@ -526,12 +527,12 @@ class OpenClawConnector {
       // Forward to SSE
       if (eventType === 'agent' && payload) {
         broadcast('agent_event', payload);
-        this.logAudit('agent_event', 'agent', 'openclaw', JSON.stringify(payload).slice(0, 500));
+        this.logAudit('agent_event', 'agent', 'openclaw', sanitizeLogField(JSON.stringify(payload), 500));
       }
 
       if (eventType === 'chat' && payload) {
         broadcast('chat_event', payload);
-        this.logAudit('chat_event', 'chat', 'openclaw', JSON.stringify(payload).slice(0, 500));
+        this.logAudit('chat_event', 'chat', 'openclaw', sanitizeLogField(JSON.stringify(payload), 500));
 
         // Run chat content through prompt shield
         const content = (payload.content as string) || (payload.message as string) || '';
@@ -546,7 +547,11 @@ class OpenClawConnector {
                 detections: result.detections.length,
                 timestamp: new Date().toISOString(),
               });
-              console.log(`[ClawNex/OpenClaw] Shield ${result.verdict}: score=${result.score}, detections=${result.detections.length}`);
+              console.log("[ClawNex/OpenClaw] Shield verdict", {
+                verdict: result.verdict,
+                score: result.score,
+                detections: result.detections.length,
+              });
             }
           } catch (err) {
             console.error('[ClawNex/OpenClaw] Shield scan error:', err);
@@ -556,7 +561,7 @@ class OpenClawConnector {
 
       if (eventType === 'system' && payload) {
         broadcast('system_event', payload);
-        this.logAudit('system_event', 'system', 'openclaw', JSON.stringify(payload).slice(0, 500));
+        this.logAudit('system_event', 'system', 'openclaw', sanitizeLogField(JSON.stringify(payload), 500));
       }
     }
   }

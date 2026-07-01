@@ -238,7 +238,7 @@ export function syncProvidersToYaml(opts: SyncOptions): SyncResult {
     "# ClawNex LiteLLM Proxy Configuration",
     "# Auto-generated from Configuration panel providers + models",
     `# Updated: ${new Date().toISOString()}`,
-    "# Version: litellm==1.83.0 (PINNED)",
+    "# Version: litellm==1.84.10 (PINNED)",
     "",
     "model_list:",
     modelEntries.join("\n\n"),

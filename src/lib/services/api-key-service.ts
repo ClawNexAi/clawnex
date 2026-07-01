@@ -3,7 +3,7 @@
  *
  * Handles generation, validation, revocation, and scope checking for
  * public API keys. Keys use the format `cnx_` + 40 hex chars, and are
- * stored as SHA-256 hashes (never plaintext).
+ * stored as SHA-256 lookup digests (never plaintext).
  *
  * Tables: api_keys
  *
@@ -66,7 +66,14 @@ export interface ValidateKeyResult {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Hash a plaintext API key with SHA-256. */
+/**
+ * Hash a plaintext API key for DB lookup.
+ *
+ * This is not a password-hashing path: ClawNex API keys are generated
+ * server-side as 160-bit random bearer tokens and are shown once. SHA-256 is
+ * used only as a stable lookup digest so existing generated keys remain
+ * compatible across upgrades.
+ */
 function hashKey(key: string): string {
   return createHash('sha256').update(key).digest('hex');
 }
@@ -99,9 +106,9 @@ function rowToRecord(row: ApiKeyRow): ApiKeyRecord {
 /**
  * Generate a new API key.
  *
- * Creates a random key with format `cnx_` + 40 hex chars, hashes it with
- * SHA-256 for storage, and saves to the api_keys table. The plaintext key
- * is returned once and never stored.
+ * Creates a random key with format `cnx_` + 40 hex chars, hashes it for
+ * storage, and saves to the api_keys table. The plaintext key is returned once
+ * and never stored.
  *
  * @param name - Human-readable label for the key
  * @param scopes - Array of permission scopes (e.g. "shield:scan", "agents:read")
@@ -139,8 +146,8 @@ export function generateApiKey(
 /**
  * Validate an API key.
  *
- * Hashes the provided key and looks it up in the database. Checks that the
- * key has not been revoked and has not expired.
+ * Hashes the provided key and looks it up in the database. Checks that the key
+ * has not been revoked and has not expired.
  *
  * @param key - The plaintext API key to validate
  * @returns Validation result with the key record on success

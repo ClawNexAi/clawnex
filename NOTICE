@@ -84,7 +84,7 @@ The LiteLLM proxy bundled with ClawNex uses an isolated Python venv installed
 on the host at install time. The deploy script (`deploy/install-prod.sh`)
 creates the venv and runs:
 
-  pip install "litellm[proxy]==1.83.0"
+  pip install "litellm[proxy]==1.84.10"
   pip install "httpx==0.28.1"
 
 The resulting transitive Python dep tree resolves to permissive licenses:
@@ -105,7 +105,7 @@ The resulting transitive Python dep tree resolves to permissive licenses:
 
 Key direct Python deps:
 
-  litellm[proxy]==1.83.0                  MIT  (BerriAI / litellm)
+  litellm[proxy]==1.84.10                  MIT  (BerriAI / litellm)
   httpx==0.28.1                            BSD-3-Clause
 
 Notable transitive Python packages requiring attribution (Apache-2.0 or MPL):
@@ -149,7 +149,7 @@ EXCLUSIONS — packages deliberately NOT bundled into the OSS distribution
   Status: NOT installed by the production deploy script.
   Why noted: this package may appear in a developer's local venv if pip
    resolved an older path; ClawNex's production install path (`pip install
-   litellm[proxy]==1.83.0`) does not pull it because none of `litellm`,
+   litellm[proxy]==1.84.10`) does not pull it because none of `litellm`,
    `litellm[proxy]`, or `httpx` declare it as a dependency. Operators who
    independently `pip install litellm-enterprise` are agreeing to BerriAI's
    commercial Enterprise Terms separately.

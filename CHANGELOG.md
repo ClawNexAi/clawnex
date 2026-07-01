@@ -1966,7 +1966,7 @@ Pre-OSS hardening release. Consolidates the full output of the 2026-04-22 enterp
 
 ### Security
 - Fail-closed architecture enforced (no bypass without break-glass)
-- LiteLLM pinned to 1.82.6 (supply chain compromise in later versions; subsequently updated to the current pinned version 1.83.0)
+- LiteLLM exact-pinned; current verified pin is 1.84.10
 - All dependencies exact-pinned with no version ranges
 
 ### Migration Notes

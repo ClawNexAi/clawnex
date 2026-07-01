@@ -23,7 +23,7 @@ NC='\033[0m'
 
 CLAWNEX_VERSION="$(node -e "console.log(require('./package.json').version)" 2>/dev/null || echo "0.0.0-unknown")"
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LITELLM_VERSION="1.83.0"
+LITELLM_VERSION="1.84.10"
 MIN_NODE_MAJOR=18
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=10
@@ -1409,7 +1409,7 @@ elif [ -f "$LITELLM_CONFIG_FILE" ] && [ "$LITELLM_HAS_VALID_CONFIG" = true ]; th
         fi
     else
         echo -e "  ${RED}✗${NC} LiteLLM binary not found"
-        echo "  Install with: pip install 'litellm[proxy]==1.83.0'"
+        echo "  Install with: pip install 'litellm[proxy]==1.84.10'"
         echo "  See docs/17-troubleshooting-guide.md"
     fi
 else

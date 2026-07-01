@@ -53,7 +53,7 @@ Ship inside the ClawNex deployment. Pinned versions, reviewed per release.
 | `zustand` | 5.0.12 | Client state store | In-memory UI state | Low | Project owner | OSS — no DPA applicable | No sensitive persistence. | 2026-05-31 |
 | `uuid` | 13.0.0 | Identifier generation | IDs for sessions/events | Low | Project owner | OSS — no DPA applicable | Standard use. | 2026-05-31 |
 | `@heygen/liveavatar-web-sdk` | 0.0.12 (exact) | Voice avatar client SDK | Microphone audio + HeyGen session tokens | Medium | Project owner | OSS — paired with HeyGen service DPA (see §3) | Pinned exact (caret was removed as SOC 2 quick win). Feature opt-in. | 2026-05-31 |
-| LiteLLM (proxy framework) | `litellm[proxy]==1.83.0` | AI proxy/gateway framework | All proxied prompt/response traffic | High | Project owner | OSS — no DPA applicable | Hard-pinned due to upstream supply chain incident; anything >1.82.6 except 1.83.0 is prohibited. Tracked in risk R-003/R-004 watch. | 2026-05-31 |
+| LiteLLM (proxy framework) | `litellm[proxy]==1.84.10` | AI proxy/gateway framework | All proxied prompt/response traffic | High | Project owner | OSS — no DPA applicable | Hard-pinned and security-reviewed after upstream supply chain and proxy advisories. Future bumps require explicit verification. Tracked in risk R-003/R-004 watch. | 2026-07-01 |
 | `httpx` (for LiteLLM) | 0.28.1 | HTTP client for LiteLLM | Outbound provider traffic | High | Project owner | OSS — no DPA applicable | Pinned as part of LiteLLM lock. | 2026-05-31 |
 
 ## 2. Host runtime platforms

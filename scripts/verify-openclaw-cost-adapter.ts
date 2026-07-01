@@ -8,7 +8,7 @@
  *  4. tool_call_count = 0 only when stopReason='stop' (per row, not per session)
  *  5. Trust map: known providers → expected initial cost_status
  */
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openClawCostAdapter } from '../src/lib/adapters/openclaw-cost-adapter';
@@ -36,7 +36,7 @@ for (const p of FORBIDDEN_PATHS) {
 }
 
 // 2. Normalization — write a synthetic JSONL line under a temp agent dir
-const tmpRoot = join(tmpdir(), `openclaw-test-${Date.now()}`);
+const tmpRoot = mkdtempSync(join(tmpdir(), 'openclaw-test-'));
 const agentDir = join(tmpRoot, 'agents', 'testagent', 'sessions');
 mkdirSync(agentDir, { recursive: true });
 const sessionId = 'abc123';

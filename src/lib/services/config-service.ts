@@ -338,6 +338,47 @@ async function rejectIfWriteTargetUnsafe(url: string): Promise<{ blocked: boolea
   return assertSafeFetchTarget(url, 'addProvider/updateProvider');
 }
 
+/**
+ * Read-time SSRF guard for persisted provider URLs.
+ *
+ * Write-time validation keeps new unsafe providers out, but restored DB rows,
+ * manual imports, or pre-remediation installs can still contain unsafe
+ * `config_providers.base_url` values. Call this immediately before every
+ * provider URL fetch so legacy rows fail closed before credentials or traffic
+ * leave the process.
+ */
+export async function assertSafeProviderHttpFetchTarget(url: string, context: string): Promise<{ blocked: boolean; reason?: string }> {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return { blocked: true, reason: 'invalid URL' }; }
+  if (!/^https?:$/.test(parsed.protocol)) {
+    return { blocked: true, reason: `disallowed scheme: ${parsed.protocol}` };
+  }
+
+  const host = parsed.hostname.replace(/^\[|\]$/g, '');
+  const loopbackHostnames = new Set(['localhost', '127.0.0.1', '::1']);
+  if (loopbackHostnames.has(host.toLowerCase()) || (isIP(host) && isLoopbackIp(host))) {
+    return { blocked: false };
+  }
+
+  if (!isIP(host)) {
+    const allowed = getProviderHostAllowlist();
+    if (!allowed.has(host.toLowerCase())) {
+      return {
+        blocked: true,
+        reason: `provider hostname '${host}' is not on the trusted-provider allowlist`,
+      };
+    }
+  }
+
+  return assertSafeFetchTarget(url, context);
+}
+
+export function providerEndpointUrl(baseUrl: string, endpointPath: string): string {
+  const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  const relative = endpointPath.replace(/^\/+/, '');
+  return new URL(relative, base).toString();
+}
+
 export async function addProvider(data: { id?: string; name: string; type: string; baseUrl: string; apiKey?: string }): Promise<ProviderWithModels> {
   const safety = await rejectIfWriteTargetUnsafe(data.baseUrl);
   if (safety.blocked) {

@@ -7,6 +7,7 @@
 
 import { queryAll, queryOne, run } from '../db/index';
 import { getSetting } from './config-service';
+import { sanitizeLogField } from '../security/log-sanitize';
 
 export interface ScheduledJob {
   id: string;
@@ -215,7 +216,10 @@ async function executeJob(job: ScheduledJob): Promise<void> {
     });
 
     if (!res.ok) {
-      console.error(`[ReportScheduler] Failed to generate ${job.report_type}: HTTP ${res.status}`);
+      console.error("[ReportScheduler] Failed to generate report", {
+        reportType: sanitizeLogField(job.report_type),
+        status: res.status,
+      });
       return;
     }
 
@@ -233,13 +237,22 @@ async function executeJob(job: ScheduledJob): Promise<void> {
           }</pre>`,
         });
       } catch (mailErr) {
-        console.error(`[ReportScheduler] Failed to email report: ${mailErr}`);
+        console.error("[ReportScheduler] Failed to email report", {
+          error: mailErr instanceof Error ? sanitizeLogField(mailErr.message) : sanitizeLogField(mailErr),
+        });
       }
     }
 
-    console.log(`[ReportScheduler] Generated ${job.report_type} (${job.format}) — ${job.email_to ? 'emailed to ' + job.email_to : 'no email'}`);
+    console.log("[ReportScheduler] Generated report", {
+      reportType: sanitizeLogField(job.report_type),
+      format: sanitizeLogField(job.format),
+      emailed: Boolean(job.email_to),
+    });
   } catch (err) {
-    console.error(`[ReportScheduler] Error executing job ${job.id}: ${err}`);
+    console.error("[ReportScheduler] Error executing job", {
+      jobId: sanitizeLogField(job.id),
+      error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+    });
   }
 }
 

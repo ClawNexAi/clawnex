@@ -95,7 +95,7 @@ pip install -r requirements.txt
 deactivate
 ```
 
-Verify: `~/sentinel/litellm/venv/bin/python3 -c "import litellm; print(litellm.version)"` should print `1.83.0`.
+Verify: `~/sentinel/litellm/venv/bin/python3 -c "import litellm; print(litellm.version)"` should print `1.84.10`.
 
 ### Step 4: Configure Environment
 
@@ -189,7 +189,7 @@ Run the automated verification script to confirm all components are healthy:
 bash ~/sentinel/scripts/verify.sh
 ```
 
-The script checks: Dashboard and LiteLLM health endpoints, database integrity, watchdog cron entry, file permissions on sensitive files, LiteLLM version (must be 1.83.0), and session watcher path. All checks should report **PASS**. Investigate any **FAIL** items before proceeding.
+The script checks: Dashboard and LiteLLM health endpoints, database integrity, watchdog cron entry, file permissions on sensitive files, LiteLLM version (must be 1.84.10), and session watcher path. All checks should report **PASS**. Investigate any **FAIL** items before proceeding.
 
 ### Step 10: First-Run — Work the Welcome Wizard
 
@@ -1026,7 +1026,7 @@ Apply these items before exposing ClawNex to any network beyond localhost. Every
 | 9 | SETUP_SECRET rotated after initial admin created | Remove or regenerate via `openssl rand -hex 32` | One-time + on breach |
 | 10 | Credentials rotated | OpenRouter, Resend, gateway token, SMTP | Quarterly |
 | 11 | Dependency audit | `npm audit --production` and `pip list --outdated` | Weekly |
-| 12 | LiteLLM pinned to 1.83.0 | `grep 'litellm\[proxy\]==1.83.0' litellm/requirements.txt` | Each deploy |
+| 12 | LiteLLM pinned to 1.84.10 | `grep 'litellm\[proxy\]==1.84.10' litellm/requirements.txt` | Each deploy |
 | 13 | Backups running and off-host | See Ops Manual section 14.4 | Daily |
 | 14 | Monitoring alerts configured | Dashboard health, LiteLLM health, cert expiry, disk free | One-time |
 | 15 | Audit log retention >= 365 days | Configuration → Data Retention → Audit | One-time |

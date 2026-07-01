@@ -440,22 +440,56 @@ UNIT
 #      across redeploys without forcing a venv migration.
 #   3. /usr/local/bin/litellm (legacy pip system install). Same idea.
 #   4. Bootstrap fresh: download Astral python-build-standalone python3.12,
-#      create ~/.litellm-venv, pip install litellm[proxy]==1.83.0. This is
+#      create ~/.litellm-venv, pip install litellm[proxy]==1.84.10. This is
 #      the path Ubuntu 26.04 / Debian 13 / any fresh box hits.
 #
 # The bootstrap is intentionally idempotent — re-running it on a box that
-# already has the venv just reuses it.
+# already has an older venv upgrades LiteLLM to the required security floor.
 if [ -f "${INSTALL_DIR}/litellm/config.yaml" ]; then
+    REQUIRED_LITELLM_VERSION="1.84.10"
     LITELLM_BIN=""
+    ensure_litellm_version() {
+        local python_bin="$1"
+        local current
+        current="$($SUDO -u "${SERVICE_USER}" "${python_bin}" - <<'PY' 2>/dev/null || true
+import importlib.metadata
+try:
+    print(importlib.metadata.version("litellm"))
+except importlib.metadata.PackageNotFoundError:
+    pass
+PY
+)"
+        if [ "$current" = "$REQUIRED_LITELLM_VERSION" ]; then
+            echo -e "  ${GREEN}✓${NC} LiteLLM ${REQUIRED_LITELLM_VERSION} verified"
+            return 0
+        fi
+        echo -e "  ${YELLOW}⚠${NC} LiteLLM ${current:-not installed} found; upgrading to ${REQUIRED_LITELLM_VERSION}"
+        $SUDO -u "${SERVICE_USER}" "${python_bin}" -m pip install --upgrade "litellm[proxy]==${REQUIRED_LITELLM_VERSION}" --quiet 2>&1 | tail -1 \
+            || { echo -e "  ${RED}✗${NC} litellm pip upgrade failed"; exit 1; }
+        current="$($SUDO -u "${SERVICE_USER}" "${python_bin}" - <<'PY' 2>/dev/null || true
+import importlib.metadata
+try:
+    print(importlib.metadata.version("litellm"))
+except importlib.metadata.PackageNotFoundError:
+    pass
+PY
+)"
+        [ "$current" = "$REQUIRED_LITELLM_VERSION" ] \
+            || { echo -e "  ${RED}✗${NC} LiteLLM version check failed after upgrade. Got '${current:-metadata not found}'"; exit 1; }
+        echo -e "  ${GREEN}✓${NC} LiteLLM ${REQUIRED_LITELLM_VERSION} installed"
+    }
     if [ -x "/home/${SERVICE_USER}/.litellm-venv/bin/litellm" ]; then
         LITELLM_BIN="/home/${SERVICE_USER}/.litellm-venv/bin/litellm"
         echo -e "  ${GREEN}✓${NC} Using existing litellm venv at ~/.litellm-venv (fresh-box durable pattern)"
+        ensure_litellm_version "/home/${SERVICE_USER}/.litellm-venv/bin/python"
     elif [ -x "/home/${SERVICE_USER}/.local/bin/litellm" ]; then
         LITELLM_BIN="/home/${SERVICE_USER}/.local/bin/litellm"
         echo -e "  ${GREEN}✓${NC} Using legacy pip-user litellm at ~/.local/bin/litellm"
+        ensure_litellm_version "$(command -v python3)"
     elif [ -x "/usr/local/bin/litellm" ]; then
         LITELLM_BIN="/usr/local/bin/litellm"
         echo -e "  ${GREEN}✓${NC} Using legacy pip-system litellm at /usr/local/bin/litellm"
+        ensure_litellm_version "$(command -v python3)"
     else
         # Bootstrap path: fresh box, no litellm anywhere. Install via
         # portable python3.12 so we don't fight whatever distro python the
@@ -474,11 +508,11 @@ if [ -f "${INSTALL_DIR}/litellm/config.yaml" ]; then
         fi
         $SUDO -u "${SERVICE_USER}" "${PY_PORTABLE}/python/bin/python3" -m venv "${VENV}"
         $SUDO -u "${SERVICE_USER}" "${VENV}/bin/pip" install --upgrade pip --quiet 2>&1 | tail -1
-        $SUDO -u "${SERVICE_USER}" "${VENV}/bin/pip" install "litellm[proxy]==1.83.0" --quiet 2>&1 | tail -1 \
+        $SUDO -u "${SERVICE_USER}" "${VENV}/bin/pip" install "litellm[proxy]==${REQUIRED_LITELLM_VERSION}" --quiet 2>&1 | tail -1 \
             || { echo -e "  ${RED}✗${NC} litellm pip install failed"; exit 1; }
         LITELLM_BIN="${VENV}/bin/litellm"
         [ -x "$LITELLM_BIN" ] || { echo -e "  ${RED}✗${NC} venv bootstrap completed but ${LITELLM_BIN} not executable"; exit 1; }
-        echo -e "  ${GREEN}✓${NC} litellm 1.83.0 installed in ${VENV}"
+        echo -e "  ${GREEN}✓${NC} litellm ${REQUIRED_LITELLM_VERSION} installed in ${VENV}"
     fi
     $SUDO tee /etc/systemd/system/clawnex-litellm.service > /dev/null <<UNIT
 [Unit]

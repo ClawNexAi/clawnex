@@ -154,7 +154,7 @@ For architecture details, start with the [high-level architecture](docs/02-high-
 - **Next.js 16** App Router
 - **React 18**
 - **SQLite** with `better-sqlite3`, WAL mode, migrations, and retention controls
-- **LiteLLM 1.83.0** as the upstream proxy
+- **LiteLLM 1.84.10** as the upstream proxy
 - **TypeScript** across the app and API layer
 - **Python** for LiteLLM callback logging and related service utilities
 - **Tailwind CSS** and a self-hosted UI/font asset model

@@ -340,7 +340,7 @@ export const WATCHER_STATUS_DEMO = {
 export const INFRA_DEMO = {
   services: [
     { id: "openclaw", name: "OpenClaw Gateway", status: "online", port: 8200, version: "1.4.2", latency_ms: 12, uptime: 1843200 },
-    { id: "litellm", name: "LiteLLM Proxy", status: "online", port: 4001, version: "1.83.0", latency_ms: 8, uptime: 1843200 },
+    { id: "litellm", name: "LiteLLM Proxy", status: "online", port: 4001, version: "1.84.10", latency_ms: 8, uptime: 1843200 },
     { id: "clawkeeper", name: "Host Security Scanner", status: "online", port: null, version: "0.6.1", latency_ms: 0, uptime: 7200 },
     { id: "dashboard", name: "ClawNex Dashboard", status: "online", port: 5001, version: "0.10.0-alpha", latency_ms: 4, uptime: 7200 },
     { id: "shield", name: "Prompt Shield Engine", status: "online", port: null, version: "0.10.0-alpha", latency_ms: 0, uptime: 7200 },
@@ -440,7 +440,7 @@ export const TRUST_AUDIT_DEMO = {
     { id: "TA-11", rule: "Anomaly detection", level: 4, status: "pass", evidence: "Token-burn correlation engine active; 3 alerts in 24h.", confidence: "high", severity: "MEDIUM" },
     { id: "TA-12", rule: "Lateral movement detection", level: 4, status: "partial", evidence: "Cross-agent tool delegation tracked; cross-fleet not yet wired.", confidence: "low", severity: "HIGH" },
     { id: "TA-13", rule: "Cryptographic posture", level: 5, status: "pass", evidence: "TLS 1.3 enforced; cert auto-rotation healthy on 7/8 instances.", confidence: "high", severity: "HIGH" },
-    { id: "TA-14", rule: "Supply-chain integrity", level: 5, status: "fail", evidence: "litellm@1.83.0 pinned but lockfile drift on 2 deps.", confidence: "high", severity: "HIGH" },
+    { id: "TA-14", rule: "Supply-chain integrity", level: 5, status: "fail", evidence: "litellm@1.84.10 pinned but lockfile drift on 2 deps.", confidence: "high", severity: "HIGH" },
     { id: "TA-15", rule: "Compliance evidence", level: 5, status: "partial", evidence: "SOC 2 evidence at 78% coverage; gaps in change-management log.", confidence: "medium", severity: "MEDIUM" },
   ],
 };

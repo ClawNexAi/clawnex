@@ -1,5 +1,5 @@
 """
-ClawNex Logger — CustomLogger for LiteLLM 1.83.0
+ClawNex Logger — CustomLogger for LiteLLM 1.84.10
 Scans every LLM call through ClawNex's shield and logs to proxy_traffic.
 
 Capabilities:
@@ -251,11 +251,11 @@ class ClawNexLogger(CustomLogger):
         return response
 
     async def async_log_success_event(self, kwargs, response_obj, start_time, end_time):
-        """Async version — called by LiteLLM 1.83.0 proxy."""
+        """Async version — called by LiteLLM 1.84.10 proxy."""
         self.log_success_event(kwargs, response_obj, start_time, end_time)
 
     async def async_log_failure_event(self, kwargs, response_obj, start_time, end_time):
-        """Async version — called by LiteLLM 1.83.0 proxy."""
+        """Async version — called by LiteLLM 1.84.10 proxy."""
         self.log_failure_event(kwargs, response_obj, start_time, end_time)
 
     def log_success_event(self, kwargs, response_obj, start_time, end_time):

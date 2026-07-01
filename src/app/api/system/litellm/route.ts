@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isRbacEnabled, requireSession, requirePermission, getOperatorFromRequest } from '@/lib/rbac/guard';
 import { requireLocalhost } from "@/lib/middleware/localhost-guard";
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync, execSync, spawn } from "node:child_process";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import { run, getDb } from "@/lib/db/index";
@@ -68,6 +68,22 @@ function sudoSystemdUnavailable(action: "start" | "stop" | "restart") {
   }, { status: 503 });
 }
 
+function stopPortListener(port: number): void {
+  try {
+    const output = execFileSync("lsof", ["-ti", `:${port}`], {
+      encoding: "utf8",
+      timeout: 5000,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    for (const pidText of output.split(/\s+/).filter(Boolean)) {
+      const pid = Number(pidText);
+      if (Number.isInteger(pid) && pid > 0) {
+        try { process.kill(pid, "SIGTERM"); } catch {}
+      }
+    }
+  } catch {}
+}
+
 export async function POST(request: NextRequest) {
   if (isRbacEnabled()) {
     const auth = requireSession(request);
@@ -103,7 +119,7 @@ export async function POST(request: NextRequest) {
         }
       } else {
         try {
-          execSync(`kill $(lsof -ti :${port}) 2>/dev/null`, { timeout: 5000 });
+          stopPortListener(port);
         } catch {}
       }
       try { run(`INSERT INTO audit_log (id, actor, action, resource_type, resource_id, detail, source, created_at) VALUES (?, ?, 'litellm_stop', 'system', NULL, 'LiteLLM proxy stopped', 'dashboard', datetime('now'))`, [require("crypto").randomUUID(), actor]); } catch {}
@@ -152,7 +168,7 @@ export async function POST(request: NextRequest) {
       if (!usedSystemd) {
         // Stop first if restarting
         if (action === "restart") {
-          try { execSync(`kill $(lsof -ti :${port}) 2>/dev/null`, { timeout: 5000 }); } catch {}
+          stopPortListener(port);
           await new Promise(r => setTimeout(r, 2000));
         }
 
@@ -176,7 +192,7 @@ export async function POST(request: NextRequest) {
             execSync("python3 -c 'import litellm'", { timeout: 5000 });
             litellmCmd = "python3 -m litellm";
           } catch {
-            return NextResponse.json({ ok: false, error: "LiteLLM not found — install with: pip install litellm[proxy]==1.83.0" }, { status: 400 });
+            return NextResponse.json({ ok: false, error: "LiteLLM not found — install with: pip install litellm[proxy]==1.84.10" }, { status: 400 });
           }
         }
 
@@ -184,10 +200,25 @@ export async function POST(request: NextRequest) {
         if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
 
         try {
-          execSync(`cd "${installDir}" && nohup ${litellmCmd} --config litellm/config.yaml --host 127.0.0.1 --port ${port} > logs/litellm.log 2>&1 &`, {
-            timeout: 5000,
-            shell: "/bin/bash",
-          });
+          const logFd = fs.openSync(path.join(logDir, "litellm.log"), "a");
+          try {
+            const [command, ...args] = litellmCmd === "python3 -m litellm"
+              ? ["python3", "-m", "litellm"]
+              : [litellmCmd];
+            const child = spawn(command, [
+              ...args,
+              "--config", "litellm/config.yaml",
+              "--host", "127.0.0.1",
+              "--port", String(port),
+            ], {
+              cwd: installDir,
+              detached: true,
+              stdio: ["ignore", logFd, logFd],
+            });
+            child.unref();
+          } finally {
+            try { fs.closeSync(logFd); } catch {}
+          }
         } catch {}
       }
 

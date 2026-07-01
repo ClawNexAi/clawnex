@@ -10,13 +10,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/guard';
 import { requireLocalhost } from "@/lib/middleware/localhost-guard";
 import { getSetting, setSetting } from "@/lib/services/config-service";
+import { sanitizeLogField } from "@/lib/security/log-sanitize";
 
 export const runtime = "nodejs";
 export const dynamic = 'force-dynamic';
 
 const DID_API = "https://api.d-id.com";
+const DID_ID_RE = /^[A-Za-z0-9_.:@-]{1,160}$/;
 
-async function didFetch(path: string, method: string, body?: Record<string, unknown>): Promise<Response> {
+function didPath(...segments: string[]): string {
+  return segments.map((segment) => {
+    if (!DID_ID_RE.test(segment)) {
+      throw new Error("Invalid D-ID resource identifier");
+    }
+    return encodeURIComponent(segment);
+  }).join("/");
+}
+
+async function didFetch(pathname: string, method: string, body?: Record<string, unknown>): Promise<Response> {
   const apiKey = getSetting("did_api_key");
   if (!apiKey) throw new Error("D-ID API key not configured");
 
@@ -26,7 +37,12 @@ async function didFetch(path: string, method: string, body?: Record<string, unkn
   };
   if (body) headers["Content-Type"] = "application/json";
 
-  return fetch(`${DID_API}${path}`, {
+  const url = new URL(pathname, DID_API);
+  if (url.origin !== DID_API) {
+    throw new Error("Invalid D-ID request target");
+  }
+
+  return fetch(url, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
@@ -87,8 +103,9 @@ export async function POST(request: NextRequest) {
         const res = await didFetch("/agents", "POST", agentBody);
         if (!res.ok) {
           const err = await res.text();
-          console.error("[D-ID] Create agent failed:", res.status, err);
-          return NextResponse.json({ error: `D-ID error: ${res.status}`, detail: err }, { status: 502 });
+          const detail = sanitizeLogField(err, 500);
+          console.error("[D-ID] Create agent failed:", { status: res.status, detail });
+          return NextResponse.json({ error: `D-ID error: ${res.status}`, detail }, { status: 502 });
         }
 
         const data = await res.json();
@@ -105,11 +122,12 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: "No D-ID agent created. Create one first." }, { status: 400 });
         }
 
-        const res = await didFetch(`/agents/${agentId}/streams`, "POST", {});
+        const res = await didFetch(`/${didPath("agents", agentId, "streams")}`, "POST", {});
         if (!res.ok) {
           const err = await res.text();
-          console.error("[D-ID] Create stream failed:", res.status, err);
-          return NextResponse.json({ error: `D-ID stream error: ${res.status}`, detail: err }, { status: 502 });
+          const detail = sanitizeLogField(err, 500);
+          console.error("[D-ID] Create stream failed:", { status: res.status, detail });
+          return NextResponse.json({ error: `D-ID stream error: ${res.status}`, detail }, { status: 502 });
         }
 
         const data = await res.json();
@@ -128,12 +146,14 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: "Missing agent_id or stream_id" }, { status: 400 });
         }
 
-        const res = await didFetch(`/agents/${agentId}/streams/${stream_id}/sdp`, "POST", {
+        const res = await didFetch(`/${didPath("agents", agentId, "streams", stream_id, "sdp")}`, "POST", {
           answer,
         });
         if (!res.ok) {
           const err = await res.text();
-          return NextResponse.json({ error: `D-ID SDP error: ${res.status}`, detail: err }, { status: 502 });
+          const detail = sanitizeLogField(err, 500);
+          console.error("[D-ID] SDP failed:", { status: res.status, detail });
+          return NextResponse.json({ error: `D-ID SDP error: ${res.status}`, detail }, { status: 502 });
         }
 
         return NextResponse.json({ ok: true });
@@ -156,7 +176,7 @@ export async function POST(request: NextRequest) {
           .trim()
           .slice(0, 3000);
 
-        const res = await didFetch(`/agents/${agentId}/streams/${stream_id}`, "POST", {
+        const res = await didFetch(`/${didPath("agents", agentId, "streams", stream_id)}`, "POST", {
           script: {
             type: "text",
             input: clean,
@@ -165,7 +185,9 @@ export async function POST(request: NextRequest) {
 
         if (!res.ok) {
           const err = await res.text();
-          return NextResponse.json({ error: `D-ID speak error: ${res.status}`, detail: err }, { status: 502 });
+          const detail = sanitizeLogField(err, 500);
+          console.error("[D-ID] Speak failed:", { status: res.status, detail });
+          return NextResponse.json({ error: `D-ID speak error: ${res.status}`, detail }, { status: 502 });
         }
 
         return NextResponse.json({ ok: true });
@@ -178,7 +200,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ ok: true }); // Graceful no-op
         }
 
-        await didFetch(`/agents/${agentId}/streams/${stream_id}`, "DELETE").catch(() => {});
+        await didFetch(`/${didPath("agents", agentId, "streams", stream_id)}`, "DELETE").catch(() => {});
         return NextResponse.json({ ok: true });
       }
 
@@ -186,7 +208,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
     }
   } catch (err) {
-    console.error("[D-ID API] Error:", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : "D-ID proxy error" }, { status: 500 });
+    const detail = sanitizeLogField(err instanceof Error ? err.message : err);
+    console.error("[D-ID API] Error:", { detail });
+    return NextResponse.json({ error: detail || "D-ID proxy error" }, { status: 500 });
   }
 }

@@ -13,8 +13,9 @@
  * Why a sidecar instead of JSON comments:
  *   OpenClaw uses `JSON.parse` — comments would break it. The sidecar
  *   at `~/.clawnex-routing-managed.json` records every key path we
- *   wrote, the SHA256 of each value at write time, ClawNex version,
- *   OpenClaw version, and timestamp. Revert reads the sidecar and
+ *   wrote, a non-secret SHA-256 fingerprint of each value at write time,
+ *   ClawNex version, OpenClaw version, and timestamp. Revert reads the
+ *   sidecar and
  *   removes only the paths whose current values still match the
  *   recorded SHAs — operator edits made after the wire are preserved.
  *
@@ -122,6 +123,9 @@ export interface RevertResult {
 // ---------------------------------------------------------------------------
 
 function sha256(value: unknown): string {
+  // Non-secret integrity fingerprint for app-managed OpenClaw routing slots.
+  // This is intentionally stable across ClawNex upgrades so existing sidecars
+  // remain readable and reversible.
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 

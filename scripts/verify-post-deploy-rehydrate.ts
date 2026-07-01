@@ -17,7 +17,9 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as os from "node:os";
 import Database from "better-sqlite3";
+import YAML from "yaml";
 import { syncProvidersToYaml, PLACEHOLDER_MODEL_NAME } from "../src/lib/litellm/sync";
 
 const ROOT = process.cwd();
@@ -234,7 +236,15 @@ console.log("\n[4b] tsx is pinned exactly in package.json + package-lock.json");
 // Section 5 — functional tests against in-memory DB (real lib, not mocks)
 // ---------------------------------------------------------------------------
 
-const tmp = path.join("/tmp", `verify-rehydrate-${Date.now()}-${process.pid}.yaml`);
+function makeTempConfigPath(): { dir: string; file: string } {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "verify-rehydrate-"));
+  return { dir, file: path.join(dir, "config.yaml") };
+}
+
+function removeTempConfig(temp: { dir: string }): void {
+  fs.rmSync(temp.dir, { recursive: true, force: true });
+}
+
 function freshDb(): Database.Database {
   const db = new Database(":memory:");
   db.exec(`
@@ -253,26 +263,28 @@ function freshDb(): Database.Database {
 
 console.log("\n[5a] zero providers → placeholder + placeholder_only=true");
 {
+  const tmp = makeTempConfigPath();
   const db = freshDb();
-  const result = syncProvidersToYaml({ db, configPath: tmp });
+  const result = syncProvidersToYaml({ db, configPath: tmp.file });
   assert(result.provider_count === 0, `provider_count = 0 (got ${result.provider_count})`);
   assert(result.placeholder_only === true, `placeholder_only = true (got ${result.placeholder_only})`);
   assert(result.model_names.includes(PLACEHOLDER_MODEL_NAME), `model_names contains placeholder`);
   assert(result.wrote_config === true, `wrote_config = true`);
-  assert(result.config_path === tmp, `config_path echoed back`);
-  const yaml = fs.readFileSync(tmp, "utf-8");
+  assert(result.config_path === tmp.file, `config_path echoed back`);
+  const yaml = fs.readFileSync(tmp.file, "utf-8");
   assert(yaml.includes(PLACEHOLDER_MODEL_NAME), `yaml on disk contains placeholder model_name`);
   db.close();
-  fs.unlinkSync(tmp);
+  removeTempConfig(tmp);
 }
 
 console.log("\n[5b] active OpenRouter provider → real entries + placeholder_only=false");
 {
+  const tmp = makeTempConfigPath();
   const db = freshDb();
   const activeApiKey = "redaction-fixture-api-key";
   db.prepare("INSERT INTO config_providers (id,name,type,base_url,api_key,is_active) VALUES (?,?,?,?,?,?)")
     .run("p-or", "OpenRouter", "openrouter", "https://openrouter.ai/api/v1", activeApiKey, 1);
-  const result = syncProvidersToYaml({ db, configPath: tmp });
+  const result = syncProvidersToYaml({ db, configPath: tmp.file });
   assert(result.provider_count === 1, `provider_count = 1 (got ${result.provider_count})`);
   assert(result.placeholder_only === false, `placeholder_only = false (got ${result.placeholder_only})`);
   assert(result.model_names.includes("openrouter/auto"), `model_names contains openrouter/auto`);
@@ -281,35 +293,41 @@ console.log("\n[5b] active OpenRouter provider → real entries + placeholder_on
   const resultStr = JSON.stringify(result);
   assert(!resultStr.includes(activeApiKey), `SyncResult does NOT leak api_key`);
   // Yaml on disk DOES contain api_key (litellm needs it) — verifies the write happened
-  const yaml = fs.readFileSync(tmp, "utf-8");
+  const yaml = fs.readFileSync(tmp.file, "utf-8");
   assert(yaml.includes("openrouter/auto"), `yaml has openrouter/auto entry`);
-  assert(yaml.includes("https://openrouter.ai/api/v1"), `yaml has base_url`);
+  const parsedYaml = YAML.parse(yaml) as { model_list?: Array<{ litellm_params?: { api_base?: string } }> };
+  assert(
+    parsedYaml.model_list?.some(entry => entry.litellm_params?.api_base === "https://openrouter.ai/api/v1"),
+    `yaml has exact base_url`,
+  );
   db.close();
-  fs.unlinkSync(tmp);
+  removeTempConfig(tmp);
 }
 
 console.log("\n[5c] OpenClaw-only → still classified as no-real-providers");
 {
+  const tmp = makeTempConfigPath();
   const db = freshDb();
   db.prepare("INSERT INTO config_providers (id,name,type,base_url,api_key,is_active) VALUES (?,?,?,?,?,?)")
     .run("openclaw", "OpenClaw Gateway", "openclaw", "ws://127.0.0.1:18789", "", 1);
-  const result = syncProvidersToYaml({ db, configPath: tmp });
+  const result = syncProvidersToYaml({ db, configPath: tmp.file });
   assert(result.provider_count === 0, `provider_count excludes OpenClaw gateway (got ${result.provider_count})`);
   assert(result.placeholder_only === true, `placeholder_only = true when only OpenClaw exists`);
   db.close();
-  fs.unlinkSync(tmp);
+  removeTempConfig(tmp);
 }
 
 console.log("\n[5d] inactive provider → ignored");
 {
+  const tmp = makeTempConfigPath();
   const db = freshDb();
   db.prepare("INSERT INTO config_providers (id,name,type,base_url,api_key,is_active) VALUES (?,?,?,?,?,?)")
     .run("p-disabled", "OldOpenRouter", "openrouter", "https://openrouter.ai/api/v1", "sk-disabled", 0);
-  const result = syncProvidersToYaml({ db, configPath: tmp });
+  const result = syncProvidersToYaml({ db, configPath: tmp.file });
   assert(result.provider_count === 0, `inactive provider not counted`);
   assert(result.placeholder_only === true, `inactive provider produces placeholder-only`);
   db.close();
-  fs.unlinkSync(tmp);
+  removeTempConfig(tmp);
 }
 
 // ---------------------------------------------------------------------------

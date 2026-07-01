@@ -19,7 +19,7 @@
  * pricing data without rebuilding the ClawNex package.
  *
  * Safety: the sync endpoint pulls from the GitHub tag matching the currently
- * pinned LITELLM_VERSION (default 1.83.0), NOT `main`. This keeps the supply
+ * pinned LITELLM_VERSION (default 1.84.10), NOT `main`. This keeps the supply
  * chain story identical to the pinned LiteLLM binary itself — only what the
  * ClawNex team has approved.
  *
@@ -256,9 +256,9 @@ export function ensureSeeded(): void {
 // GitHub sync
 // ---------------------------------------------------------------------------
 
-/** Resolve the GitHub tag to fetch. Prefers LITELLM_VERSION env, falls back to 1.83.0. */
+/** Resolve the GitHub tag to fetch. Prefers LITELLM_VERSION env, falls back to 1.84.10. */
 function getLiteLLMTag(): string {
-  const pinned = process.env.LITELLM_VERSION?.trim() || '1.83.0';
+  const pinned = process.env.LITELLM_VERSION?.trim() || '1.84.10';
   // LiteLLM publishes pricing files on `v<version>-nightly` tags for every
   // release (including patch versions like 1.82.6). The plain `v<version>` tag
   // frequently doesn't carry the pricing JSON and returns 404. Always prefer
@@ -402,7 +402,7 @@ export function getStatus(): PricingStatus {
     isStale,
     autoSyncEnabled,
     autoSyncIntervalHours,
-    pinnedLiteLLMVersion: process.env.LITELLM_VERSION?.trim() || '1.83.0',
+    pinnedLiteLLMVersion: process.env.LITELLM_VERSION?.trim() || '1.84.10',
     everSynced,
   };
 }

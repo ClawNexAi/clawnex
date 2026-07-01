@@ -46,6 +46,13 @@ const nextConfig = {
     ];
   },
   serverExternalPackages: ['better-sqlite3', 'ws', 'bufferutil', 'utf-8-validate'],
+  // Next 16.2.x can race while collecting standalone trace manifests when
+  // static-generation workers are writing route .nft.json files in parallel.
+  // Keep production builds deterministic; installers and CI value reliability
+  // over shaving a few seconds off the build.
+  experimental: {
+    cpus: 1,
+  },
   // DAST 2026-05-15 H3: Next.js standalone output traces every file
   // reachable from the project root and copies them into
   // .next/standalone/. The dev/test SQLite DB (clawnex.db + its

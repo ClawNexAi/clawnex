@@ -1,7 +1,8 @@
 # ClawNex LiteLLM Proxy Dependencies
 # ALL versions pinned — do NOT upgrade without explicit verification
-# Last verified: 2026-04-01
-# SECURITY: litellm versions after 1.82.6 were compromised (supply chain attack). 1.83.0 is verified safe.
+# Last verified: 2026-07-01
+# SECURITY: 1.84.10 is the verified patched 1.84.x line for the 2026 LiteLLM
+# proxy advisories tracked by Dependabot.
 
-litellm[proxy]==1.83.0
+litellm[proxy]==1.84.10
 httpx==0.28.1

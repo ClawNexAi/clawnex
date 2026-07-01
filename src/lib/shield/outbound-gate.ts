@@ -24,6 +24,7 @@
 
 import { NextResponse } from "next/server";
 import { outboundScan } from "./scanner";
+import { sanitizeLogField } from "@/lib/security/log-sanitize";
 
 export type OutboundShieldDecision =
   | { ok: true }
@@ -34,19 +35,21 @@ export function outboundShieldGate(
   blockMode: string,
   source: string,
 ): OutboundShieldDecision {
+  const safeSource = sanitizeLogField(source, 120);
   try {
     const r = outboundScan(responseContent);
     if (r.verdict === "BLOCK") {
       if (blockMode === "on" || blockMode === "block") {
         console.warn(
-          `[outbound-gate] BLOCK from ${source}: score=${r.score} top=${r.detections[0]?.id || "none"}`,
+          "[outbound-gate] BLOCK",
+          { source: safeSource, score: r.score, top: r.detections[0]?.id || "none" },
         );
         return {
           ok: false,
           response: NextResponse.json(
             {
               error: "Response blocked by ClawNex Shield (outbound).",
-              source,
+              source: safeSource,
               score: r.score,
               detections: r.stats,
             },
@@ -54,17 +57,20 @@ export function outboundShieldGate(
           ),
         };
       }
-      console.warn(`[outbound-gate] BLOCK (monitor-only) from ${source}: score=${r.score}`);
+      console.warn("[outbound-gate] BLOCK monitor-only", { source: safeSource, score: r.score });
     }
     return { ok: true };
   } catch (err) {
-    console.error(`[outbound-gate] exception on ${source} — failing CLOSED:`, err);
+    console.error("[outbound-gate] exception; failing CLOSED", {
+      source: safeSource,
+      error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+    });
     return {
       ok: false,
       response: NextResponse.json(
         {
           error: "Shield scanner unavailable on response path — request blocked. Retry shortly.",
-          source,
+          source: safeSource,
         },
         { status: 503 },
       ),

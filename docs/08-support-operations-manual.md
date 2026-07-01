@@ -26,7 +26,7 @@ ClawNex consists of two services that must both be running:
 | Service | Technology | Port | Process | Start Command |
 |---------|-----------|------|---------|--------------|
 | **Dashboard** | Node.js / Next.js | 5001 | `node` | `cd ~/sentinel && npm run dev` |
-| **LiteLLM Proxy** | Python / LiteLLM 1.83.0 | 4001 | `python3` | `cd ~/sentinel/litellm && bash start.sh` |
+| **LiteLLM Proxy** | Python / LiteLLM 1.84.10 | 4001 | `python3` | `cd ~/sentinel/litellm && bash start.sh` |
 
 **Supporting infrastructure:**
 
@@ -365,7 +365,7 @@ kill $(lsof -ti :4001) 2>/dev/null
 cd ~/sentinel/litellm
 source venv/bin/activate
 python3 -c "import litellm; print(litellm.version)"
-# Should print: 1.83.0
+# Should print: 1.84.10
 
 # 4. Check for import errors
 python3 -c "from clawnex_logger import ClawNexLogger; print('OK')"
@@ -381,7 +381,7 @@ echo $CLAWNEX_API_URL
 **Common causes:**
 - Port conflict → kill stale process
 - venv not activated → `source venv/bin/activate`
-- Missing dependency → `pip install 'litellm[proxy]==1.83.0' httpx==0.28.1`
+- Missing dependency → `pip install 'litellm[proxy]==1.84.10' httpx==0.28.1`
 - Wrong Python version → verify `python3 --version` is 3.12.x
 - Environment variables not set → check `start.sh` exports
 
@@ -897,7 +897,7 @@ bash ~/sentinel/scripts/verify.sh
 - Database file exists and passes SQLite integrity check
 - Watchdog cron entry is installed
 - File permissions on sensitive files (`.env.local`, `sentinel.db`, `start.sh`)
-- LiteLLM version is pinned to 1.83.0
+- LiteLLM version is pinned to 1.84.10
 - Session watcher path is configured and accessible
 
 **When to run:**
@@ -980,13 +980,13 @@ curl -s http://127.0.0.1:4001/health
 | WAL size | `ls -lh ~/sentinel/sentinel.db-wal` | Under 50MB |
 | Disk space | `df -h /` | Sufficient free space |
 | npm audit | `cd ~/sentinel && npm audit` | No critical vulnerabilities |
-| Python packages | `cd ~/sentinel/litellm && source venv/bin/activate && pip list` | litellm==1.83.0 |
+| Python packages | `cd ~/sentinel/litellm && source venv/bin/activate && pip list` | litellm==1.84.10 |
 
 ### 9.3 Monthly Checks
 
 | Check | How | Expected |
 |-------|-----|----------|
-| LiteLLM version | Verify still pinned to 1.83.0 | Do NOT upgrade |
+| LiteLLM version | Verify still pinned to 1.84.10 | Change only through a security-reviewed pin bump |
 | Backup test | Restore a backup to temp location, verify integrity | Backup is valid |
 | Log rotation | Check watchdog.log size, truncate if > 10MB | `> ~/sentinel/logs/watchdog.log` |
 | Retention review | Check if retention periods are appropriate | Adjust if needed |
@@ -1013,7 +1013,7 @@ cd ~/sentinel/litellm && nohup bash start.sh > ~/sentinel/logs/litellm.log 2>&1 
 3. Read the changelog
 
 **Dependency updates:**
-- **NEVER** update LiteLLM from 1.83.0 — supply chain compromise affected intermediate versions
+- **Do not ad hoc upgrade LiteLLM from 1.84.10** — change the pin only through a security-reviewed update.
 - All other dependency updates require explicit approval
 - After updating: `rm -rf .next`, restart, verify health
 
@@ -1068,7 +1068,7 @@ ls -la ~/sentinel/.env.local ~/sentinel/sentinel.db ~/sentinel/litellm/start.sh
 
 - All Node.js dependencies are pinned to exact versions in `package.json`
 - All Python dependencies are pinned in `requirements.txt`
-- **LiteLLM 1.83.0 is the current verified-safe version** — versions after 1.82.6 up to 1.83.0 were compromised
+- **LiteLLM 1.84.10 is the current verified-safe version** — versions after 1.82.6 up to 1.84.10 were compromised
 - Never run `npm update`, `pip install --upgrade`, or any auto-update command
 - Every dependency change requires manual verification and approval
 
@@ -1225,7 +1225,7 @@ The uninstall step stops services, removes the watchdog cron entry, and deletes 
 - Database corruption detected (integrity check fails)
 - Unknown process bound on ports 5001 or 4001
 - Credential exposure suspected
-- LiteLLM version changed from 1.83.0 (supply chain risk)
+- LiteLLM version changed from 1.84.10 (supply chain risk)
 - RBAC permission bypass or unexpected admin promotion
 - Any failed backup for 2 consecutive days
 
@@ -1277,7 +1277,7 @@ Every runbook uses the same structure: Purpose, Prerequisites, Steps, Verificati
 2. Archive the database: `curl -X POST http://127.0.0.1:5001/api/system/archive`
 3. Copy env file: `cp ~/sentinel/.env.local ~/sentinel/.env.local.pre-change`
 4. Stop services: `sudo kill $(lsof -ti :5001) $(lsof -ti :4001) 2>/dev/null; sleep 3`
-5. Apply change (git pull, dependency bump, config edit) — never touch LiteLLM 1.83.0 pin
+5. Apply change (git pull, dependency bump, config edit) — change the LiteLLM 1.84.10 pin only as part of a reviewed security update
 6. Clear build cache: `rm -rf ~/sentinel/.next`
 7. Install dependencies: `cd ~/sentinel && npm ci`
 8. Rebuild: `cd ~/sentinel && npm run build`

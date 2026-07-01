@@ -735,7 +735,7 @@ export const c2Rules: PatternRule[] = [
   },
   {
     id: 'C2-NGROK',
-    pattern: /(?:ngrok\.io|ngrok-free\.app)/i,
+    pattern: /(^|[^\w-])(?:[\w-]+\.)*(?:ngrok\.io|ngrok-free\.app)(?=$|[^\w-])/i,
     title: 'ngrok tunnel (exfil risk)',
     severity: 'HIGH',
     confidence: 0.85,
@@ -745,7 +745,7 @@ export const c2Rules: PatternRule[] = [
   },
   {
     id: 'C2-PIPEDREAM',
-    pattern: /pipedream\.net/i,
+    pattern: /(^|[^\w-])(?:[\w-]+\.)*pipedream\.net(?=$|[^\w-])/i,
     title: 'Pipedream (known exfil)',
     severity: 'HIGH',
     confidence: 0.90,
@@ -755,7 +755,7 @@ export const c2Rules: PatternRule[] = [
   },
   {
     id: 'C2-REQUESTBIN',
-    pattern: /requestbin\.com/i,
+    pattern: /(^|[^\w-])(?:[\w-]+\.)*requestbin\.com(?=$|[^\w-])/i,
     title: 'RequestBin (known exfil)',
     severity: 'HIGH',
     confidence: 0.90,
@@ -765,7 +765,7 @@ export const c2Rules: PatternRule[] = [
   },
   {
     id: 'C2-HOOKBIN',
-    pattern: /hookbin\.com/i,
+    pattern: /(^|[^\w-])(?:[\w-]+\.)*hookbin\.com(?=$|[^\w-])/i,
     title: 'HookBin (known exfil)',
     severity: 'HIGH',
     confidence: 0.90,
@@ -775,7 +775,7 @@ export const c2Rules: PatternRule[] = [
   },
   {
     id: 'C2-BURP',
-    pattern: /burpcollaborator\.net/i,
+    pattern: /(^|[^\w-])(?:[\w-]+\.)*burpcollaborator\.net(?=$|[^\w-])/i,
     title: 'Burp Collaborator (pentest C2)',
     severity: 'HIGH',
     confidence: 0.90,
@@ -785,7 +785,7 @@ export const c2Rules: PatternRule[] = [
   },
   {
     id: 'C2-INTERACTSH',
-    pattern: /interact\.sh/i,
+    pattern: /(^|[^\w-])(?:[\w-]+\.)*interact\.sh(?=$|[^\w-])/i,
     title: 'interact.sh (OOB exfil)',
     severity: 'HIGH',
     confidence: 0.90,
@@ -795,7 +795,7 @@ export const c2Rules: PatternRule[] = [
   },
   {
     id: 'C2-OAST',
-    pattern: /oast\.fun/i,
+    pattern: /(^|[^\w-])(?:[\w-]+\.)*oast\.fun(?=$|[^\w-])/i,
     title: 'oast.fun (OOB testing)',
     severity: 'HIGH',
     confidence: 0.85,
@@ -805,7 +805,7 @@ export const c2Rules: PatternRule[] = [
   },
   {
     id: 'C2-CANARY',
-    pattern: /canarytokens\.com/i,
+    pattern: /(^|[^\w-])(?:[\w-]+\.)*canarytokens\.com(?=$|[^\w-])/i,
     title: 'Canary Tokens',
     severity: 'MEDIUM',
     confidence: 0.75,
@@ -815,7 +815,7 @@ export const c2Rules: PatternRule[] = [
   },
   {
     id: 'C2-PASTEBIN',
-    pattern: /pastebin\.com\/raw\//i,
+    pattern: /(^|[^\w.-])pastebin\.com\/raw\//i,
     title: 'Pastebin raw fetch',
     severity: 'MEDIUM',
     confidence: 0.70,

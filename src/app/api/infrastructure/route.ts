@@ -15,6 +15,7 @@ import { getPaperclipStatus, startPaperclipPoller } from "@/lib/connectors/paper
 import { getAutensaStatus, startAutensaPoller } from "@/lib/connectors/autensa-connector";
 import { queryAll, run } from "@/lib/db/index";
 import { checkLiteLLM as checkLiteLLMImpl } from "@/lib/health/litellm-check";
+import { assertSafeProviderHttpFetchTarget, providerEndpointUrl } from "@/lib/services/config-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,12 +42,24 @@ interface ServiceCheck {
 /**
  * Basic service check — is the endpoint reachable?
  */
-async function checkService(name: string, url: string): Promise<ServiceCheck> {
+async function checkService(name: string, url: string, opts: { providerGuard?: boolean } = {}): Promise<ServiceCheck> {
   const start = performance.now();
   try {
+    if (opts.providerGuard) {
+      const safety = await assertSafeProviderHttpFetchTarget(url, `infrastructure service check ${name}`);
+      if (safety.blocked) {
+        return {
+          name,
+          url,
+          status: "offline",
+          latency: Math.round(performance.now() - start),
+          error: safety.reason || "blocked provider target",
+        };
+      }
+    }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(url, { method: "GET", signal: controller.signal, cache: "no-store" });
+    const res = await fetch(url, { method: "GET", signal: controller.signal, cache: "no-store", redirect: "error" });
     clearTimeout(timeout);
     const latency = Math.round(performance.now() - start);
     return { name, url, status: res.ok ? "online" : "degraded", latency };
@@ -205,7 +218,7 @@ export async function GET(request: NextRequest) {
         "SELECT name, base_url, type, is_active FROM config_providers WHERE is_active = 1 AND type != 'openclaw'"
       );
       for (const p of providers) {
-        serviceChecks.push(checkService(p.name, `${p.base_url}/models`));
+        serviceChecks.push(checkService(p.name, providerEndpointUrl(p.base_url, "models"), { providerGuard: true }));
       }
     } catch {}
 

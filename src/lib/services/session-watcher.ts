@@ -37,6 +37,7 @@ import { broadcast } from '../events';
 import { createAlert } from './alert-manager';
 import { logEvent } from './audit-logger';
 import { ingestEvent } from './correlation-engine';
+import { sanitizeLogField } from '../security/log-sanitize';
 import type { ShieldScanResult } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -86,6 +87,8 @@ const fileOffsets = new Map<string, number>();
 let messagesScanned = 0;
 let lastScanTime: string | null = null;
 let errorCount = 0;
+
+const OPEN_READ_NOFOLLOW = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
 
 // ---------------------------------------------------------------------------
 // Content extraction
@@ -156,7 +159,9 @@ function processEntry(entry: SessionMessage, sessionFilename: string): void {
       ? shieldScan(content, { whitelistRules: getPersistedWhitelist() })
       : outboundScan(content);
   } catch (err) {
-    console.error('[SessionWatcher] Shield scan error:', err);
+    console.error('[SessionWatcher] Shield scan error', {
+      error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+    });
     errorCount++;
     return;
   }
@@ -197,7 +202,9 @@ function processEntry(entry: SessionMessage, sessionFilename: string): void {
       ],
     );
   } catch (err) {
-    console.error('[SessionWatcher] DB write error:', err);
+    console.error('[SessionWatcher] DB write error', {
+      error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+    });
     errorCount++;
   }
 
@@ -359,22 +366,25 @@ export function initializeOffsets(): void {
   try {
     files = fs.readdirSync(sessionsDir).filter((f) => f.endsWith('.jsonl'));
   } catch (err) {
-    console.error('[SessionWatcher] Cannot read sessions directory:', err);
+    console.error('[SessionWatcher] Cannot read sessions directory', {
+      error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+    });
     return;
   }
 
   for (const file of files) {
     const fullPath = path.join(sessionsDir, file);
     try {
-      const stat = fs.statSync(fullPath);
-      const fileSize = stat.size;
-
-      // Read the tail of the file (last ~8KB) to catch recent messages
-      const tailBytes = Math.min(fileSize, 8192);
-      const startOffset = Math.max(0, fileSize - tailBytes);
-
-      const fd = fs.openSync(fullPath, 'r');
+      const fd = fs.openSync(fullPath, OPEN_READ_NOFOLLOW);
       try {
+        const stat = fs.fstatSync(fd);
+        if (!stat.isFile()) continue;
+        const fileSize = stat.size;
+
+        // Read the tail of the file (last ~8KB) to catch recent messages
+        const tailBytes = Math.min(fileSize, 8192);
+        const startOffset = Math.max(0, fileSize - tailBytes);
+
         const buffer = Buffer.alloc(tailBytes);
         fs.readSync(fd, buffer, 0, tailBytes, startOffset);
         const tailText = buffer.toString('utf-8');
@@ -392,14 +402,17 @@ export function initializeOffsets(): void {
             // Skip malformed JSON
           }
         }
+
+        // Set offset to end of file so we don't re-scan
+        fileOffsets.set(file, fileSize);
       } finally {
         fs.closeSync(fd);
       }
-
-      // Set offset to end of file so we don't re-scan
-      fileOffsets.set(file, fileSize);
     } catch (err) {
-      console.error(`[SessionWatcher] Error initializing ${file}:`, err);
+      console.error("[SessionWatcher] Error initializing file", {
+        file: sanitizeLogField(file),
+        error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+      });
       errorCount++;
     }
   }
@@ -436,7 +449,9 @@ export function pollFiles(): void {
         allFiles.push({ file: f, fullPath: path.join(sessionsDir, f), agentId: 'main' });
       }
     } catch (err) {
-      console.error('[SessionWatcher] Cannot read sessions directory:', err);
+      console.error('[SessionWatcher] Cannot read sessions directory', {
+        error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+      });
       errorCount++;
       return;
     }
@@ -453,11 +468,18 @@ export function pollFiles(): void {
 
   for (const { file, fullPath } of allFiles) {
 
+    let fd: number;
     let stat: fs.Stats;
     try {
-      stat = fs.statSync(fullPath);
+      fd = fs.openSync(fullPath, OPEN_READ_NOFOLLOW);
+      stat = fs.fstatSync(fd);
+      if (!stat.isFile()) {
+        fs.closeSync(fd);
+        fileOffsets.delete(file);
+        continue;
+      }
     } catch {
-      // File may have been deleted between readdir and stat
+      // File may have been deleted between readdir and open
       fileOffsets.delete(file);
       continue;
     }
@@ -468,6 +490,7 @@ export function pollFiles(): void {
     if (lastOffset === undefined) {
       // New file — start from end (don't scan old content for new files found during polling)
       fileOffsets.set(file, currentSize);
+      fs.closeSync(fd);
       continue;
     }
 
@@ -477,17 +500,12 @@ export function pollFiles(): void {
         // File was truncated (e.g., session reset) — reset offset
         fileOffsets.set(file, currentSize);
       }
+      fs.closeSync(fd);
       continue;
     }
 
     // Read new bytes
     const bytesToRead = currentSize - lastOffset;
-    let fd: number;
-    try {
-      fd = fs.openSync(fullPath, 'r');
-    } catch {
-      continue;
-    }
 
     try {
       const buffer = Buffer.alloc(bytesToRead);
@@ -509,7 +527,10 @@ export function pollFiles(): void {
       // Update offset
       fileOffsets.set(file, currentSize);
     } catch (err) {
-      console.error(`[SessionWatcher] Error reading ${file}:`, err);
+      console.error("[SessionWatcher] Error reading file", {
+        file: sanitizeLogField(file),
+        error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+      });
       errorCount++;
     } finally {
       fs.closeSync(fd);
@@ -542,7 +563,9 @@ export function getRecentScans(limit = 50): Record<string, unknown>[] {
       [limit],
     );
   } catch (err) {
-    console.error('[SessionWatcher] Recent scans query error:', err);
+    console.error('[SessionWatcher] Recent scans query error', {
+      error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
+    });
     return [];
   }
 }

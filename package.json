@@ -4,13 +4,13 @@
   "private": true,
   "description": "AI Agent Fleet Security Operations Center — inline Prompt Shield, fleet-wide visibility, immutable audit, RBAC, and scheduled compliance reporting for AI agent fleets.",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/clawnexai/clawnex#readme",
+  "homepage": "https://github.com/ClawNexAi/clawnex#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/clawnexai/clawnex.git"
+    "url": "https://github.com/ClawNexAi/clawnex.git"
   },
   "bugs": {
-    "url": "https://github.com/clawnexai/clawnex/issues"
+    "url": "https://github.com/ClawNexAi/clawnex/issues"
   },
   "author": "ClawNex Maintainers <contact@clawnexai.com>",
   "keywords": [
@@ -34,6 +34,7 @@
     "start": "next start -H 127.0.0.1",
     "start:prod": "node .next/standalone/server.js",
     "lint": "tsc --noEmit --pretty false --incremental false",
+    "verify:security-remediation": "tsx scripts/verify-github-security-remediation.ts",
     "sbom": "npm sbom --sbom-format=cyclonedx --omit=dev > sbom.json"
   },
   "dependencies": {
