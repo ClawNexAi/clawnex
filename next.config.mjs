@@ -111,7 +111,13 @@ const nextConfig = {
       '**/.deploy-build.log',
     ],
   },
-  webpack: (config) => {
+  webpack: (config, { dev }) => {
+    if (!dev) {
+      // Mounted/cloud-synced volumes can make Webpack's production pack-file
+      // cache observe generated files before they are fully visible, causing
+      // intermittent ENOENT/partial JSON failures during installer builds.
+      config.cache = false;
+    }
     config.externals.push({
       'better-sqlite3': 'commonjs better-sqlite3',
       'bufferutil': 'commonjs bufferutil',
