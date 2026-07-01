@@ -97,9 +97,10 @@ async function main() {
   const cursor = queryOne<{ last_message_id: number }>("SELECT last_message_id FROM hermes_ingest_cursors LIMIT 1");
   assert.equal(cursor?.last_message_id, 2);
 
-  const event = queryOne<{ message_id: number; content_hash: string; shield_verdict: string; traffic_id: string }>(
-    "SELECT message_id, content_hash, shield_verdict, traffic_id FROM hermes_events WHERE message_id = 2",
+  const event = queryOne<{ source_id: string; message_id: number; content_hash: string; shield_verdict: string; traffic_id: string }>(
+    "SELECT source_id, message_id, content_hash, shield_verdict, traffic_id FROM hermes_events WHERE message_id = 2",
   );
+  assert.equal(event?.source_id, "hermes:profile:prod:channel:discord");
   assert.equal(event?.message_id, 2);
   assert.equal(event?.content_hash.length, 16);
   assert.equal(event?.shield_verdict, "ALLOW");

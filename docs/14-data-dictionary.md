@@ -518,7 +518,7 @@ the header ribbon.
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
-| source_id | TEXT | NO | — | Stable source identifier derived from the Hermes home path |
+| source_id | TEXT | NO | — | Stable cursor identifier derived from the Hermes home path (`hermes:home:<hash>`) |
 | home_path | TEXT | NO | — | Hermes home directory being observed |
 | last_message_id | INTEGER | NO | 0 | Highest Hermes `messages.id` processed by ClawNex |
 | last_message_timestamp | TEXT | YES | NULL | Timestamp of the last processed Hermes message |
@@ -536,7 +536,7 @@ the header ribbon.
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | id | TEXT | NO | — | Primary key (`source_id:message_id`) |
-| source_id | TEXT | NO | — | Source identifier matching `hermes_ingest_cursors.source_id` |
+| source_id | TEXT | NO | — | Stable event source identifier scoped to Hermes profile and channel (`hermes:profile:<profile>:channel:<channel>`) |
 | message_id | INTEGER | NO | — | Hermes `messages.id` |
 | session_id | TEXT | YES | NULL | Hermes session ID |
 | role | TEXT | YES | NULL | Hermes role (`user`, `assistant`, etc.) |
@@ -1490,7 +1490,7 @@ Foreign key and logical relationships across the current SQLite schema:
 | 1.10 | 2026-04-24 | ClawNex Engineering | v0.9.1/v0.9.2 sweep: documented `password_reset_tokens` (§3.19b, was missing since v0.6.1) and new `magic_link_tokens` table (§3.19c, v0.9.2). Table totals updated to 24 (22 primary + 2 ephemeral token stores). ERD FK list extended with `operator_credentials`, `password_reset_tokens`, `magic_link_tokens` → `operators` cascades. Migration history extended with entries 11 (password_reset_tokens), 12 (auth_providers column), 13 (operator_credentials), 14 (v0.9.1 adversarial review #A1 UNIQUE passkey credential_id index), 15 (v0.9.2 magic_link_tokens). New config_defaults key `auth_magic_link_enabled` referenced in §3.19c. |
 | 1.11 | 2026-05-05 | ClawNex Engineering | v0.10.0-alpha + v0.11.x-alpha. New §3.100 Policy Framework Tables — `policies` (3.100a) and `policy_rules` (3.100b) with full column specs, vendor-mutation lockdown rules, recommended indexes, and dual-key idempotent migration semantics (`policy_framework_schema_version` + `policy_framework_seed_version`). New §3.101 Token Cost FinOps Pipeline Type Surface — `NormalizedRow` (3.101a, 24 fields), `Signal` (3.101b), `AdapterResult` (3.101c) with adapter-private `signal_context` invariant, `GlossaryEntry` (3.101d). New §3.102 Alert Evidence extensions — `alerts.metadata` JSON for session-watcher source (11 fields), `audit_log.detail` JSON for `shield_review`/`shield_detected` actions (4 fields including redact()'d `payload_excerpt`). |
 | 1.12 | 2026-05-08 | ClawNex Engineering | v0.12.0 → v0.15.0-alpha: new §3.103 Mission Control + Triage Graph Type Surface — `ActionVerb` 11-value closed enum (3.103a), `SuggestedAction` shape with display formatter (3.103b), `IncidentFamily` 4-value closed enum (3.103c), Phase 5 finding shapes for the 5 newly-wired resolvers — `CorrelationFinding` / `BlastRadiusFinding` / `AuthRbacFinding` / `UpdateCveFinding` / `PolicyWarningFinding` (3.103d), full Triage Graph type set including `TriageStageId` 5-value canonical order / `TriageLinkState` 6-value taxonomy / `TriageArtifact` shape with `evidenceSnippet` + `evidenceTrail` payloads / per-family `resolverVersion` (3.103e), new theme tokens `glassPanelNested` / `glassPanelNested2` / `glassBorderCyanStrong` for the v0.14.5 Stat tile lift + opt-in `dimGlow` prop (3.103f). |
-| 1.13 | 2026-07-02 | ClawNex Engineering | v0.15.2-alpha: Added hermes_ingest_cursors and hermes_events for durable Hermes watcher state and normalized, content-hash-only Hermes scan events. |
+| 1.13 | 2026-07-02 | ClawNex Engineering | v0.15.2-alpha: Added hermes_ingest_cursors and hermes_events for durable Hermes watcher state and normalized, profile/channel-scoped, content-hash-only Hermes scan events. |
 
 ---
 

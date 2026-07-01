@@ -14,6 +14,8 @@
  */
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { v4 as uuid } from 'uuid';
 import { getHermesDb, getHermesHome, isHermesAvailable } from './hermes-db';
 import { shieldScan, outboundScan, getPersistedWhitelist } from '../shield/scanner';
@@ -63,7 +65,31 @@ let errorCount = 0;
 
 function hermesSourceId(): string {
   const homeHash = crypto.createHash('sha256').update(getHermesHome()).digest('hex').slice(0, 12);
-  return `hermes:${homeHash}`;
+  return `hermes:home:${homeHash}`;
+}
+
+function sourceSegment(value: string | null | undefined, fallback: string): string {
+  const segment = (value || fallback)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return segment || fallback;
+}
+
+function activeHermesProfileName(): string | null {
+  try {
+    const profile = fs.readFileSync(path.join(getHermesHome(), 'active_profile'), 'utf8').trim();
+    return profile || null;
+  } catch {
+    return null;
+  }
+}
+
+function hermesEventSourceId(row: HermesMessageRow): string {
+  const profile = sourceSegment(activeHermesProfileName(), 'unknown-profile');
+  const channel = sourceSegment(row.platform, 'unknown-channel');
+  return `hermes:profile:${profile}:channel:${channel}`;
 }
 
 function coerceHermesTimestamp(value: string | number | null | undefined): string | null {
@@ -126,14 +152,15 @@ function persistHermesEvent(row: HermesMessageRow, opts: {
   trafficId: string;
 }): void {
   try {
+    const eventSourceId = hermesEventSourceId(row);
     run(
       `INSERT OR REPLACE INTO hermes_events
          (id, source_id, message_id, session_id, role, direction, platform, model, content_hash,
           shield_verdict, shield_score, detections_count, traffic_id, message_timestamp, observed_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
       [
-        `${hermesSourceId()}:${row.id}`,
-        hermesSourceId(),
+        `${eventSourceId}:${row.id}`,
+        eventSourceId,
         row.id,
         row.session_id,
         row.role,
