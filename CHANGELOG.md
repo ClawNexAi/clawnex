@@ -40,7 +40,7 @@ Section ordering per release: **Added, Changed, Deprecated, Removed, Fixed, Secu
 
 ### Added
 
-- Hermes Agent diagnostics now report install state, `state.db` readability, schema validity, active profile, configured and observed channels, skill count, 24h session/message activity, watcher cadence, and Prompt Shield visibility.
+- Hermes Agent diagnostics now report install state, `state.db` readability, schema validity, active profile, configured and observed channels, skill and extracted-tool counts, 24h session/message activity, watcher cadence, and Prompt Shield visibility.
 - Hermes ingestion now persists a durable home-scoped high-water cursor in `hermes_ingest_cursors` and normalized, profile/channel-scoped, content-hash-only message scan rows in `hermes_events`.
 - Configuration, Infrastructure, Fleet, and detailed Health surfaces now use the shared Hermes diagnostics model so stale, unreadable, or partially configured Hermes installs are visible to operators.
 - Auto-detected Hermes homes can be explicitly saved from Configuration → Fleet Connectors after the diagnostic checklist is reviewed.

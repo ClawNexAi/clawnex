@@ -35,16 +35,16 @@ Each release entry below is structured against a fixed metadata contract so that
 **Version:** v0.15.2-alpha
 **Type:** Alpha patch (integration hardening + operator visibility)
 **Status:** Public release line.
-**Scope:** Makes Hermes Agent a first-class ClawNex source by adding a shared diagnostics model, durable ingestion cursor, normalized Hermes event rows, and richer dashboard surfaces for connection state, profile/channel/skill visibility, session/message activity, watcher state, and Prompt Shield visibility.
+**Scope:** Makes Hermes Agent a first-class ClawNex source by adding a shared diagnostics model, durable ingestion cursor, normalized Hermes event rows, and richer dashboard surfaces for connection state, profile/channel/skill/tool visibility, session/message activity, watcher state, and Prompt Shield visibility.
 **Upgrade Path:** Source: v0.15.1-alpha. In-place upgrade (`git pull`, `npm ci`, `npm run build`, service restart). Additive SQLite schema migration creates `hermes_ingest_cursors` and `hermes_events`.
 **Breaking Changes:** None.
 **Security Fixes:** Defense-in-depth: normalized Hermes events persist content hashes and scan metadata only; raw Hermes message bodies are not stored in the new Hermes event table.
 
 **Added:**
 
-- Shared Hermes diagnostics service reporting install state, `state.db` existence/readability, required schema tables, active profile, configured and observed channels, scanned skill count, 24h session/message counts, last activity age, watcher cadence, and Prompt Shield visibility.
+- Shared Hermes diagnostics service reporting install state, `state.db` existence/readability, required schema tables, active profile, configured and observed channels, scanned skill count, extracted tool count, 24h session/message counts, last activity age, watcher cadence, and Prompt Shield visibility.
 - Durable Hermes ingestion cursor table (`hermes_ingest_cursors`) so the watcher high-water mark survives dashboard restarts.
-- Normalized Hermes event table (`hermes_events`) keyed by source and message ID with content hash, scan verdict, score, detection count, traffic row linkage, and timestamps.
+- Normalized Hermes event table (`hermes_events`) keyed by profile/channel-scoped source and message ID with content hash, scan verdict, score, detection count, traffic row linkage, and timestamps.
 - `scripts/verify-hermes-integration.ts` to prove diagnostics, cursor persistence, event normalization, and raw-message non-persistence against a temporary Hermes database.
 
 **Changed:**

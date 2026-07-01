@@ -60,6 +60,7 @@ export function InfrastructurePanel({ infra: liveInfra, onNavigate, filters, dem
       profiles?: { count: number; names: string[] };
       channels?: { configured: string[]; observed: string[] };
       skills?: { count: number; profilesWithSkills: number };
+      tools?: { count: number; names: string[]; profilesWithTools: number };
       sessions?: { total: number; last24h: number };
       messages?: { total: number; last24h: number; lastId: number };
       lastActivity?: string | null;
@@ -115,6 +116,7 @@ export function InfrastructurePanel({ infra: liveInfra, onNavigate, filters, dem
             { name: "Active Profile", path: hermesData?.activeProfile || "not selected", desc: `${hermesData?.profiles?.count ?? 0} profile(s) detected`, status: hermesData?.activeProfile ? "online" : "degraded" },
             { name: "Channels", path: (hermesData?.channels?.configured || []).join(", ") || "none configured", desc: `${hermesData?.channels?.observed?.length ?? 0} observed source(s)`, status: (hermesData?.channels?.configured?.length || hermesData?.channels?.observed?.length) ? "online" : "degraded" },
             { name: "Skills Library", path: "profiles/*/skills/**/SKILL.md", desc: `${hermesData?.skills?.count ?? 0} skill file(s), ${hermesData?.skills?.profilesWithSkills ?? 0} profile(s) with skills`, status: (hermesData?.skills?.count ?? 0) > 0 ? "online" : "degraded" },
+            { name: "Extracted Tools", path: (hermesData?.tools?.names || []).join(", ") || "none detected", desc: `${hermesData?.tools?.count ?? 0} tool(s), ${hermesData?.tools?.profilesWithTools ?? 0} profile(s) with tools`, status: (hermesData?.tools?.count ?? 0) > 0 ? "online" : "degraded" },
             { name: "Prompt Shield Visibility", path: hermesData?.shieldVisibility?.mode || "not-visible", desc: hermesData?.shieldVisibility?.enabled ? "Retro-scan watcher is enabled" : "Hermes messages are not visible to Shield", status: hermesData?.shieldVisibility?.enabled ? "online" : "offline" },
           ].map((comp, i) => (
             <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 12px", marginBottom: 4, background: C.glassSurfTrans, border: `1px solid ${C.glassSurfBorder}`, borderLeft: `3px solid ${stColor(comp.status)}`, borderRadius: 12 }}>

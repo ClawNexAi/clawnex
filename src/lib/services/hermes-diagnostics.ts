@@ -11,6 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { config } from "@/lib/config";
+import { scanProfileSkills } from "@/lib/services/permissiveness/scanners/hermes";
 
 export type HermesDiagnosticState =
   | "not_installed"
@@ -44,6 +45,11 @@ export interface HermesDiagnostics {
   skills: {
     count: number;
     profilesWithSkills: number;
+  };
+  tools: {
+    count: number;
+    names: string[];
+    profilesWithTools: number;
   };
   sessions: {
     total: number;
@@ -145,13 +151,19 @@ function configuredChannels(home: string, activeProfile: string | null): string[
   return [...keys].sort((a, b) => a.localeCompare(b));
 }
 
-function skillStats(home: string, profiles: string[]): { count: number; profilesWithSkills: number } {
+function skillStats(home: string, profiles: string[]): { count: number; profilesWithSkills: number; tools: HermesDiagnostics["tools"] } {
   let count = 0;
   let profilesWithSkills = 0;
+  let profilesWithTools = 0;
+  const tools = new Set<string>();
   for (const profile of profiles) {
     const skillsRoot = path.join(home, "profiles", profile, "skills");
     let profileCount = 0;
     try {
+      const scanned = scanProfileSkills(path.join(home, "profiles", profile));
+      for (const tool of scanned.toolUnion) tools.add(tool);
+      if (scanned.toolUnion.length > 0) profilesWithTools++;
+
       const stack = [skillsRoot];
       while (stack.length > 0) {
         const current = stack.pop();
@@ -166,7 +178,16 @@ function skillStats(home: string, profiles: string[]): { count: number; profiles
     if (profileCount > 0) profilesWithSkills++;
     count += profileCount;
   }
-  return { count, profilesWithSkills };
+  const names = [...tools].sort((a, b) => a.localeCompare(b));
+  return {
+    count,
+    profilesWithSkills,
+    tools: {
+      count: names.length,
+      names: names.slice(0, 25),
+      profilesWithTools,
+    },
+  };
 }
 
 function countRecentSql(column: string): string {
@@ -201,7 +222,8 @@ export function diagnoseHermes(homePath?: string): HermesDiagnostics {
     activeProfileSource: active.source,
     profiles: { count: profiles.length, names: profiles.slice(0, 20) },
     channels: { configured: channelsConfigured, observed: [] },
-    skills,
+    skills: { count: skills.count, profilesWithSkills: skills.profilesWithSkills },
+    tools: skills.tools,
     sessions: { total: 0, last24h: 0 },
     messages: { total: 0, last24h: 0, lastId: 0 },
     lastActivity: null,

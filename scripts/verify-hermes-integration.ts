@@ -20,7 +20,7 @@ function mkdirp(p: string) {
 mkdirp(path.join(hermesHome, "profiles", "prod", "skills", "triage"));
 fs.writeFileSync(path.join(hermesHome, "active_profile"), "prod\n");
 fs.writeFileSync(path.join(hermesHome, "channel_directory.json"), JSON.stringify({ discord: {}, slack: {} }));
-fs.writeFileSync(path.join(hermesHome, "profiles", "prod", "skills", "triage", "SKILL.md"), "# Triage\n");
+fs.writeFileSync(path.join(hermesHome, "profiles", "prod", "skills", "triage", "SKILL.md"), "# Triage\nUses `browser_navigate` for review.\n");
 
 const hermesDbPath = path.join(hermesHome, "state.db");
 const hdb = new Database(hermesDbPath);
@@ -73,6 +73,8 @@ async function main() {
   assert.deepEqual(diag.channels.configured, ["discord", "slack"]);
   assert.deepEqual(diag.channels.observed, ["discord"]);
   assert.equal(diag.skills.count, 1);
+  assert.equal(diag.tools.count, 1);
+  assert.deepEqual(diag.tools.names, ["browser_navigate"]);
   assert.equal(diag.sessions.last24h, 1);
   assert.equal(diag.messages.lastId, 1);
 

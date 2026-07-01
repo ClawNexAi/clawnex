@@ -71,6 +71,7 @@ interface HermesDiagnostics {
   profiles: { count: number; names: string[] };
   channels: { configured: string[]; observed: string[] };
   skills: { count: number; profilesWithSkills: number };
+  tools: { count: number; names: string[]; profilesWithTools: number };
   sessions: { total: number; last24h: number };
   messages: { total: number; last24h: number; lastId: number };
   lastActivity: string | null;
@@ -3984,6 +3985,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
       { label: "Profile", ok: !!diag.activeProfile, value: diag.activeProfile || "not selected" },
       { label: "Channels", ok: diag.channels.configured.length + diag.channels.observed.length > 0, value: `${diag.channels.configured.length} configured · ${diag.channels.observed.length} observed` },
       { label: "Skills", ok: diag.skills.count > 0, value: `${diag.skills.count} skill file${diag.skills.count === 1 ? "" : "s"}` },
+      { label: "Tools", ok: diag.tools.count > 0, value: `${diag.tools.count} extracted · ${diag.tools.names.slice(0, 3).join(", ") || "none"}` },
       { label: "Watcher", ok: diag.watcher.enabled, value: `${diag.watcher.enabled ? "enabled" : "disabled"} · ${Math.round(diag.watcher.pollIntervalMs / 1000)}s poll` },
       { label: "Shield", ok: diag.shieldVisibility.enabled, value: diag.shieldVisibility.mode },
     ];

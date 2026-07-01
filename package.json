@@ -29,7 +29,7 @@
   ],
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "next build --webpack",
+    "build": "node --require ./scripts/next-build-retry.cjs ./node_modules/next/dist/bin/next build --webpack",
     "postbuild": "bash scripts/postbuild-standalone-hygiene.sh",
     "start": "next start -H 127.0.0.1",
     "start:prod": "node .next/standalone/server.js",
