@@ -33,6 +33,7 @@ import {
   ensureHermesWatcherStarted,
   getHermesWatcherStatus,
 } from '@/lib/services/hermes-watcher-runner';
+import { diagnoseHermes } from '@/lib/services/hermes-diagnostics';
 import { maybeEnforceRetention } from '@/lib/db/retention';
 import { CLAWNEX_VERSION } from '@/lib/version';
 import {
@@ -160,6 +161,7 @@ export function readDetailedHealth() {
   const ocStatus = connector.getConnectionStatus();
   const watcherStatus = getWatcherStatus();
   const hermesStatus = getHermesWatcherStatus();
+  const hermesDiagnostics = diagnoseHermes();
 
   return {
     status: 'ok' as const,
@@ -199,6 +201,10 @@ export function readDetailedHealth() {
       lastScanTime: hermesStatus.lastScanTime,
       errors: hermesStatus.errors,
       hermesAvailable: hermesStatus.hermesAvailable,
+      pollIntervalMs: hermesStatus.pollIntervalMs,
+      sourceId: hermesStatus.sourceId,
+      lastProcessedId: hermesStatus.lastProcessedId,
+      diagnostics: hermesDiagnostics,
     },
     timestamp: new Date().toISOString(),
   };

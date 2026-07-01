@@ -36,6 +36,24 @@ Section ordering per release: **Added, Changed, Deprecated, Removed, Fixed, Secu
 - `scripts/install.sh` (offered the deleted Docker path) and
   `deploy/deploy.sh` (legacy Ubuntu deployer) — superseded by `install.sh`.
 
+## [0.15.2-alpha] - 2026-07-02
+
+### Added
+
+- Hermes Agent diagnostics now report install state, `state.db` readability, schema validity, active profile, configured and observed channels, skill count, 24h session/message activity, watcher cadence, and Prompt Shield visibility.
+- Hermes ingestion now persists a durable high-water cursor in `hermes_ingest_cursors` and normalized, content-hash-only message scan rows in `hermes_events`.
+- Configuration, Infrastructure, Fleet, and detailed Health surfaces now use the shared Hermes diagnostics model so stale, unreadable, or partially configured Hermes installs are visible to operators.
+- `scripts/verify-hermes-integration.ts` covers Hermes diagnostics, durable cursor behavior, normalized event writes, and raw-message non-persistence.
+
+### Changed
+
+- Hermes fleet status now distinguishes live, stale, idle, unreadable, and schema-mismatch states instead of treating every readable `state.db` as fully healthy.
+- Hermes watcher restart behavior is now cursor-backed and idempotent across dashboard restarts.
+
+### Security
+
+- Hermes event storage records message hashes and scan metadata only. Raw Hermes message content remains transient to the shield scan path and is not persisted in `hermes_events`.
+
 ## [0.15.1-alpha] - 2026-07-01
 
 ### Fixed

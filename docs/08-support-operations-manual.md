@@ -4,7 +4,7 @@
 **Version:** 1.3
 **Classification:** Confidential — IT Staff Only
 **Last Updated:** 2026-05-08
-**Product Version:** v0.15.1-alpha
+**Product Version:** v0.15.2-alpha
 **Status:** Living Document
 
 ---

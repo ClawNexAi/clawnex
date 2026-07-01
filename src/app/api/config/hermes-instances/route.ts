@@ -13,6 +13,7 @@ import { logEvent } from "@/lib/services/audit-logger";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { diagnoseHermes } from "@/lib/services/hermes-diagnostics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,14 +66,16 @@ function resolveRealHermesHomePath(homePath: string): { ok: true; path: string }
   }
 }
 
-function checkHermesPath(homePath: string): { available: boolean; error?: string } {
+function checkHermesPath(homePath: string): { available: boolean; error?: string; diagnostics?: ReturnType<typeof diagnoseHermes> } {
   const pathResult = resolveRealHermesHomePath(homePath);
   if (!pathResult.ok) return { available: false, error: pathResult.error };
   const resolved = pathResult.path;
-  const stateDb = path.join(resolved, "state.db");
-  if (!fs.existsSync(resolved)) return { available: false, error: "Directory does not exist" };
-  if (!fs.existsSync(stateDb)) return { available: false, error: "state.db not found in directory" };
-  return { available: true };
+  const diagnostics = diagnoseHermes(resolved);
+  return {
+    available: diagnostics.available,
+    error: diagnostics.available ? undefined : diagnostics.statusDetail || diagnostics.status,
+    diagnostics,
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -98,6 +101,7 @@ export async function GET(request: NextRequest) {
         ...inst,
         available: check.available,
         statusDetail: check.error || null,
+        diagnostics: check.diagnostics || null,
       };
     });
 
@@ -148,7 +152,15 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      instance: { id, name: name.trim(), homePath: resolved, status: check.available ? "connected" : "error", available: check.available, error: check.error },
+      instance: {
+        id,
+        name: name.trim(),
+        homePath: resolved,
+        status: check.available ? "connected" : "error",
+        available: check.available,
+        error: check.error,
+        diagnostics: check.diagnostics || null,
+      },
     }, { status: 201 });
   } catch (err) {
     console.error("[API/hermes-instances] POST error:", err);

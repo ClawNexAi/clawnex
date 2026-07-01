@@ -11,7 +11,7 @@
   <a href="https://github.com/ClawNexAi/clawnex/actions/workflows/codeql.yml"><img src="https://github.com/ClawNexAi/clawnex/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"></a>
   <a href="DCO"><img src="https://img.shields.io/badge/Sign--off-DCO-brightgreen" alt="DCO"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.15.1--alpha-orange" alt="Version 0.15.1-alpha"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.15.2--alpha-orange" alt="Version 0.15.2-alpha"></a>
 </p>
 
 ClawNex is a runtime security control plane for AI agent fleets. It sits between agents and model providers, scans model traffic, surfaces fleet risk, tracks cost, governs operator access, and preserves audit evidence when something goes wrong.
@@ -19,7 +19,7 @@ ClawNex is a runtime security control plane for AI agent fleets. It sits between
 - Website: [clawnexai.com](https://clawnexai.com)
 - Documentation: [docs.clawnexai.com](https://docs.clawnexai.com)
 - Product gallery: [clawnexai.com/gallery](https://clawnexai.com/gallery)
-- Current version: `0.15.1-alpha`
+- Current version: `0.15.2-alpha`
 - Status: public alpha, functional and under active development
 
 ## Getting Started
@@ -277,7 +277,7 @@ ClawNex follows Semantic Versioning with pre-release stages:
 | `beta` | Stable API surface under evaluation | Breaking changes only with deprecation notice |
 | `GA` | Generally available | SemVer guarantees; breaking changes only in major versions |
 
-`0.15.1-alpha` is public alpha software. APIs, configuration keys, and operational workflows may change before GA.
+`0.15.2-alpha` is public alpha software. APIs, configuration keys, and operational workflows may change before GA.
 
 ## Contributing
 

@@ -51,7 +51,23 @@ export function InfrastructurePanel({ infra: liveInfra, onNavigate, filters, dem
   // Hermes-specific infrastructure view
   if (isHermes) {
     const hermesSvc = infra.services.find(s => /hermes/i.test(s.name));
-    const hermesData = (infra as unknown as Record<string, unknown>).hermes as { available?: boolean; sessionCount?: number; lastActivity?: string; sources?: string[] } | undefined;
+    const hermesData = (infra as unknown as Record<string, unknown>).hermes as {
+      available?: boolean;
+      status?: string;
+      statusDetail?: string | null;
+      stateDbPath?: string;
+      activeProfile?: string | null;
+      profiles?: { count: number; names: string[] };
+      channels?: { configured: string[]; observed: string[] };
+      skills?: { count: number; profilesWithSkills: number };
+      sessions?: { total: number; last24h: number };
+      messages?: { total: number; last24h: number; lastId: number };
+      lastActivity?: string | null;
+      watcher?: { enabled: boolean; pollIntervalMs: number };
+      shieldVisibility?: { enabled: boolean; mode: string };
+    } | undefined;
+    const status = hermesData?.status || (hermesData?.available ? "live" : "not_configured");
+    const stateColor = hermesData?.available ? status === "live" ? C.green : C.warn : C.danger;
     return (
       <div>
         <Card title="Hermes Agent Health" accent={C.brand} actions={<Fresh />}>
@@ -59,8 +75,8 @@ export function InfrastructurePanel({ infra: liveInfra, onNavigate, filters, dem
             <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 12px", marginBottom: 8, background: C.glassSurfTrans, border: `1px solid ${C.glassSurfBorder}`, borderLeft: `3px solid ${stColor(hermesSvc.status)}`, borderRadius: 12 }}>
               <Dot color={stColor(hermesSvc.status)} size={8} glow={hermesSvc.status === "online"} />
               <span style={{ fontWeight: 600, fontSize: 13, color: C.tx }}>Hermes Agent</span>
-              <Badge label={hermesSvc.status.toUpperCase()} color={stColor(hermesSvc.status)} />
-              {hermesSvc.status === "online" && <span style={{ fontSize: 11, color: C.txT, fontFamily: F.mono }}>state.db accessible</span>}
+              <Badge label={status.toUpperCase()} color={stateColor} />
+              <span style={{ fontSize: 11, color: C.txT, fontFamily: F.mono }}>{hermesData?.statusDetail || "state.db diagnostic source"}</span>
             </div>
           )}
           {!hermesSvc && (
@@ -72,13 +88,13 @@ export function InfrastructurePanel({ infra: liveInfra, onNavigate, filters, dem
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 16 }}>
           <Card title="Sessions (24h)" accent={C.brand}>
-            <div style={{ fontSize: 24, fontWeight: 800, fontFamily: F.mono, color: C.brand }}>{hermesData?.sessionCount ?? 0}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, fontFamily: F.mono, color: C.brand }}>{hermesData?.sessions?.last24h ?? 0}</div>
             <div style={{ fontSize: 12, color: C.txT, marginTop: 4 }}>Active in last 24 hours</div>
           </Card>
           <Card title="Platforms" accent={C.cyan}>
-            <div style={{ fontSize: 18, fontWeight: 800, fontFamily: F.mono, color: C.cyan }}>{hermesData?.sources?.length ?? 0}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, fontFamily: F.mono, color: C.cyan }}>{hermesData?.channels?.observed?.length ?? 0}</div>
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
-              {(hermesData?.sources || []).map(s => <Badge key={s} label={s} color={C.cyan} />)}
+              {(hermesData?.channels?.observed || []).map(s => <Badge key={s} label={s} color={C.cyan} />)}
             </div>
           </Card>
           <Card title="Last Activity" accent={C.info}>
@@ -87,19 +103,19 @@ export function InfrastructurePanel({ infra: liveInfra, onNavigate, filters, dem
             </div>
           </Card>
           <Card title="Data Source" accent={C.purp}>
-            <div style={{ fontSize: 12, fontFamily: F.mono, color: C.tx }}>~/.hermes/state.db</div>
+            <div style={{ fontSize: 12, fontFamily: F.mono, color: C.tx }}>{hermesData?.stateDbPath || "~/.hermes/state.db"}</div>
             <div style={{ fontSize: 11, color: C.txT, marginTop: 4 }}>SQLite (WAL mode, read-only)</div>
-            <div style={{ fontSize: 11, color: C.txT }}>Poll: every 10s</div>
+            <div style={{ fontSize: 11, color: C.txT }}>Poll: every {Math.round((hermesData?.watcher?.pollIntervalMs || 10000) / 1000)}s</div>
           </Card>
         </div>
 
         <CollapsibleCard title="Hermes Components" accent={C.info} defaultOpen={true}>
           {[
-            { name: "State Database", path: "~/.hermes/state.db", desc: "Session and message storage (SQLite WAL)", status: hermesData?.available ? "online" : "offline" },
-            { name: "Configuration", path: "~/.hermes/config.yaml", desc: "Model, provider, personality, MCP servers", status: "online" },
-            { name: "Memory System", path: "~/.hermes/memories/", desc: "MEMORY.md + USER.md (persistent across sessions)", status: "online" },
-            { name: "Skills Library", path: "~/.hermes/skills/", desc: "29 skill categories, managed via Hermes CLI", status: "online" },
-            { name: "Agent Logs", path: "~/.hermes/logs/agent.log", desc: "Rotating file handler (5MB max, 3 backups)", status: "online" },
+            { name: "State Database", path: hermesData?.stateDbPath || "~/.hermes/state.db", desc: `${hermesData?.messages?.total ?? 0} messages · cursor ${hermesData?.messages?.lastId ?? 0}`, status: hermesData?.available ? "online" : "offline" },
+            { name: "Active Profile", path: hermesData?.activeProfile || "not selected", desc: `${hermesData?.profiles?.count ?? 0} profile(s) detected`, status: hermesData?.activeProfile ? "online" : "degraded" },
+            { name: "Channels", path: (hermesData?.channels?.configured || []).join(", ") || "none configured", desc: `${hermesData?.channels?.observed?.length ?? 0} observed source(s)`, status: (hermesData?.channels?.configured?.length || hermesData?.channels?.observed?.length) ? "online" : "degraded" },
+            { name: "Skills Library", path: "profiles/*/skills/**/SKILL.md", desc: `${hermesData?.skills?.count ?? 0} skill file(s), ${hermesData?.skills?.profilesWithSkills ?? 0} profile(s) with skills`, status: (hermesData?.skills?.count ?? 0) > 0 ? "online" : "degraded" },
+            { name: "Prompt Shield Visibility", path: hermesData?.shieldVisibility?.mode || "not-visible", desc: hermesData?.shieldVisibility?.enabled ? "Retro-scan watcher is enabled" : "Hermes messages are not visible to Shield", status: hermesData?.shieldVisibility?.enabled ? "online" : "offline" },
           ].map((comp, i) => (
             <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 12px", marginBottom: 4, background: C.glassSurfTrans, border: `1px solid ${C.glassSurfBorder}`, borderLeft: `3px solid ${stColor(comp.status)}`, borderRadius: 12 }}>
               <Dot color={stColor(comp.status)} size={6} />

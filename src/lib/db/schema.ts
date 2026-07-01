@@ -224,6 +224,38 @@ CREATE TABLE IF NOT EXISTS hermes_instances (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Hermes Agent normalized ingestion cursors
+CREATE TABLE IF NOT EXISTS hermes_ingest_cursors (
+  source_id TEXT PRIMARY KEY,
+  home_path TEXT NOT NULL,
+  last_message_id INTEGER NOT NULL DEFAULT 0,
+  last_message_timestamp TEXT,
+  last_ingested_at TEXT,
+  last_error TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Hermes Agent normalized message/shield events
+CREATE TABLE IF NOT EXISTS hermes_events (
+  id TEXT PRIMARY KEY,
+  source_id TEXT NOT NULL,
+  message_id INTEGER NOT NULL,
+  session_id TEXT,
+  role TEXT,
+  direction TEXT,
+  platform TEXT,
+  model TEXT,
+  content_hash TEXT NOT NULL,
+  shield_verdict TEXT,
+  shield_score INTEGER,
+  detections_count INTEGER DEFAULT 0,
+  traffic_id TEXT,
+  message_timestamp TEXT,
+  observed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(source_id, message_id)
+);
+
 -- Default settings
 CREATE TABLE IF NOT EXISTS config_defaults (
   key TEXT PRIMARY KEY,
@@ -259,6 +291,9 @@ CREATE INDEX IF NOT EXISTS idx_audit_action_time ON audit_log(action, created_at
 CREATE INDEX IF NOT EXISTS idx_check_results_scan ON security_check_results(scan_id);
 CREATE INDEX IF NOT EXISTS idx_config_models_provider ON config_models(provider_id);
 CREATE INDEX IF NOT EXISTS idx_config_models_default ON config_models(is_default);
+CREATE INDEX IF NOT EXISTS idx_hermes_events_source_message ON hermes_events(source_id, message_id);
+CREATE INDEX IF NOT EXISTS idx_hermes_events_session ON hermes_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_hermes_events_observed ON hermes_events(observed_at);
 
 -- Proxy traffic log
 CREATE TABLE IF NOT EXISTS proxy_traffic (
@@ -528,4 +563,40 @@ export const MIGRATIONS: string[] = [
   // NOT NULL DEFAULT '' is safe because existing rows will populate the
   // empty-flags case (matches "no flags" behavior).
   "ALTER TABLE policy_rules ADD COLUMN flags TEXT NOT NULL DEFAULT ''",
+
+  // 2026-07-02 (v0.15.2-alpha): durable Hermes ingestion state. The
+  // watcher previously kept its high-water mark only in memory, which made
+  // restart behavior opaque and prevented richer Hermes drilldowns. These
+  // tables keep the cursor and a normalized, content-hash-only event record.
+  `CREATE TABLE IF NOT EXISTS hermes_ingest_cursors (
+    source_id TEXT PRIMARY KEY,
+    home_path TEXT NOT NULL,
+    last_message_id INTEGER NOT NULL DEFAULT 0,
+    last_message_timestamp TEXT,
+    last_ingested_at TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `CREATE TABLE IF NOT EXISTS hermes_events (
+    id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL,
+    message_id INTEGER NOT NULL,
+    session_id TEXT,
+    role TEXT,
+    direction TEXT,
+    platform TEXT,
+    model TEXT,
+    content_hash TEXT NOT NULL,
+    shield_verdict TEXT,
+    shield_score INTEGER,
+    detections_count INTEGER DEFAULT 0,
+    traffic_id TEXT,
+    message_timestamp TEXT,
+    observed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(source_id, message_id)
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_hermes_events_source_message ON hermes_events(source_id, message_id)",
+  "CREATE INDEX IF NOT EXISTS idx_hermes_events_session ON hermes_events(session_id)",
+  "CREATE INDEX IF NOT EXISTS idx_hermes_events_observed ON hermes_events(observed_at)",
 ];

@@ -3,7 +3,7 @@
 **Document ID:** CLAWNEX-PUB-INFRA-001
 **Version:** 1.0
 **Classification:** Public
-**Product Version:** v0.15.1-alpha
+**Product Version:** v0.15.2-alpha
 **Status:** Public Reference
 
 ---

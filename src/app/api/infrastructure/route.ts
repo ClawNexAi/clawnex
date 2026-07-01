@@ -16,6 +16,7 @@ import { getAutensaStatus, startAutensaPoller } from "@/lib/connectors/autensa-c
 import { queryAll, run } from "@/lib/db/index";
 import { checkLiteLLM as checkLiteLLMImpl } from "@/lib/health/litellm-check";
 import { assertSafeProviderHttpFetchTarget, providerEndpointUrl } from "@/lib/services/config-service";
+import { diagnoseHermes } from "@/lib/services/hermes-diagnostics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -245,6 +246,19 @@ export async function GET(request: NextRequest) {
       error: ocStatus.lastError || undefined,
     });
 
+    const hermesDiagnostics = diagnoseHermes();
+    services.push({
+      name: "Hermes Agent",
+      url: hermesDiagnostics.stateDbPath,
+      status: hermesDiagnostics.available
+        ? hermesDiagnostics.status === "live" ? "online" : "degraded"
+        : "not_configured",
+      latency: 0,
+      error: hermesDiagnostics.available ? undefined : hermesDiagnostics.statusDetail || undefined,
+      detail: hermesDiagnostics.statusDetail || undefined,
+      ingestion_summary: `${hermesDiagnostics.messages.last24h.toLocaleString()} messages observed · ${hermesDiagnostics.messages.lastId.toLocaleString()} cursor`,
+    });
+
     // Only include Paperclip/Autensa connector data if explicitly configured
     const paperclipStatus = getPaperclipStatus();
     const autensaStatus = getAutensaStatus();
@@ -313,6 +327,7 @@ export async function GET(request: NextRequest) {
         lastEvent: ocStatus.lastEvent,
         lastError: ocStatus.lastError,
       },
+      hermes: hermesDiagnostics,
       ...(paperclipExplicit ? {
         paperclip: {
           status: paperclipStatus.status,

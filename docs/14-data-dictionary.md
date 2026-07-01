@@ -40,7 +40,7 @@ PII presence is called out explicitly per column in Section 3. Columns carrying 
 
 ## 2. Table Summary
 
-The 22-table schema is grouped into four functional categories. Every row in the summary specifies growth characteristics and the highest sensitivity tier present in the table.
+The current SQLite schema is grouped into four functional categories. Every row in the summary specifies growth characteristics and the highest sensitivity tier present in the table.
 
 **Category key:**
 - **OPS** — operational telemetry, high growth, retention-bounded
@@ -65,6 +65,8 @@ The 22-table schema is grouped into four functional categories. Every row in the
 | 13 | config_models | CFG | Model configurations per provider | id (composite) | Low-Medium (follows provider catalog) | Cascade from config_providers | Internal |
 | 14 | config_gateways | CFG | OpenClaw gateway instances | id (UUID) | Low (operator-managed) | None | Sensitive (token) |
 | 15 | hermes_instances | CFG | Hermes Agent connection configurations | id (TEXT) | Low (operator-managed) | None | Restricted |
+| 15a | hermes_ingest_cursors | OPS | Durable Hermes watcher high-water marks | source_id (TEXT) | Low (one row per Hermes source) | None | Internal |
+| 15b | hermes_events | EVT | Normalized Hermes message scan events | id (TEXT) | Medium (one row per scanned Hermes message) | Retention with operational DB | Restricted (content_hash only; no raw message text) |
 | 16 | config_defaults | CFG | Key-value settings store | key (TEXT) | Static (bounded key set) | None | Sensitive (certain keys) |
 | 17 | cve_records | EVT | CVE data synced from jgamblin/OpenClawCVEs | id (CVE-ID) | Low (governed by upstream sync) | None | None |
 | 18 | operators | SEC | Operator accounts for RBAC | id (UUID) | Low (5-50 operators typical) | None (lifecycle-driven) | Sensitive (password_hash, email); auth_providers CSV (v0.9.0+) |
@@ -507,6 +509,47 @@ the header ribbon.
 | session_count | INTEGER | NO | 0 | Sessions detected in last check |
 | created_at | TEXT | NO | `datetime('now')` | Creation timestamp |
 | updated_at | TEXT | NO | `datetime('now')` | Last update timestamp |
+
+---
+
+### 3.15a hermes_ingest_cursors
+
+**Purpose:** Durable high-water marks for Hermes Agent message ingestion. This lets the Hermes watcher resume cleanly after dashboard restarts instead of relying on an in-memory cursor.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| source_id | TEXT | NO | — | Stable source identifier derived from the Hermes home path |
+| home_path | TEXT | NO | — | Hermes home directory being observed |
+| last_message_id | INTEGER | NO | 0 | Highest Hermes `messages.id` processed by ClawNex |
+| last_message_timestamp | TEXT | YES | NULL | Timestamp of the last processed Hermes message |
+| last_ingested_at | TEXT | YES | NULL | When ClawNex last advanced this cursor |
+| last_error | TEXT | YES | NULL | Last watcher error associated with this source |
+| created_at | TEXT | NO | `datetime('now')` | Creation timestamp |
+| updated_at | TEXT | NO | `datetime('now')` | Last update timestamp |
+
+---
+
+### 3.15b hermes_events
+
+**Purpose:** Normalized Hermes Agent message scan events. Rows link Hermes message IDs to ClawNex shield verdicts and proxy traffic rows while storing only content hashes, not raw Hermes message content.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | TEXT | NO | — | Primary key (`source_id:message_id`) |
+| source_id | TEXT | NO | — | Source identifier matching `hermes_ingest_cursors.source_id` |
+| message_id | INTEGER | NO | — | Hermes `messages.id` |
+| session_id | TEXT | YES | NULL | Hermes session ID |
+| role | TEXT | YES | NULL | Hermes role (`user`, `assistant`, etc.) |
+| direction | TEXT | YES | NULL | ClawNex scan direction (`inbound` or `outbound`) |
+| platform | TEXT | YES | NULL | Hermes session source/platform when present |
+| model | TEXT | YES | NULL | Hermes model string when present |
+| content_hash | TEXT | NO | — | Short SHA-256 content hash; raw message content is not stored |
+| shield_verdict | TEXT | YES | NULL | ClawNex shield verdict |
+| shield_score | INTEGER | YES | NULL | ClawNex shield score |
+| detections_count | INTEGER | NO | 0 | Number of detections returned by the shield scan |
+| traffic_id | TEXT | YES | NULL | Related `proxy_traffic.id` row |
+| message_timestamp | TEXT | YES | NULL | Hermes message timestamp normalized to ISO-8601 when possible |
+| observed_at | TEXT | NO | `datetime('now')` | When ClawNex observed/scanned the message |
 
 ---
 
@@ -1370,7 +1413,7 @@ Retention enforcement:
 
 ## 7.1 Entity Relationship Diagram (Textual)
 
-Foreign key and logical relationships across the 22-table schema:
+Foreign key and logical relationships across the current SQLite schema:
 
 ```
                     ┌──────────────────────────────────┐
@@ -1447,6 +1490,7 @@ Foreign key and logical relationships across the 22-table schema:
 | 1.10 | 2026-04-24 | ClawNex Engineering | v0.9.1/v0.9.2 sweep: documented `password_reset_tokens` (§3.19b, was missing since v0.6.1) and new `magic_link_tokens` table (§3.19c, v0.9.2). Table totals updated to 24 (22 primary + 2 ephemeral token stores). ERD FK list extended with `operator_credentials`, `password_reset_tokens`, `magic_link_tokens` → `operators` cascades. Migration history extended with entries 11 (password_reset_tokens), 12 (auth_providers column), 13 (operator_credentials), 14 (v0.9.1 adversarial review #A1 UNIQUE passkey credential_id index), 15 (v0.9.2 magic_link_tokens). New config_defaults key `auth_magic_link_enabled` referenced in §3.19c. |
 | 1.11 | 2026-05-05 | ClawNex Engineering | v0.10.0-alpha + v0.11.x-alpha. New §3.100 Policy Framework Tables — `policies` (3.100a) and `policy_rules` (3.100b) with full column specs, vendor-mutation lockdown rules, recommended indexes, and dual-key idempotent migration semantics (`policy_framework_schema_version` + `policy_framework_seed_version`). New §3.101 Token Cost FinOps Pipeline Type Surface — `NormalizedRow` (3.101a, 24 fields), `Signal` (3.101b), `AdapterResult` (3.101c) with adapter-private `signal_context` invariant, `GlossaryEntry` (3.101d). New §3.102 Alert Evidence extensions — `alerts.metadata` JSON for session-watcher source (11 fields), `audit_log.detail` JSON for `shield_review`/`shield_detected` actions (4 fields including redact()'d `payload_excerpt`). |
 | 1.12 | 2026-05-08 | ClawNex Engineering | v0.12.0 → v0.15.0-alpha: new §3.103 Mission Control + Triage Graph Type Surface — `ActionVerb` 11-value closed enum (3.103a), `SuggestedAction` shape with display formatter (3.103b), `IncidentFamily` 4-value closed enum (3.103c), Phase 5 finding shapes for the 5 newly-wired resolvers — `CorrelationFinding` / `BlastRadiusFinding` / `AuthRbacFinding` / `UpdateCveFinding` / `PolicyWarningFinding` (3.103d), full Triage Graph type set including `TriageStageId` 5-value canonical order / `TriageLinkState` 6-value taxonomy / `TriageArtifact` shape with `evidenceSnippet` + `evidenceTrail` payloads / per-family `resolverVersion` (3.103e), new theme tokens `glassPanelNested` / `glassPanelNested2` / `glassBorderCyanStrong` for the v0.14.5 Stat tile lift + opt-in `dimGlow` prop (3.103f). |
+| 1.13 | 2026-07-02 | ClawNex Engineering | v0.15.2-alpha: Added hermes_ingest_cursors and hermes_events for durable Hermes watcher state and normalized, content-hash-only Hermes scan events. |
 
 ---
 

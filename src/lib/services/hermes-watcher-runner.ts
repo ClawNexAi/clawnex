@@ -109,6 +109,8 @@ export function getHermesWatcherStatus(): {
   errors: number;
   pollIntervalMs: number;
   hermesAvailable: boolean;
+  sourceId: string;
+  lastProcessedId: number;
 } {
   const stats = getHermesWatcherStats();
   return {
@@ -121,6 +123,8 @@ export function getHermesWatcherStatus(): {
     errors: stats.errors,
     pollIntervalMs: config.hermes.pollIntervalMs,
     hermesAvailable: stats.hermesAvailable,
+    sourceId: stats.sourceId,
+    lastProcessedId: stats.lastProcessedId,
   };
 }
 

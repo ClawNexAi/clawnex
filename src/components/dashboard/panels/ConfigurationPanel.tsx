@@ -57,6 +57,40 @@ interface GatewayInstance {
   clientName?: string;
 }
 
+interface HermesDiagnostics {
+  home: string;
+  stateDbPath: string;
+  installed: boolean;
+  stateDbExists: boolean;
+  stateDbReadable: boolean;
+  schemaOk: boolean;
+  available: boolean;
+  status: string;
+  statusDetail: string | null;
+  activeProfile: string | null;
+  profiles: { count: number; names: string[] };
+  channels: { configured: string[]; observed: string[] };
+  skills: { count: number; profilesWithSkills: number };
+  sessions: { total: number; last24h: number };
+  messages: { total: number; last24h: number; lastId: number };
+  lastActivity: string | null;
+  lastActivityAgeSeconds: number | null;
+  watcher: { enabled: boolean; pollIntervalMs: number };
+  shieldVisibility: { enabled: boolean; mode: string };
+}
+
+interface HermesInstanceConfig {
+  id: string;
+  name: string;
+  home_path: string;
+  is_active: number;
+  status: string;
+  available: boolean;
+  statusDetail?: string | null;
+  session_count: number;
+  diagnostics?: HermesDiagnostics | null;
+}
+
 // ---------------------------------------------------------------------------
 // Break-Glass Components
 // ---------------------------------------------------------------------------
@@ -3673,8 +3707,8 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   } | null>(null);
 
   // Hermes instance state
-  const [hermesInstances, setHermesInstances] = useState<Array<{ id: string; name: string; home_path: string; is_active: number; status: string; available: boolean; statusDetail?: string | null; session_count: number }>>([]);
-  const [hermesStatus, setHermesStatus] = useState<{ available: boolean; home: string; enabled: boolean; pollMs: number; sessions: number; lastActivity: string | null } | null>(null);
+  const [hermesInstances, setHermesInstances] = useState<HermesInstanceConfig[]>([]);
+  const [hermesStatus, setHermesStatus] = useState<HermesDiagnostics | null>(null);
   const [hermesTestResult, setHermesTestResult] = useState<string | null>(null);
   const [newHermesName, setNewHermesName] = useState("");
   const [newHermesPath, setNewHermesPath] = useState("");
@@ -3786,14 +3820,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
       if (healthRes.status === "fulfilled" && healthRes.value.ok) {
         const h = await healthRes.value.json();
         const hw = h.hermesWatcher || {};
-        setHermesStatus({
-          available: hw.hermesAvailable ?? false,
-          home: hw.hermesHome || "~/.hermes",
-          enabled: hw.enabled ?? false,
-          pollMs: hw.pollIntervalMs || 10000,
-          sessions: 0,
-          lastActivity: null,
-        });
+        setHermesStatus(hw.diagnostics || null);
       }
 
       // RBAC operator info
@@ -3947,6 +3974,32 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
 
   const inputStyle = { width: "100%", padding: "8px 10px", background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6, color: C.tx, fontFamily: F.mono, fontSize: 13, outline: "none", boxSizing: "border-box" as const };
   const btnStyle = { padding: "8px 16px", borderRadius: 6, border: "none", fontWeight: 700, fontSize: 13, cursor: "pointer" };
+  const renderHermesChecks = (diag: HermesDiagnostics | null | undefined) => {
+    if (!diag) return null;
+    const checks = [
+      { label: "Home", ok: diag.installed, value: diag.home },
+      { label: "State DB", ok: diag.stateDbExists && diag.stateDbReadable, value: diag.stateDbPath },
+      { label: "Schema", ok: diag.schemaOk, value: diag.schemaOk ? "sessions + messages" : "missing expected tables" },
+      { label: "Profile", ok: !!diag.activeProfile, value: diag.activeProfile || "not selected" },
+      { label: "Channels", ok: diag.channels.configured.length + diag.channels.observed.length > 0, value: `${diag.channels.configured.length} configured · ${diag.channels.observed.length} observed` },
+      { label: "Skills", ok: diag.skills.count > 0, value: `${diag.skills.count} skill file${diag.skills.count === 1 ? "" : "s"}` },
+      { label: "Watcher", ok: diag.watcher.enabled, value: `${diag.watcher.enabled ? "enabled" : "disabled"} · ${Math.round(diag.watcher.pollIntervalMs / 1000)}s poll` },
+      { label: "Shield", ok: diag.shieldVisibility.enabled, value: diag.shieldVisibility.mode },
+    ];
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 6, marginTop: 10 }}>
+        {checks.map(check => (
+          <div key={check.label} style={{ padding: "7px 8px", borderRadius: 6, background: C.bg, border: `1px solid ${check.ok ? C.green : C.orange}33` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+              <Dot color={check.ok ? C.green : C.orange} size={5} />
+              <span style={{ fontSize: 10, color: C.txT, fontWeight: 800, letterSpacing: "0.04em" }}>{check.label.toUpperCase()}</span>
+            </div>
+            <div title={check.value} style={{ fontSize: 11, color: C.txS, fontFamily: F.mono, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{check.value}</div>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   // --- Updates state ---
   const [updateStatus, setUpdateStatus] = useState<{
@@ -4496,18 +4549,18 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <Dot color={C.green} glow size={8} />
                   <span style={{ fontSize: 14, fontWeight: 700, color: C.tx }}>Hermes Agent</span>
-                  <Badge color={C.green} label="CONNECTED" />
+                  <Badge color={hermesStatus.status === "live" ? C.green : C.orange} label={hermesStatus.status.toUpperCase()} />
                   <Badge color={C.purp} label="AUTO-DETECTED" />
                 </div>
-                <button onClick={async () => { setHermesTestResult("Testing..."); try { const res = await fetch("/api/health/detailed"); if (res.ok) { const d = await res.json(); const hw = d.hermesWatcher || {}; setHermesTestResult(hw.hermesAvailable ? `OK — state.db accessible, ${hw.messagesScanned} messages scanned` : "FAIL — state.db not accessible"); } else { setHermesTestResult("FAIL — health endpoint error"); } } catch { setHermesTestResult("FAIL — connection error"); } setTimeout(() => setHermesTestResult(null), 5000); }} style={{ padding: "4px 10px", background: C.info, color: "#fff", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Test</button>
+                <button onClick={async () => { setHermesTestResult("Testing..."); try { const res = await fetch("/api/health/detailed"); if (res.ok) { const d = await res.json(); const diag = d.hermesWatcher?.diagnostics as HermesDiagnostics | undefined; setHermesTestResult(diag?.available ? `${diag.status.toUpperCase()} — ${diag.messages.last24h} messages / ${diag.sessions.last24h} sessions in 24h` : `FAIL — ${diag?.statusDetail || "state.db not accessible"}`); if (diag) setHermesStatus(diag); } else { setHermesTestResult("FAIL — health endpoint error"); } } catch { setHermesTestResult("FAIL — connection error"); } setTimeout(() => setHermesTestResult(null), 5000); }} style={{ padding: "4px 10px", background: C.info, color: "#fff", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Test</button>
               </div>
-              <div style={{ fontSize: 12, color: C.txT, fontFamily: F.mono }}>{hermesStatus.home}/state.db</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 8 }}>
-                <div style={{ fontSize: 11, color: C.txS }}><span style={{ color: C.txT }}>Poll:</span> {hermesStatus.pollMs / 1000}s</div>
-                <div style={{ fontSize: 11, color: C.txS }}><span style={{ color: C.txT }}>Sessions (24h):</span> {hermesStatus.sessions}</div>
-                <div style={{ fontSize: 11, color: C.txS }}><span style={{ color: C.txT }}>Monitoring:</span> <span style={{ color: hermesStatus.enabled ? C.green : C.danger }}>{hermesStatus.enabled ? "Enabled" : "Disabled"}</span></div>
+              <div style={{ fontSize: 12, color: C.txT, fontFamily: F.mono }}>{hermesStatus.stateDbPath}</div>
+              <div style={{ fontSize: 11, color: C.txS, marginTop: 4 }}>
+                Last activity: {hermesStatus.lastActivity ? timeAgo(hermesStatus.lastActivity) : "none"} · {hermesStatus.sessions.last24h} sessions · {hermesStatus.messages.last24h} messages in 24h
               </div>
-              {hermesTestResult && <div style={{ fontSize: 11, fontFamily: F.mono, color: hermesTestResult.startsWith("OK") ? C.green : C.danger, marginTop: 6, padding: "4px 8px", background: `${hermesTestResult.startsWith("OK") ? C.green : C.danger}08`, borderRadius: 4 }}>{hermesTestResult}</div>}
+              {renderHermesChecks(hermesStatus)}
+              {hermesStatus.statusDetail && <div style={{ fontSize: 11, color: hermesStatus.available ? C.txT : C.danger, fontFamily: F.mono, marginTop: 6 }}>{hermesStatus.statusDetail}</div>}
+              {hermesTestResult && <div style={{ fontSize: 11, fontFamily: F.mono, color: hermesTestResult.startsWith("FAIL") ? C.danger : C.green, marginTop: 6, padding: "4px 8px", background: `${hermesTestResult.startsWith("FAIL") ? C.danger : C.green}08`, borderRadius: 4 }}>{hermesTestResult}</div>}
             </div>
           )}
           {hermesInstances.map(inst => (
@@ -4521,6 +4574,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
                 <button onClick={async () => { try { await fetch(`/api/config/hermes-instances?id=${encodeURIComponent(inst.id)}`, { method: "DELETE" }); fetchConfig(); } catch {} }} style={{ padding: "4px 10px", background: C.danger, color: "#fff", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Remove</button>
               </div>
               <div style={{ fontSize: 12, color: C.txT, fontFamily: F.mono }}>{inst.home_path}/state.db</div>
+              {renderHermesChecks(inst.diagnostics)}
               {inst.statusDetail && <div style={{ fontSize: 11, color: C.danger, fontFamily: F.mono, marginTop: 2 }}>Error: {inst.statusDetail}</div>}
             </div>
           ))}

@@ -15,6 +15,8 @@ import { activeAlertSqlClause, productionOriginSqlClause } from "@/lib/dashboard
 import { getLatestClawkeeperPosture } from "@/lib/services/posture-service";
 import { readOpenClawConfig as readOpenClawConfigHelper, resolveOpenClawPaths } from "@/lib/openclaw-paths";
 import { getOpenClawInstalledVersion } from "@/lib/openclaw-version";
+import { diagnoseHermes } from "@/lib/services/hermes-diagnostics";
+import { config } from "@/lib/config";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -275,37 +277,31 @@ export async function GET(request: NextRequest) {
     }
   } catch {}
 
-  // Hermes Agent fleet instance
+  // Hermes Agent fleet instance — source state comes from the same
+  // diagnostics service used by Health and Infrastructure so "live/stale/
+  // unreadable" means one thing across the product.
   try {
-    const { isHermesAvailable, getHermesDb } = require("@/lib/services/hermes-db");
-    const { config: appConfig } = require("@/lib/config");
-    if (appConfig.hermes.enabled && isHermesAvailable()) {
-      const hermesDb = getHermesDb();
-      if (hermesDb) {
-        const now = Date.now() / 1000;
-        const sessionRow = hermesDb.prepare("SELECT COUNT(*) as cnt FROM sessions WHERE started_at > ?").get(now - 86400) as { cnt: number } | undefined;
-        const costRow = hermesDb.prepare("SELECT COALESCE(SUM(estimated_cost_usd), 0) as cost FROM sessions WHERE started_at > ?").get(now - 86400) as { cost: number } | undefined;
-        const agentRow = hermesDb.prepare("SELECT COUNT(DISTINCT source) as cnt FROM sessions WHERE started_at > ?").get(now - 86400) as { cnt: number } | undefined;
-        const lastRow = hermesDb.prepare("SELECT started_at FROM sessions ORDER BY started_at DESC LIMIT 1").get() as { started_at: number } | undefined;
-        const cnt = sessionRow?.cnt ?? 0;
-        instances.push({
-          id: "hermes-local",
-          client: "Hermes Agent",
-          version: "0.8.0",
-          status: cnt > 0 ? "healthy" : "degraded",
-          uptime: lastRow ? (now - lastRow.started_at) : 0,
-          cpu: 0, mem: 0, disk: 0, threats: 0, alerts: 0,
-          region: "Local",
-          heartbeat: lastRow ? lastRow.started_at * 1000 : 0,
-          agents: agentRow?.cnt ?? 0,
-          sessions: cnt,
-          p95: 0,
-          cost: costRow?.cost ?? 0,
-          posture: null as number | null,
-          isLive: cnt > 0,
-          services: { openclaw: "offline" as const, paperclip: "offline" as const, autensa: "offline" as const },
-        });
-      }
+    const hermes = diagnoseHermes();
+    if (config.hermes.enabled && hermes.installed) {
+      instances.push({
+        id: "hermes-local",
+        client: "Hermes Agent",
+        version: hermes.activeProfile ? `profile:${hermes.activeProfile}` : "state.db",
+        status: hermes.available
+          ? hermes.status === "live" ? "healthy" : "degraded"
+          : "critical",
+        uptime: hermes.lastActivityAgeSeconds ?? 0,
+        cpu: 0, mem: 0, disk: 0, threats: 0, alerts: 0,
+        region: "Local",
+        heartbeat: hermes.lastActivity ? new Date(hermes.lastActivity).getTime() : 0,
+        agents: Math.max(hermes.channels.observed.length, hermes.channels.configured.length),
+        sessions: hermes.sessions.last24h,
+        p95: 0,
+        cost: 0,
+        posture: null as number | null,
+        isLive: hermes.status === "live",
+        services: { openclaw: "offline" as const, paperclip: "offline" as const, autensa: "offline" as const },
+      });
     }
   } catch {}
 
