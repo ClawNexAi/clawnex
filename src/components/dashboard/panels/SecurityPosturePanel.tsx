@@ -125,7 +125,6 @@ export function SecurityPosturePanel({ fleetApi, demoMode, onNavigate, filters, 
   // Average only over instances that actually have a posture score (not null).
   // If every fleet row is unscanned AND there's no hardening data, we show "unscanned".
   const scoredInstances = instances.filter(i => typeof i.posture === 'number') as Array<InstanceRow & { posture: number }>;
-  const hasFleetScores = scoredInstances.length > 0;
   // Single shared reconciliation (metric-semantics.reconcilePosture) — the same
   // precedence the Fleet column + Readiness Banner observe, so the gauge can't
   // silently diverge. clawkeeper > fleet-estimate > unscanned.

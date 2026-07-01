@@ -738,7 +738,7 @@ function SentinelDashboardInner() {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <img src={mounted && theme === "light" ? "/clawnex-icon-light.png" : "/clawnex-icon-dark.png"} alt="ClawNex" width={20} height={20} style={{ flexShrink: 0, objectFit: "contain", borderRadius: 4 }} />
+            <img src={theme === "light" ? "/clawnex-icon-light.png" : "/clawnex-icon-dark.png"} alt="ClawNex" width={20} height={20} style={{ flexShrink: 0, objectFit: "contain", borderRadius: 4 }} />
             <a href="https://clawnexai.com" target="_blank" rel="noopener noreferrer" title="clawnexai.com" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
               {/* SVG wordmark — see BrandWordmark.tsx for why we ditched the
                  CSS background-clip:text approach. */}

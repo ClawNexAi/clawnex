@@ -34,7 +34,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { readOpenClawConfig, normalizeOpenClawModel } from '@/lib/openclaw-paths';
-import { sanitizeLogField } from '@/lib/security/log-sanitize';
 import { getAgentRole } from './agent-roles';
 
 // ---------------------------------------------------------------------------

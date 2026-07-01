@@ -22,7 +22,6 @@
 import { queryAll, queryOne, run, transaction } from '../db/index';
 import { isIP } from 'node:net';
 import { promises as dnsPromises } from 'node:dns';
-import { sanitizeLogField } from '../security/log-sanitize';
 
 // ---------------------------------------------------------------------------
 // Security: warn when sending credentials over plain HTTP to non-local hosts
@@ -33,12 +32,12 @@ function warnIfInsecure(url: string, context: string): void {
     const parsed = new URL(url);
     const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
     if (parsed.protocol === 'http:' && !isLocalhost) {
-      console.warn(`[SECURITY] ${sanitizeLogField(context)}: sending credentials over insecure HTTP to non-local host. Consider using HTTPS.`);
+      console.warn('[SECURITY] Provider configuration sends credentials over insecure HTTP to a non-local host. Consider using HTTPS.');
     }
   } catch {
     // Invalid URL — warn anyway
     if (url.startsWith('http://')) {
-      console.warn(`[SECURITY] ${sanitizeLogField(context)}: sending credentials over insecure HTTP to invalid URL. Consider using HTTPS.`);
+      console.warn('[SECURITY] Provider configuration sends credentials over insecure HTTP to an invalid URL. Consider using HTTPS.');
     }
   }
 }
@@ -114,7 +113,7 @@ async function assertSafeFetchTarget(url: string, context: string): Promise<{ bl
     if (isLoopbackIp(ip)) continue;  // legitimate for OpenClaw / LM Studio
     if (isBlockedRange(ip)) {
       const reason = `target ${host} resolves to ${ip} (private/link-local/metadata/reserved range — refused for ${context})`;
-      console.warn(`[SECURITY] ${sanitizeLogField(context)}: provider target resolved to a blocked private/link-local/metadata/reserved range`);
+      console.warn('[SECURITY] Provider target resolved to a blocked private/link-local/metadata/reserved range.');
       return { blocked: true, reason };
     }
   }

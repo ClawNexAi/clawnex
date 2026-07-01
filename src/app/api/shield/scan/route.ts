@@ -168,8 +168,7 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    console.error(`[Shield Scan] Error: ${sanitizeLogField(detail)}`);
+    console.error('[Shield Scan] Error');
     return NextResponse.json(
       { error: "Internal scan error" },
       { status: 500 }

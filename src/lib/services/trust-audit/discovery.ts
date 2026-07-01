@@ -80,14 +80,6 @@ export function discoverSurfaces(): Surface[] {
 export function discoverAgents(): Agent[] {
   const agents: Agent[] = [];
 
-  // Query configured providers to determine routing
-  const providers = queryAll<{
-    id: string;
-    name: string;
-    type: string;
-    base_url: string;
-  }>("SELECT id, name, type, base_url FROM config_providers");
-
   // Get agents from traffic data (using session_id as proxy for agent identity)
   const trafficSessions = queryAll<{
     session_id: string;
