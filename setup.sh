@@ -596,7 +596,7 @@ if [ -n "$PYTHON_CMD" ]; then
     echo -e "  ${GREEN}✓${NC} pip $(${PYTHON_CMD} -m pip --version 2>/dev/null | awk '{print $2}')"
 
     # Version check uses importlib.metadata, not litellm.__version__.
-    # LiteLLM 1.83.0+ dropped the __version__ module attribute, so the
+    # recent LiteLLM releases dropped the __version__ module attribute, so the
     # latter raises AttributeError even when the package is installed
     # correctly. importlib.metadata reads the package's installed-version
     # metadata directly and works regardless of module exports.

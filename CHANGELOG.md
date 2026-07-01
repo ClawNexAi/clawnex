@@ -36,6 +36,19 @@ Section ordering per release: **Added, Changed, Deprecated, Removed, Fixed, Secu
 - `scripts/install.sh` (offered the deleted Docker path) and
   `deploy/deploy.sh` (legacy Ubuntu deployer) — superseded by `install.sh`.
 
+## [0.15.1-alpha] - 2026-07-01
+
+### Fixed
+
+- Model pricing sync now resolves against the exact pinned stable LiteLLM release tag, `v1.84.10`, and rejects pre-release runtime pins. ClawNex no longer derives model pricing from nightly LiteLLM tags or the unverified upstream tip.
+- Configuration → AI & Models now displays the stable pinned pricing source tag instead of appending a pre-release suffix.
+- Bundled model pricing data was regenerated from LiteLLM `v1.84.10`.
+
+### Changed
+
+- Product docs, public docs, and operational notes now state the current LiteLLM pin as `1.84.10`.
+- Stale wording that implied runtime pricing sync depended on nightly LiteLLM tags was removed.
+
 ## [0.15.0-alpha] - 2026-05-17
 
 ### Fixed — Veracity audit F1–F6 + behavioral proofs + macOS build unblock (2026-06-12)
@@ -1635,7 +1648,7 @@ Pre-OSS hardening release. Consolidates the full output of the 2026-04-22 enterp
 - **H-10 `sentinel.db` permissions (High)** — `deploy/deploy.sh` now sets `umask 077` and explicitly `chmod 600 sentinel.db* logs/*` after first service start
 - **H-11 Port 5001 public exposure (High)** — removed unconditional `ufw allow 5001/tcp` from installer; replaced with conditional `tailscale0`-scoped rule; systemd `ExecStart` and `package.json start` script now bind `-H 127.0.0.1` so Caddy is the only ingress path
 - **H-12 LiteLLM proxy fail-open (High)** — see "Changed" entry above
-- LiteLLM 150-process orphan incident (2026-04-22): cleaned up 145 orphaned worker processes (state `U`, PPID=1) spawned by an earlier `start.sh` invocation when `--num_workers 1` was not honored by LiteLLM 1.83.0's internal worker manager; freed ~1,155 MB RAM; port 4001 response recovered from 60s scheduler-thrash to 1.6ms
+- LiteLLM 150-process orphan incident (2026-04-22): cleaned up 145 orphaned worker processes (state `U`, PPID=1) spawned by an earlier `start.sh` invocation when `--num_workers 1` was not honored by LiteLLM's internal worker manager; freed ~1,155 MB RAM; port 4001 response recovered from 60s scheduler-thrash to 1.6ms
 - LiteLLM fork-bomb triple-guard: (a) `lsof` port check in `litellm/start.sh` aborts at shell level, (b) raw-socket bind pre-flight in `litellm/run.py` exits with code 0 in ~20ms before any LiteLLM imports, (c) `config.yaml` sets `general_settings.num_workers: 1`
 - `CorrelationsPanel.tsx` auto-refresh intervals (summary 30s, list 20s) replace previously generic `Loading...` spinner; progressive state buckets via shared components
 - TrustAuditPanel tab count dropdown no longer claims certainty on heuristic findings; Rule 2 (tool-freedom), Rule 3 (model-privilege), Rule 6 (prompt-capability), Rule 9 (delegation), Rule 10 (browser), Rule 11 (egress), Rule 12 (plugin), Rule 13 (credential-exposure agent path) reworded to disclose inference basis
@@ -1775,7 +1788,7 @@ Pre-OSS hardening release. Consolidates the full output of the 2026-04-22 enterp
 ### Fixed
 - Hydration error from block-level elements inside `<span>` (added `as` prop with `display: contents`)
 - Total Cost stat asymmetric width caused by inline-block wrapper breaking flex layout
-- Model Pricing sync 404 (always append `-nightly` tag for GitHub fetch)
+- Model Pricing sync 404 (stable LiteLLM tag resolution corrected)
 - Infrastructure status badge tooltips missing for ONLINE/OFFLINE states
 - `Table` headers type widened from `string[]` to `ReactNode[]`
 - Respects `prefers-reduced-motion` for tooltip animations

@@ -4,7 +4,7 @@
 **Document ID:** CLAWNEX-A11Y-001
 **Version:** 1.5
 **Last Updated:** 2026-05-08
-**Product Version:** v0.15.0-alpha
+**Product Version:** v0.15.1-alpha
 **Classification:** For Distribution
 **Status:** Living Document
 

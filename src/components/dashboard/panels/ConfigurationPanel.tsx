@@ -2927,7 +2927,7 @@ function ModelPricingRow() {
 
       <div style={{ marginTop: 6, fontSize: 11, color: C.txT, lineHeight: 1.5 }}>
         Pricing data powers the Token &amp; Cost Intel panel. Bundled snapshot seeds the DB on first boot; updates pull from LiteLLM&apos;s GitHub at the pinned tag{" "}
-        <span style={{ fontFamily: F.mono, color: C.cyan }}>v{status?.pinnedLiteLLMVersion || "1.84.10"}-nightly</span>.
+        <span style={{ fontFamily: F.mono, color: C.cyan }}>v{status?.pinnedLiteLLMVersion || "1.84.10"}</span>.
       </div>
 
       {message && (

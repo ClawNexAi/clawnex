@@ -2,7 +2,7 @@
 #
 # Two ecosystems for ClawNex: npm (the dashboard + LiteLLM Python deps live
 # in their own pinned requirements.txt that we hand-curate per the
-# LiteLLM-1.83.0 supply-chain incident — pip is intentionally NOT auto-
+# LiteLLM supply-chain pinning policy — pip is intentionally NOT auto-
 # updated), and github-actions (workflow action versions).
 #
 # Schedule weekly so PRs don't pile up; group ecosystem-wide updates into

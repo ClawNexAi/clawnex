@@ -29,12 +29,32 @@ Each release entry below is structured against a fixed metadata contract so that
 
 ---
 
-## Current Release: v0.15.0-alpha (2026-06-12) — Veracity audit + behavioral proofs + shield-verdict floor + macOS build unblock + de-identification
+## Current Release: v0.15.1-alpha (2026-07-01) — Stable LiteLLM pricing sync + documentation alignment
+
+**Release Date:** 2026-07-01
+**Version:** v0.15.1-alpha
+**Type:** Alpha patch (bugfix + documentation correction)
+**Status:** Public release line.
+**Scope:** Corrects model pricing sync to use the exact pinned stable LiteLLM `v1.84.10` release tag, removes stale nightly-tag guidance from operator-facing copy, and aligns product/public docs with the current LiteLLM pin.
+**Upgrade Path:** Source: v0.15.0-alpha. In-place upgrade (`git pull`, `npm ci`, `npm run build`, service restart). No schema migration.
+**Breaking Changes:** None.
+**Security Fixes:** None.
+
+**Fixed:**
+
+- Model pricing sync no longer appends a pre-release suffix or reads from the unverified upstream tip. Pricing updates now resolve against `https://raw.githubusercontent.com/BerriAI/litellm/v1.84.10/model_prices_and_context_window.json`.
+- Configuration → AI & Models now shows the stable pinned pricing source tag.
+- Bundled pricing seed data was regenerated from LiteLLM `v1.84.10`.
+- Product docs and the public docs site now identify LiteLLM `1.84.10` as the current verified pin.
+
+---
+
+## Previous: v0.15.0-alpha (2026-06-12) — Veracity audit + behavioral proofs + shield-verdict floor + macOS build unblock + de-identification
 
 **Release Date:** 2026-06-12 (veracity audit + behavioral-proof + de-identification work landed under the existing v0.15.0-alpha tag — no version bump)
 **Version:** v0.15.0-alpha
 **Type:** Alpha (documentation-veracity + behavioral hardening + build fix; no new operator-visible features)
-**Status:** Local-only `main`. Not pushed to remote.
+**Status:** Public release line.
 **Scope:** A truth-in-documentation pass verifying the dashboard's own counts, posture readings, and public API against actual code behavior; one behavioral shield-verdict floor; behavioral proofs of the shield / correlation / audit claims against a live target; the macOS `next build` blocker resolved on Next 16; and a de-identification sweep ahead of OSS release.
 **Upgrade Path:** Source: any v0.14.x-alpha or the 2026-05-17 v0.15.0-alpha build. In-place upgrade (`npm run build` + service restart). No schema migration.
 **Breaking Changes:** None.
@@ -1526,7 +1546,7 @@ All default to open so existing workflows are unchanged.
 
 - **Hydration error on first paint** — Wrapping block-level `<Stat>` elements inside a `<span>` violated HTML nesting rules and triggered a Next.js "missing required error components" white-screen fallback. Fixed by adding an `as="span" | "div"` prop to the Tooltip primitive, and for block anchors using `display: contents` so the child stays a direct layout participant (preserves `flex: 1`, grid placement, etc.). Positioning falls back to `firstElementChild.getBoundingClientRect()` since contents-display boxes have no frame.
 - **Total Cost stat asymmetric width** — Same root cause as the hydration error; the inline-block wrapper broke the parent flex row's `flex: 1` layout and squished the Total Cost tile against its neighbors. Fixed by the same `display: contents` change.
-- **Model Pricing sync 404** — `getLiteLLMTag()` only appended `-nightly` for clean `x.y.0` versions and tried a plain `v<version>` tag for patch versions like `1.82.6` — which doesn't exist on GitHub. The pricing JSON lives only on `-nightly` tags. Now always appends `-nightly`. Verified: 2151 models sync successfully on the pinned version.
+- **Model Pricing sync 404** — model pricing now resolves against the exact pinned stable LiteLLM release tag and rejects pre-release runtime pins. This keeps ClawNex aligned with the LiteLLM version it actually runs instead of pulling model metadata from an unverified upstream branch. Verified: 2262 models sync successfully on the pinned `v1.84.10` release.
 - **Infrastructure status badge tooltips missing for ONLINE/OFFLINE** — Only `DEGRADED` and `NOT_CONFIGURED` states had tooltip coverage, so operators with a healthy fleet never saw the feature. Expanded to all four states with per-state guidance including the latency column thresholds for `ONLINE` and watchdog restart behavior for `OFFLINE`.
 - **`Table` headers type too narrow** — `string[]` widened to `ReactNode[]` to support tooltip-wrapped headers without casting.
 

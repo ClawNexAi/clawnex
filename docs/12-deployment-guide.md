@@ -4,7 +4,7 @@
 **Version:** 2.4
 **Classification:** Confidential
 **Last Updated:** 2026-05-14
-**Product Version:** v0.15.0-alpha (post-merge `main`)
+**Product Version:** v0.15.1-alpha
 **Status:** Living Document
 
 ---

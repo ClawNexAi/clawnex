@@ -1,6 +1,6 @@
 {
   "name": "clawnex",
-  "version": "0.15.0-alpha",
+  "version": "0.15.1-alpha",
   "private": true,
   "description": "AI Agent Fleet Security Operations Center — inline Prompt Shield, fleet-wide visibility, immutable audit, RBAC, and scheduled compliance reporting for AI agent fleets.",
   "license": "Apache-2.0",

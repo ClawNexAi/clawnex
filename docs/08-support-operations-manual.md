@@ -4,7 +4,7 @@
 **Version:** 1.3
 **Classification:** Confidential — IT Staff Only
 **Last Updated:** 2026-05-08
-**Product Version:** v0.15.0-alpha
+**Product Version:** v0.15.1-alpha
 **Status:** Living Document
 
 ---
@@ -1068,7 +1068,7 @@ ls -la ~/sentinel/.env.local ~/sentinel/sentinel.db ~/sentinel/litellm/start.sh
 
 - All Node.js dependencies are pinned to exact versions in `package.json`
 - All Python dependencies are pinned in `requirements.txt`
-- **LiteLLM 1.84.10 is the current verified-safe version** — versions after 1.82.6 up to 1.84.10 were compromised
+- **LiteLLM 1.84.10 is the current verified pin** — future LiteLLM bumps require manual verification before release
 - Never run `npm update`, `pip install --upgrade`, or any auto-update command
 - Every dependency change requires manual verification and approval
 

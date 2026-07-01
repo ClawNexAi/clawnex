@@ -3,7 +3,7 @@
 **Document ID:** CLAWNEX-PUB-INT-001
 **Version:** 1.0
 **Classification:** Public
-**Product Version:** v0.15.0-alpha
+**Product Version:** v0.15.1-alpha
 **Status:** Public Reference
 
 ---
