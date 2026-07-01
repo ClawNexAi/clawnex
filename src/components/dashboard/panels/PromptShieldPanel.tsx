@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { DashboardFilters, ShieldResult, ShieldStats, ShieldHistoryItem } from '../types';
 import { C, F } from '../constants';
-import { Badge, Card, Stat, Table, LoadingSpinner } from '../shared';
+import { Badge, Card, Stat, Table } from '../shared';
 import { Tooltip } from '../tooltip';
 import { sevColor, stColor } from '../utils';
 import { ShieldWhitelistSection } from './ShieldWhitelistSection';
