@@ -91,6 +91,7 @@ const KEY_BUNDLED_VERSION = 'pricing_bundled_version';
 
 const DEFAULT_STALE_DAYS = 30;
 const DEFAULT_AUTO_SYNC_INTERVAL_HOURS = 24;
+const DEFAULT_LITELLM_VERSION = '1.84.10';
 
 // ---------------------------------------------------------------------------
 // Bundled JSON loader (for seeding + failsafe)
@@ -256,17 +257,27 @@ export function ensureSeeded(): void {
 // GitHub sync
 // ---------------------------------------------------------------------------
 
-/** Resolve the GitHub tag to fetch. Prefers LITELLM_VERSION env, falls back to 1.84.10. */
-function getLiteLLMTag(): string {
-  const pinned = process.env.LITELLM_VERSION?.trim() || '1.84.10';
-  // LiteLLM publishes pricing files on `v<version>-nightly` tags for every
-  // release (including patch versions like 1.82.6). The plain `v<version>` tag
-  // frequently doesn't carry the pricing JSON and returns 404. Always prefer
-  // the `-nightly` suffix; the caller falls back to plain if that 404s.
-  return `v${pinned}-nightly`;
+/** Return the pinned LiteLLM version. Prefers LITELLM_VERSION env, falls back to the verified pin. */
+export function getPinnedLiteLLMVersion(): string {
+  return process.env.LITELLM_VERSION?.trim() || DEFAULT_LITELLM_VERSION;
 }
 
-function getSyncUrl(tag: string): string {
+/**
+ * Resolve the GitHub tag for LiteLLM pricing sync.
+ *
+ * ClawNex only syncs model pricing from the exact stable LiteLLM release tag
+ * that matches the pinned runtime version. Do not use nightly tags here.
+ */
+export function getLiteLLMSyncTags(version = getPinnedLiteLLMVersion()): string[] {
+  const pinned = version.trim().replace(/^v/i, '');
+  if (!pinned) return [`v${DEFAULT_LITELLM_VERSION}`];
+  if (/nightly/i.test(pinned)) {
+    throw new Error(`Nightly LiteLLM builds are not supported for ClawNex pricing sync: ${version}`);
+  }
+  return [`v${pinned}`];
+}
+
+export function getSyncUrl(tag: string): string {
   return `https://raw.githubusercontent.com/BerriAI/litellm/${tag}/model_prices_and_context_window.json`;
 }
 
@@ -294,16 +305,35 @@ export async function syncFromGitHub(): Promise<{
   durationMs: number;
 }> {
   const start = Date.now();
-  const tag = getLiteLLMTag();
-  const url = getSyncUrl(tag);
+  const tags = getLiteLLMSyncTags();
+  const failures: string[] = [];
+  let tag = '';
+  let url = '';
+  let raw: Record<string, LiteLLMRawEntry> | null = null;
 
-  const res = await fetch(url, {
-    headers: { Accept: 'application/json', 'User-Agent': `ClawNex/${CLAWNEX_VERSION}` },
-  });
-  if (!res.ok) {
-    throw new Error(`GitHub fetch failed: ${res.status} ${res.statusText} (${url})`);
+  for (const candidateTag of tags) {
+    const candidateUrl = getSyncUrl(candidateTag);
+    try {
+      const res = await fetch(candidateUrl, {
+        headers: { Accept: 'application/json', 'User-Agent': `ClawNex/${CLAWNEX_VERSION}` },
+      });
+      if (!res.ok) {
+        failures.push(`${candidateTag}: ${res.status} ${res.statusText}`);
+        continue;
+      }
+      tag = candidateTag;
+      url = candidateUrl;
+      raw = (await res.json()) as Record<string, LiteLLMRawEntry>;
+      break;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      failures.push(`${candidateTag}: ${message}`);
+    }
   }
-  const raw = (await res.json()) as Record<string, LiteLLMRawEntry>;
+
+  if (!raw) {
+    throw new Error(`GitHub fetch failed for LiteLLM pricing tags (${failures.join('; ')})`);
+  }
 
   const rows: Array<{
     model_id: string;
@@ -402,7 +432,7 @@ export function getStatus(): PricingStatus {
     isStale,
     autoSyncEnabled,
     autoSyncIntervalHours,
-    pinnedLiteLLMVersion: process.env.LITELLM_VERSION?.trim() || '1.84.10',
+    pinnedLiteLLMVersion: getPinnedLiteLLMVersion(),
     everSynced,
   };
 }
