@@ -3974,6 +3974,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
 
   const inputStyle = { width: "100%", padding: "8px 10px", background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6, color: C.tx, fontFamily: F.mono, fontSize: 13, outline: "none", boxSizing: "border-box" as const };
   const btnStyle = { padding: "8px 16px", borderRadius: 6, border: "none", fontWeight: 700, fontSize: 13, cursor: "pointer" };
+  const autoHermesSaved = !!hermesStatus && hermesInstances.some(inst => inst.home_path === hermesStatus.home);
   const renderHermesChecks = (diag: HermesDiagnostics | null | undefined) => {
     if (!diag) return null;
     const checks = [
@@ -4552,7 +4553,12 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
                   <Badge color={hermesStatus.status === "live" ? C.green : C.orange} label={hermesStatus.status.toUpperCase()} />
                   <Badge color={C.purp} label="AUTO-DETECTED" />
                 </div>
-                <button onClick={async () => { setHermesTestResult("Testing..."); try { const res = await fetch("/api/health/detailed"); if (res.ok) { const d = await res.json(); const diag = d.hermesWatcher?.diagnostics as HermesDiagnostics | undefined; setHermesTestResult(diag?.available ? `${diag.status.toUpperCase()} — ${diag.messages.last24h} messages / ${diag.sessions.last24h} sessions in 24h` : `FAIL — ${diag?.statusDetail || "state.db not accessible"}`); if (diag) setHermesStatus(diag); } else { setHermesTestResult("FAIL — health endpoint error"); } } catch { setHermesTestResult("FAIL — connection error"); } setTimeout(() => setHermesTestResult(null), 5000); }} style={{ padding: "4px 10px", background: C.info, color: "#fff", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Test</button>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {!autoHermesSaved && (
+                    <button onClick={async () => { try { const res = await fetch("/api/config/hermes-instances", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: hermesStatus.activeProfile ? `Hermes ${hermesStatus.activeProfile}` : "Hermes Local", homePath: hermesStatus.home }) }); setHermesTestResult(res.ok ? "SAVED — detected Hermes connection recorded" : "FAIL — could not save detected Hermes"); fetchConfig(); } catch { setHermesTestResult("FAIL — connection error"); } setTimeout(() => setHermesTestResult(null), 5000); }} style={{ padding: "4px 10px", background: C.purp, color: "#fff", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Save</button>
+                  )}
+                  <button onClick={async () => { setHermesTestResult("Testing..."); try { const res = await fetch("/api/health/detailed"); if (res.ok) { const d = await res.json(); const diag = d.hermesWatcher?.diagnostics as HermesDiagnostics | undefined; setHermesTestResult(diag?.available ? `${diag.status.toUpperCase()} — ${diag.messages.last24h} messages / ${diag.sessions.last24h} sessions in 24h` : `FAIL — ${diag?.statusDetail || "state.db not accessible"}`); if (diag) setHermesStatus(diag); } else { setHermesTestResult("FAIL — health endpoint error"); } } catch { setHermesTestResult("FAIL — connection error"); } setTimeout(() => setHermesTestResult(null), 5000); }} style={{ padding: "4px 10px", background: C.info, color: "#fff", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Test</button>
+                </div>
               </div>
               <div style={{ fontSize: 12, color: C.txT, fontFamily: F.mono }}>{hermesStatus.stateDbPath}</div>
               <div style={{ fontSize: 11, color: C.txS, marginTop: 4 }}>

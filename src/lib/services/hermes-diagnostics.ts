@@ -233,7 +233,6 @@ export function diagnoseHermes(homePath?: string): HermesDiagnostics {
       return base;
     }
 
-    const nowSeconds = Math.floor(Date.now() / 1000);
     const sessionRow = db.prepare(
       `SELECT
          COUNT(*) AS total,
@@ -290,7 +289,6 @@ export function diagnoseHermes(homePath?: string): HermesDiagnostics {
       base.statusDetail = "Hermes state.db is readable and recent activity is visible";
     }
 
-    void nowSeconds;
     return base;
   } catch (err) {
     base.status = "state_db_unreadable";
