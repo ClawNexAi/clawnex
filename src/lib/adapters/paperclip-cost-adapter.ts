@@ -148,9 +148,15 @@ export const paperclipCostAdapter = {
           actual_cost_usd = 0;
           actual_cost_source = 'paperclip_finance_event';
         } else if (e.estimated === true) {
-          cost_status = 'estimated';
-          estimated_cost_usd = e.amountCents / 100;
-          estimated_cost_source = 'paperclip_finance_event';
+          const estimatedUsd = e.amountCents / 100;
+          if (Number.isFinite(estimatedUsd) && estimatedUsd >= 0) {
+            cost_status = 'estimated';
+            estimated_cost_usd = estimatedUsd;
+            estimated_cost_source = 'paperclip_finance_event';
+          } else {
+            row_flags.push('invalid_cost');
+            cost_status = 'unknown';
+          }
         } else {
           // estimated=false, adapter unverified → unknown.
           // Orchestrator's enrichWithRecompute may promote to recomputed or

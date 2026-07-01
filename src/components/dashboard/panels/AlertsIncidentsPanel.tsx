@@ -71,9 +71,10 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
       // (open + acknowledged + investigating) by default. The Show Suppressed
       // toggle layers suppressed alerts on without changing the rest of the
       // scope.
+      const productionOnly = filters.productionOnly === "true" ? "&productionOnly=true" : "";
       const url = includeSuppressed
-        ? `/api/alerts?${qs}&scope=active&include_suppressed=true`
-        : `/api/alerts?${qs}&scope=active`;
+        ? `/api/alerts?${qs}&scope=active${productionOnly}&include_suppressed=true`
+        : `/api/alerts?${qs}&scope=active${productionOnly}`;
       const res = await fetch(url);
       if (res.ok) { const data = await res.json(); setApiAlerts(data.alerts || []); setFreshCounter(8); }
     } catch {}

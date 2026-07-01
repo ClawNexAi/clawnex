@@ -17,7 +17,7 @@ export const PANEL_HELP: Record<TabId, { title: string; desc: string; metrics: s
     title: "Mission Control",
     desc: "Cockpit overview — fleet safety posture, evidence quality, action queue, and cost-risk signals at a glance. Drills into deep-work tabs for investigation.",
     metrics: [
-      "Active incidents (open / investigating / suppressed)",
+      "Active incidents (open / acknowledged / investigating)",
       "Evidence confidence (forward correlation %)",
       "Shield activity (24h block / review / allow)",
       "Cost risk (USD + drain signals)",
@@ -55,10 +55,10 @@ export const PANEL_HELP: Record<TabId, { title: string; desc: string; metrics: s
   },
   blastRadius: {
     title: "Blast Radius",
-    desc: "Unified blast-radius + permissiveness operating view. Answers in one screen: which agents are reachable from where, under what controls, with what tools, and how bad would it be if one were abused? Scans ~/.openclaw/openclaw.json channels.* blocks AND ~/.hermes/profiles/*/ (.env + config.yaml + pairing + channel_directory) for real posture. Detects dual-bot configurations (OpenClaw declares one bot, Hermes runs another), granularity gaps (OpenClaw declares per-guild posture Hermes doesn't enforce), and misconfigurations like channel IDs mixed into user allowlists. Every field carries provenance — one 'unknown' input collapses the whole claim to 'unknown' rather than lying with a green zero. Four vertical blocks: Exposure Matrix (Surface × posture × enforcer), Most Permissive Agents (ranked), Most Exposed Surfaces (ranked), Dangerous Combos + Posture Lints (side-by-side findings). Every KPI tooltip inline-defines its source, inclusion criteria, and confidence — no label-narrower-than-operator-reading gaps.",
+    desc: "Unified blast-radius + permissiveness operating view. Answers in one screen: which agents are reachable from where, under what controls, with what tools, and how bad would it be if one were abused? Scans ~/.openclaw/openclaw.json channels.* blocks AND ~/.hermes/profiles/*/ (.env + config.yaml + pairing + channel_directory) for real posture. Detects dual-bot configurations (OpenClaw declares one bot, Hermes runs another), granularity gaps (OpenClaw declares per-guild posture Hermes doesn't enforce), and misconfigurations like channel IDs mixed into user access rules. Every field carries provenance — one 'unknown' input collapses the whole claim to 'unknown' rather than lying with a green zero. Four vertical blocks: Exposure Matrix (Surface × posture × enforcer), Most Permissive Agents (ranked), Most Exposed Surfaces (ranked), Dangerous Combos + Posture Lints (side-by-side findings). Every KPI tooltip inline-defines its source, inclusion criteria, and confidence — no label-narrower-than-operator-reading gaps.",
     metrics: ["Surfaces — modeled (K integrated, L not_integrated)", "Reachable agents — joined from openclaw + hermes + runtime providers", "Dangerous combos — N evaluable · M skipped (insufficient evidence)", "Posture lints — rule findings against live config", "Max blast radius — highest edge score; '—' if inputs are unknown"],
-    actions: ["Click Refresh to force a fresh scan (bypasses 60s cache)", "Expand any row in the Exposure Matrix to see the 9-dimension posture", "Click drilldown links to jump to Tools & Access / Access Lists / Agents / Routing", "Hover any KPI for its source + inclusion + confidence definition", "Review Posture Lints for live misconfigurations"],
-    related: ["trustAudit", "toolsAccess", "accessLists", "agents", "correlations"],
+    actions: ["Click Refresh to force a fresh scan (bypasses 60s cache)", "Expand any row in the Exposure Matrix to see the 9-dimension posture", "Click drilldown links to jump to Tools & Access / Agents / Routing", "Hover any KPI for its source + inclusion + confidence definition", "Review Posture Lints for live misconfigurations"],
+    related: ["trustAudit", "toolsAccess", "agents", "correlations"],
   },
   trustAudit: {
     title: "Trust Audit",
@@ -203,7 +203,7 @@ export const PANEL_HELP: Record<TabId, { title: string; desc: string; metrics: s
   governance: {
     title: "Governance",
     desc: "Read ClawNex's governance lane from inside the dashboard. Ships with 14 approved policies, 2 live registers (risk + vendor inventory), and three summary artifacts (one-pager, governance index, policy evidence checklist). Every policy carries a document ID, approval metadata (Owner & Maintainer sign-off pending a named alternate approver — tracked as risk R-019), and a change log. The Overview section is the fastest path for enterprise prospects and security reviewers; Policies and Registers expand below for deep reads. Markdown renders inline via the shared DocReader — click any row to open a doc, click Close to return to the list.",
-    metrics: ["Overview — 3 summary docs (one-pager, index, evidence checklist)", "Policies — 14 approved + index (signed 2026-04-22)", "Registers — 2 live (risk register with 23 active risks; vendor inventory reconciled against codebase)", "Compliance posture — SOC 2 ~42% / ISO 27001:2022 ~38% / NIST CSF 2.0 Tier 2 (per 2026-04-22 audit)"],
+    metrics: ["Overview — 3 summary docs (one-pager, index, evidence checklist)", "Policies — 14 approved + index (signed 2026-04-22)", "Registers — 2 live (risk register: P0 0 active, P1 10 active, P2 10 active, Closed 16; vendor inventory reconciled against codebase)", "Compliance posture — SOC 2 ~55-60% / ISO 27001:2022 ~50-55% / NIST CSF 2.0 Tier 2 (per governance one-pager)"],
     actions: ["Start with the Governance One-Pager for the leadership view", "Open the Policy Evidence Checklist to see which commitments have concrete artifacts vs gaps", "Read the Risk Register to see live priorities (P0/P1/P2 breakdown)", "Open any policy to inspect its control areas, approval metadata, and change log"],
     related: ["auditEvidence", "executiveReports", "about"],
   },

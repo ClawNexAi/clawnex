@@ -59,7 +59,7 @@ export function SignalsAndSourceHealth({ demoMode, range, onNavigate }: Props) {
     : collector;
 
   return (
-    <div style={{
+    <div className="mc-panel-surface mc-signals-source-health" style={{
       background: C.glassChrome,
       backdropFilter: "blur(18px)",
       WebkitBackdropFilter: "blur(18px)",

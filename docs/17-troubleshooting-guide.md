@@ -735,7 +735,7 @@ curl -X POST http://127.0.0.1:5001/api/shield/scan \
 - [ ] Watchdog cron installed (check with `crontab -l | grep watchdog`)
 - [ ] Daily backup cron installed (if enabled)
 - [ ] CVE database synced (check Security Posture tab)
-- [ ] Host Security verified (check with `ls ~/.local/bin/clawkeeper.sh`)
+- [ ] Host Security verified (check the Security Posture tab after running a scan)
 
 ---
 
@@ -1483,7 +1483,7 @@ curl -s -o /dev/null -m 5 -w "GET / → %{http_code}\n" http://localhost:5001/
 
 Paperclip is the only HTTP-dependent FinOps adapter — it pulls finance events via the existing `paperclip-connector.ts`. If Paperclip is offline / not configured, `sourceStatus.paperclip` will be `'unavailable'`. The orchestrator returns the report anyway with `paperclip.count = 0`. This is normal during a Paperclip outage.
 
-**Diagnosis:** check Configuration → Fleet Connectors → Paperclip card for the connector's last-seen timestamp + status.
+**Diagnosis:** Paperclip is optional and currently configured outside the released Fleet Connectors UI. Verify the connector environment/configuration and the service endpoint that writes Paperclip finance events.
 
 **Symptom C: `sourceStatus` shows `unavailable` for OpenClaw or Hermes.**
 

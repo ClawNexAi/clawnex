@@ -22,6 +22,7 @@ const BUCKETS: Bucket[] = [
   { label: "1–3d", ageMin: DAY, ageMax: 3 * DAY },
   { label: "3d+", ageMin: 3 * DAY, ageMax: Infinity },
 ];
+const ACTIVE_STATUS_FILTER = ["open", "acknowledged", "investigating"];
 
 interface Props {
   demoMode: boolean;
@@ -73,18 +74,15 @@ export function IncidentAging({ demoMode, onNavigate }: Props) {
     }
     const run = async () => {
       try {
-        const res = await fetch("/api/alerts?scope=active");
+        const res = await fetch("/api/alerts?scope=active&productionOnly=true&limit=500");
         if (!res.ok) {
           if (isMountedRef.current) setErrored(true);
           return;
         }
         const body = await res.json();
-        const allAlerts: Array<{ created_at: string; severity?: string; status?: string }> = body?.alerts ?? [];
-        // Spec §5.1 semantics: aging chart should reflect the same population as the
-        // Active Incidents KPI — status IN ('open', 'investigating', 'suppressed').
-        const alerts = allAlerts.filter((a) =>
-          a.status === "open" || a.status === "investigating" || a.status === "suppressed"
-        );
+        // Aging chart reflects the same canonical active production population
+        // as the Active Incidents KPI.
+        const alerts: Array<{ created_at: string; severity?: string; status?: string }> = body?.alerts ?? [];
         const now = Date.now();
         const buckets: AgingBucket[] = BUCKETS.map((b) => {
           const inBucket = alerts.filter((a) => {
@@ -133,20 +131,20 @@ export function IncidentAging({ demoMode, onNavigate }: Props) {
     const oldest3dPlusCount = demoBuckets[demoBuckets.length - 1].total;
     const max = Math.max(1, ...demoBuckets.map((b) => b.total));
     return (
-      <div style={{ background: C.glassChrome, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 18, boxShadow: C.glassShadow, padding: 16 }}>
+      <div className="mc-panel-surface mc-incident-aging" style={{ background: C.glassChrome, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 18, boxShadow: C.glassShadow, padding: 16 }}>
         <div style={{ fontSize: 11, color: C.txT, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.08em", marginBottom: 12 }}>
           Incident Aging by Severity <span style={{ color: C.purp, fontWeight: 800, marginLeft: 6 }}>· DEMO</span>
         </div>
         {demoBuckets.map((b) => (
           <div
             key={b.label}
-            onClick={() => onNavigate("alertsIncidents", { filter: { status: ["open"], age: [b.label] }, fromMissionControl: true })}
+            onClick={() => onNavigate("alertsIncidents", { filter: { status: ACTIVE_STATUS_FILTER, age: [b.label], productionOnly: "true" }, fromMissionControl: true })}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                onNavigate("alertsIncidents", { filter: { status: ["open"], age: [b.label] }, fromMissionControl: true });
+                onNavigate("alertsIncidents", { filter: { status: ACTIVE_STATUS_FILTER, age: [b.label], productionOnly: "true" }, fromMissionControl: true });
               }
             }}
             style={{
@@ -198,14 +196,14 @@ export function IncidentAging({ demoMode, onNavigate }: Props) {
 
   if (errored && !data) {
     return (
-      <div style={{ background: C.glassChrome, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 18, boxShadow: C.glassShadow, padding: 16 }}>
+      <div className="mc-panel-surface mc-incident-aging" style={{ background: C.glassChrome, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 18, boxShadow: C.glassShadow, padding: 16 }}>
         <div style={{ color: C.danger, fontSize: 11, fontFamily: F.mono }}>Aging source unavailable</div>
       </div>
     );
   }
   if (!data) {
     return (
-      <div style={{ background: C.glassChrome, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 18, boxShadow: C.glassShadow, padding: 16 }}>
+      <div className="mc-panel-surface mc-incident-aging" style={{ background: C.glassChrome, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 18, boxShadow: C.glassShadow, padding: 16 }}>
         <div style={{ color: C.txT, fontSize: 11 }}>Loading aging chart…</div>
       </div>
     );
@@ -214,7 +212,7 @@ export function IncidentAging({ demoMode, onNavigate }: Props) {
   const max = Math.max(1, ...data.buckets.map((b) => b.total));
 
   return (
-    <div style={{ background: C.glassChrome, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 18, boxShadow: C.glassShadow, padding: 16 }}>
+    <div className="mc-panel-surface mc-incident-aging" style={{ background: C.glassChrome, backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 18, boxShadow: C.glassShadow, padding: 16 }}>
       <div style={{ fontSize: 11, color: C.txT, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.08em", marginBottom: 12 }}>
         Incident Aging by Severity
       </div>
@@ -224,13 +222,13 @@ export function IncidentAging({ demoMode, onNavigate }: Props) {
           // v0.13.0+: passes the bucket label as the `age` filter so the
           // AlertsIncidentsPanel pre-filters to the clicked age range.
           // UrlState.age is now a CSV_KEY (added in v0.13.0).
-          onClick={() => onNavigate("alertsIncidents", { filter: { status: ["open"], age: [b.label] }, fromMissionControl: true })}
+          onClick={() => onNavigate("alertsIncidents", { filter: { status: ACTIVE_STATUS_FILTER, age: [b.label], productionOnly: "true" }, fromMissionControl: true })}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
-              onNavigate("alertsIncidents", { filter: { status: ["open"], age: [b.label] }, fromMissionControl: true });
+              onNavigate("alertsIncidents", { filter: { status: ACTIVE_STATUS_FILTER, age: [b.label], productionOnly: "true" }, fromMissionControl: true });
             }
           }}
           style={{

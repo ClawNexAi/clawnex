@@ -161,7 +161,6 @@ const FALLBACK_RATES: Record<string, ModelRate> = {
   'openrouter/auto': { input: 3e-6, output: 15e-6, source: 'fallback', provider: 'openrouter' },
   'delivery-mirror': { input: 0, output: 0, source: 'fallback', provider: 'internal' },
   'gateway-injected': { input: 0, output: 0, source: 'fallback', provider: 'internal' },
-  'unknown': { input: 0, output: 0, source: 'fallback' },
 };
 
 /** Absolute last-resort rate when nothing matches. Zero is honest. */

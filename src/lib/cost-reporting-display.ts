@@ -27,11 +27,14 @@ import type { NormalizedRow } from '@/lib/types/cost-reporting';
  */
 export function display_cost_usd(row: NormalizedRow): number | null {
   if (row.row_flags.includes('unsupported_currency')) return null;
+  if (row.row_flags.includes('invalid_cost')) return null;
+  const validCost = (value: number | null | undefined): number | null =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
   switch (row.cost_status) {
     case 'included':   return 0;
-    case 'actual':     return row.actual_cost_usd;
-    case 'estimated':  return row.estimated_cost_usd;
-    case 'recomputed': return row.recomputed_cost_usd;
+    case 'actual':     return validCost(row.actual_cost_usd);
+    case 'estimated':  return validCost(row.estimated_cost_usd);
+    case 'recomputed': return validCost(row.recomputed_cost_usd);
     case 'token_only': return null;
     case 'unknown':    return null;
   }

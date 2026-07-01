@@ -6,7 +6,7 @@
  * Rules:
  *   1. Counts here MUST match the demo rows in the deep-work tabs we drill
  *      into. If we say "Active Incidents: 5", AlertsIncidentsPanel demo
- *      mode must surface 5 demo alerts in open|investigating|suppressed.
+ *      mode must surface 5 demo alerts in open|investigating|acknowledged.
  *   2. NO real payloads, NO secrets, NO live incident content.
  *   3. NO PII, even synthetic-looking ones (avoid plausible-real names/
  *      emails/phone-numbers; use the obvious "demo-" prefix).
@@ -79,17 +79,18 @@ export const DETECTION_TREND_DEMO = Array.from({ length: 24 }, (_, hour) => ({
  * Active Incidents aggregate — shape matches useActiveIncidents() return.
  *
  * Counts must match ALERTS_D active-scope subset (status IN
- * 'open'|'investigating'|'suppressed'). ALERTS_D has 6 rows; ALT-004 is
+ * 'open'|'acknowledged'|'investigating'). ALERTS_D has 6 rows; ALT-004 is
  * MITIGATED so 5 fall into active scope.
  *   - 3 open: ALT-001 (CRIT), ALT-002 (CRIT), ALT-005 (MED)
  *   - 2 investigating: ALT-003 (HIGH), ALT-006 (HIGH)
- *   - 0 suppressed
+ *   - 0 acknowledged
  *
  * Cross-fixture invariant enforced by verify-dashboard-traffic-fixture.ts.
  */
 export const ACTIVE_INCIDENTS_DEMO: ActiveIncidentsData = {
   total: 5,
   open: 3,
+  acknowledged: 0,
   investigating: 2,
   suppressed: 0,
   critical: 2,
@@ -308,7 +309,7 @@ export function buildDemoKpis(now: number): KpiData[] {
       breakdown: [
         { label: "Open", value: String(ACTIVE_INCIDENTS_DEMO.open) },
         { label: "Investigating", value: String(ACTIVE_INCIDENTS_DEMO.investigating) },
-        { label: "Suppressed", value: String(ACTIVE_INCIDENTS_DEMO.suppressed) },
+        { label: "Acknowledged", value: String(ACTIVE_INCIDENTS_DEMO.acknowledged) },
       ],
       footer: `demo · ${ACTIVE_INCIDENTS_DEMO.critical}C ${ACTIVE_INCIDENTS_DEMO.high}H ${ACTIVE_INCIDENTS_DEMO.medium}M ${ACTIVE_INCIDENTS_DEMO.low}L`,
       stack: [

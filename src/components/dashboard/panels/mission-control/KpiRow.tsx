@@ -19,6 +19,8 @@ import type { KpiAccent, KpiData, TimeRange } from "./types";
 import type { TabId } from "../../types";
 import type { NavigateOpts } from "../../url-state";
 
+const ACTIVE_STATUS_FILTER = ["open", "acknowledged", "investigating"];
+
 interface Props {
   range: TimeRange;
   demoMode: boolean;
@@ -61,7 +63,7 @@ export function KpiRow({ range, demoMode, onNavigate }: Props) {
     >
       <KpiCard
         data={mapIncidentsToKpi(incidents)}
-        onClick={() => onNavigate("alertsIncidents", { filter: { status: ["open"] }, fromMissionControl: true })}
+        onClick={() => onNavigate("alertsIncidents", { filter: { status: ACTIVE_STATUS_FILTER, productionOnly: "true" }, fromMissionControl: true })}
       />
       <KpiCard
         data={mapEvidenceToKpi(evidence)}
@@ -108,8 +110,8 @@ function activeIncidentsLive(d: ActiveIncidentsData, lastRefreshedAt: number): K
     pillAccent: total === 0 ? "green" : "danger",
     breakdown: [
       { label: "Open", value: String(d.open) },
+      { label: "Acknowledged", value: String(d.acknowledged) },
       { label: "Investigating", value: String(d.investigating) },
-      { label: "Suppressed", value: String(d.suppressed) },
     ],
     footer: `${d.critical}C  ${d.high}H  ${d.medium}M  ${d.low}L`,
     stack: total === 0 ? [] : [

@@ -25,6 +25,14 @@ import { getOpenClawConnector } from '@/lib/connectors/openclaw-connector';
 import { readTokenUsage } from '@/lib/services/token-reader';
 import { readHermesTokenUsage } from '@/lib/services/hermes-token-reader';
 import { gatherCostRows } from '@/lib/services/cost-reporting';
+import {
+  classifyProxyCostStatus,
+  costStatusFromSource,
+  mergeCostStatus,
+  summarizeLegacyCostQuality,
+  unknownRowsForStatus,
+  type CostQualityStatus,
+} from '@/lib/services/token-cost-quality';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -123,6 +131,9 @@ export async function GET(request: NextRequest) {
       totalTokens: number;
       cost: number;
       source?: 'session' | 'proxy' | 'mixed';
+      costStatus?: 'known' | 'unknown' | 'invalid' | 'mixed';
+      invalidCostRows?: number;
+      unpricedRows?: number;
     }> = [];
 
     // Cost by session — same two-source merge as costByAgent but rolled up by
@@ -143,12 +154,17 @@ export async function GET(request: NextRequest) {
       firstSeen?: string;
       lastSeen?: string;
       source: 'session' | 'proxy' | 'mixed';
+      costStatus?: 'known' | 'unknown' | 'invalid' | 'mixed';
+      invalidCostRows?: number;
+      unpricedRows?: number;
     }> = [];
+    const hermesCostQualityRows: Array<{ invalidCostRows?: number; unpricedRows?: number }> = [];
 
     // 1. Session-log-derived rows
     if (sessionTokenData && sessionTokenData.byAgent) {
       for (const agent of sessionTokenData.byAgent) {
         for (const [model, data] of Object.entries(agent.models)) {
+          const costStatus = costStatusFromSource(data.costSource);
           costByAgent.push({
             agent: agent.agentId,
             model,
@@ -158,6 +174,8 @@ export async function GET(request: NextRequest) {
             totalTokens: data.totalTokens,
             cost: data.totalCost,
             source: 'session',
+            costStatus,
+            unpricedRows: unknownRowsForStatus(costStatus, data.messageCount),
           });
         }
       }
@@ -167,6 +185,7 @@ export async function GET(request: NextRequest) {
     if (sessionTokenData && sessionTokenData.bySession) {
       for (const s of sessionTokenData.bySession) {
         for (const [model, data] of Object.entries(s.models)) {
+          const costStatus = costStatusFromSource(data.costSource);
           costBySession.push({
             sessionId: s.sessionId,
             agent: s.agentId,
@@ -179,6 +198,8 @@ export async function GET(request: NextRequest) {
             firstSeen: s.firstSeen,
             lastSeen: s.lastSeen,
             source: 'session',
+            costStatus,
+            unpricedRows: unknownRowsForStatus(costStatus, data.messageCount),
           });
         }
       }
@@ -209,7 +230,7 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const rows = queryAll<{ session_id: string; model: string; requests: number; inputTokens: number; outputTokens: number; totalTokens: number; cost: number }>(
+      const rows = queryAll<{ session_id: string; model: string; requests: number; inputTokens: number; outputTokens: number; totalTokens: number; cost: number; invalidCostRows: number; unpricedRows: number }>(
         `SELECT
           session_id,
           COALESCE(model, 'unknown') as model,
@@ -217,7 +238,9 @@ export async function GET(request: NextRequest) {
           COALESCE(SUM(input_tokens), 0) as inputTokens,
           COALESCE(SUM(output_tokens), 0) as outputTokens,
           COALESCE(SUM(total_tokens), 0) as totalTokens,
-          COALESCE(SUM(CASE WHEN cost_usd > 0 THEN cost_usd ELSE 0 END), 0) as cost
+          COALESCE(SUM(CASE WHEN cost_usd > 0 THEN cost_usd ELSE 0 END), 0) as cost,
+          COALESCE(SUM(CASE WHEN cost_usd < 0 THEN 1 ELSE 0 END), 0) as invalidCostRows,
+          COALESCE(SUM(CASE WHEN cost_usd IS NULL OR cost_usd = 0 THEN 1 ELSE 0 END), 0) as unpricedRows
         FROM proxy_traffic
         WHERE timestamp >= ? AND total_tokens > 0 AND session_id IS NOT NULL
         GROUP BY session_id, model
@@ -237,6 +260,7 @@ export async function GET(request: NextRequest) {
         // direct-to-provider case in plain English.
         const agentForAgentRow = matchedAgent || "Direct / API";
         const agentForSessionRow = matchedAgent || "unknown";
+        const rowCostStatus = classifyProxyCostStatus(row);
 
         // Merge into an existing per-agent bucket from the session-log pass.
         const existingAgentRow = costByAgent.find(r => r.agent === agentForAgentRow && r.model === row.model);
@@ -246,6 +270,9 @@ export async function GET(request: NextRequest) {
           existingAgentRow.outputTokens += row.outputTokens;
           existingAgentRow.totalTokens += row.totalTokens;
           existingAgentRow.cost += row.cost;
+          existingAgentRow.invalidCostRows = (existingAgentRow.invalidCostRows || 0) + row.invalidCostRows;
+          existingAgentRow.unpricedRows = (existingAgentRow.unpricedRows || 0) + row.unpricedRows;
+          existingAgentRow.costStatus = mergeCostStatus(existingAgentRow.costStatus, rowCostStatus);
           existingAgentRow.source = 'mixed';
         } else {
           costByAgent.push({
@@ -257,6 +284,9 @@ export async function GET(request: NextRequest) {
             totalTokens: row.totalTokens,
             cost: row.cost,
             source: 'proxy',
+            costStatus: rowCostStatus,
+            invalidCostRows: row.invalidCostRows,
+            unpricedRows: row.unpricedRows,
           });
         }
 
@@ -268,6 +298,9 @@ export async function GET(request: NextRequest) {
           existingSessionRow.outputTokens += row.outputTokens;
           existingSessionRow.totalTokens += row.totalTokens;
           existingSessionRow.cost += row.cost;
+          existingSessionRow.invalidCostRows = (existingSessionRow.invalidCostRows || 0) + row.invalidCostRows;
+          existingSessionRow.unpricedRows = (existingSessionRow.unpricedRows || 0) + row.unpricedRows;
+          existingSessionRow.costStatus = mergeCostStatus(existingSessionRow.costStatus, rowCostStatus);
           existingSessionRow.source = 'mixed';
         } else {
           costBySession.push({
@@ -280,6 +313,9 @@ export async function GET(request: NextRequest) {
             totalTokens: row.totalTokens,
             cost: row.cost,
             source: 'proxy',
+            costStatus: rowCostStatus,
+            invalidCostRows: row.invalidCostRows,
+            unpricedRows: row.unpricedRows,
           });
         }
       }
@@ -291,6 +327,7 @@ export async function GET(request: NextRequest) {
       if (hermesData?.byAgent) {
         for (const agent of hermesData.byAgent) {
           for (const modelData of agent.models) {
+            const costStatus = costStatusFromSource(modelData.costSource);
             costByAgent.push({
               agent: agent.agentId,
               model: modelData.model,
@@ -298,8 +335,13 @@ export async function GET(request: NextRequest) {
               inputTokens: modelData.totalInput,
               outputTokens: modelData.totalOutput,
               totalTokens: modelData.totalTokens,
-              cost: modelData.totalCost,
-              source: 'session',
+            cost: modelData.totalCost,
+            source: 'session',
+            costStatus,
+              unpricedRows: modelData.unpricedRows ?? unknownRowsForStatus(costStatus, modelData.messageCount),
+            });
+            hermesCostQualityRows.push({
+              unpricedRows: modelData.unpricedRows ?? unknownRowsForStatus(costStatus, modelData.messageCount),
             });
           }
         }
@@ -353,6 +395,7 @@ export async function GET(request: NextRequest) {
       sinceMs: Number.isFinite(sinceMs) ? sinceMs : Date.now() - 24 * 60 * 60 * 1000,
       instance: instance ?? undefined,
     });
+    const legacyCostQuality = summarizeLegacyCostQuality([...costBySession, ...hermesCostQualityRows]);
 
     return NextResponse.json({
       live: {
@@ -390,6 +433,7 @@ export async function GET(request: NextRequest) {
       } : null,
       costByAgent,
       costBySession,
+      costQuality: legacyCostQuality,
       defaultModel,
       period: sinceParam ? 'custom' : '24h',
       timestamp: new Date().toISOString(),

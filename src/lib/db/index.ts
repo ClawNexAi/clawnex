@@ -107,7 +107,7 @@ export function getDb(): Database.Database {
   console.log(`[ClawNex DB] Initialized at ${dbPath}`);
 
   // Seed config tables on first run (deferred import to avoid circular deps)
-  if (!seeded) {
+  if (!seeded && process.env.CLAWNEX_TEST_SKIP_DB_SEED !== '1') {
     seeded = true;
     try {
       const { seedConfigTables } = require('./seed');

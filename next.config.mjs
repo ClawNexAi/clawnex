@@ -49,7 +49,7 @@ const nextConfig = {
   // DAST 2026-05-15 H3: Next.js standalone output traces every file
   // reachable from the project root and copies them into
   // .next/standalone/. The dev/test SQLite DB (clawnex.db + its
-  // -wal/-shm journals — and the legacy sentinel.db filename kept
+  // -wal/-shm/-journal files — and the legacy sentinel.db filename kept
   // around for pre-v0.9 installs) was getting bundled with the
   // build, leaking operator data via the deploy tarball. Exclude
   // the whole DB triple from output tracing so the bundle is
@@ -60,9 +60,48 @@ const nextConfig = {
       '**/clawnex.db',
       '**/clawnex.db-wal',
       '**/clawnex.db-shm',
+      '**/clawnex.db-journal',
       '**/sentinel.db',
       '**/sentinel.db-wal',
       '**/sentinel.db-shm',
+      '**/sentinel.db-journal',
+      '**/.env',
+      '**/.env.*',
+      '**/.git',
+      '**/.git/**',
+      '**/logs',
+      '**/logs/**',
+      '**/logs/**/*',
+      '**/*.log',
+      '**/*.jsonl',
+      '**/docs/.claude',
+      '**/docs/.claude/**',
+      '**/docs/AGENTS.md',
+      '**/docs/CLAUDE.md',
+      '**/docs/coordination',
+      '**/docs/coordination/**',
+      '**/docs/internal',
+      '**/docs/internal/**',
+      '**/docs/proposals',
+      '**/docs/proposals/**',
+      '**/docs/qa',
+      '**/docs/qa/**',
+      '**/docs/out',
+      '**/docs/out/**',
+      '**/docs/social-campaigns',
+      '**/docs/social-campaigns/**',
+      '**/docs/superpowers',
+      '**/docs/superpowers/**',
+      '**/docs/tracking',
+      '**/docs/tracking/**',
+      '**/docs/training-workbooks',
+      '**/docs/training-workbooks/**',
+      '**/docs/*handoff*',
+      '**/docs/*adversarial-review*',
+      '**/docs/*overnight*',
+      '**/litellm/config.yaml',
+      '**/litellm/config*.yaml',
+      '**/.deploy-build.log',
     ],
   },
   webpack: (config) => {

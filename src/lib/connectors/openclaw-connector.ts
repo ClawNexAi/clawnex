@@ -2,7 +2,7 @@
  * ClawNex OpenClaw Gateway Connector — READ-ONLY WebSocket client.
  *
  * Connects to the OpenClaw Gateway via WebSocket, authenticates using
- * the challenge-response handshake (protocol v3), and subscribes to
+ * the challenge-response handshake (protocol v3-v4), and subscribes to
  * real-time events (agent, chat, system). Provides RPC wrappers for
  * querying sessions, agents, models, and config.
  *
@@ -444,7 +444,7 @@ class OpenClawConnector {
         method: 'connect',
         params: {
           minProtocol: 3,
-          maxProtocol: 3,
+          maxProtocol: 4,
           client: {
             id: clientId,
             version: '0.4.4',

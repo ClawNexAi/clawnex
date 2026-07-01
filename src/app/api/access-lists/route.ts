@@ -24,6 +24,16 @@ interface AccessListEntry {
   created_at: string;
 }
 
+function validateListType(listType: string | null | undefined): string | null {
+  if (!listType || listType === "deny") return null;
+  return "Access Lists currently supports deny lists only";
+}
+
+function validateEntryType(entryType: string | null | undefined): string | null {
+  if (!entryType || entryType === "IP" || entryType === "DOMAIN") return null;
+  return "entry_type must be 'IP' or 'DOMAIN'";
+}
+
 export async function GET(request: NextRequest) {
   if (isRbacEnabled()) {
     const auth = requireSession(request);
@@ -37,20 +47,24 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const listType = searchParams.get("list_type"); // "allow" | "deny"
-    const entryType = searchParams.get("entry_type"); // "IP" | "DOMAIN" | "USER"
+    const listType = searchParams.get("list_type"); // "deny"
+    const entryType = searchParams.get("entry_type"); // "IP" | "DOMAIN"
+
+    const listTypeError = validateListType(listType);
+    if (listTypeError) return NextResponse.json({ error: listTypeError }, { status: 400 });
+    const entryTypeError = validateEntryType(entryType);
+    if (entryTypeError) return NextResponse.json({ error: entryTypeError }, { status: 400 });
 
     let sql = "SELECT * FROM access_lists";
-    const params: string[] = [];
-    const conditions: string[] = [];
+    const params: string[] = ["deny", "IP", "DOMAIN"];
+    const conditions: string[] = ["list_type = ?", "entry_type IN (?, ?)"];
 
     if (listType) {
-      conditions.push("list_type = ?");
-      params.push(listType);
+      params[0] = listType;
     }
     if (entryType) {
-      conditions.push("entry_type = ?");
-      params.push(entryType);
+      conditions[1] = "entry_type = ?";
+      params.splice(1, 2, entryType);
     }
 
     if (conditions.length > 0) {
@@ -97,12 +111,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!["allow", "deny"].includes(list_type)) {
-      return NextResponse.json({ error: "list_type must be 'allow' or 'deny'" }, { status: 400 });
+    const listTypeError = validateListType(list_type);
+    if (listTypeError) {
+      return NextResponse.json({ error: listTypeError }, { status: 400 });
     }
 
-    if (!["IP", "DOMAIN", "USER"].includes(entry_type)) {
-      return NextResponse.json({ error: "entry_type must be 'IP', 'DOMAIN', or 'USER'" }, { status: 400 });
+    const entryTypeError = validateEntryType(entry_type);
+    if (entryTypeError) {
+      return NextResponse.json({ error: entryTypeError }, { status: 400 });
     }
 
     const id = randomUUID();

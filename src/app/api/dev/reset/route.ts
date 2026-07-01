@@ -15,7 +15,7 @@ import { checkDevToolsGate } from '@/lib/services/dev-tools-gate';
 import {
   resetDashboardTraffic,
   resetAllDashboardTraffic,
-} from '../../../../../scripts/dashboard-traffic-fixture';
+} from '@/lib/dev/dashboard-traffic-fixture';
 import { logEvent } from '@/lib/services/audit-logger';
 
 export const runtime = 'nodejs';

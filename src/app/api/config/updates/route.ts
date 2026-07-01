@@ -10,8 +10,7 @@ import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/gua
 import { requireLocalhost } from "@/lib/middleware/localhost-guard";
 import { queryOne, run } from "@/lib/db/index";
 import { findHostSecurityScanner } from "@/lib/services/host-security/scanner-path";
-import path from "node:path";
-import os from "node:os";
+import { getOpenClawInstalledVersion } from "@/lib/openclaw-version";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -105,6 +104,24 @@ async function fetchGitHubLatestRelease(repo: string): Promise<{ version: string
   }
 }
 
+function compareVersions(a: string, b: string): number {
+  const normalize = (value: string) =>
+    value
+      .replace(/^v/i, "")
+      .split(/[^0-9]+/)
+      .filter(Boolean)
+      .map((part) => Number.parseInt(part, 10));
+  const left = normalize(a);
+  const right = normalize(b);
+  const length = Math.max(left.length, right.length);
+  for (let i = 0; i < length; i += 1) {
+    const l = left[i] ?? 0;
+    const r = right[i] ?? 0;
+    if (l !== r) return l > r ? 1 : -1;
+  }
+  return 0;
+}
+
 // ---------------------------------------------------------------------------
 // GET /api/config/updates -- check for updates
 // ---------------------------------------------------------------------------
@@ -172,16 +189,7 @@ export async function GET(request: NextRequest) {
     let openclawReleaseUrl: string | null = null;
     let openclawUpdateAvailable = false;
 
-    // Read installed version from OpenClaw's update-check.json
-    try {
-      const fs = await import('node:fs');
-      const updateCheckPath = path.join(os.homedir(), ".openclaw", "update-check.json");
-      const raw = fs.readFileSync(updateCheckPath, "utf-8");
-      const updateCheck = JSON.parse(raw);
-      openclawInstalled = updateCheck.lastNotifiedVersion || updateCheck.lastAvailableVersion || updateCheck.currentVersion || updateCheck.version || "unknown";
-    } catch {
-      openclawInstalled = "unknown";
-    }
+    openclawInstalled = getOpenClawInstalledVersion() || "unknown";
 
     const cachedOpenclawVersion = getConfigValue("openclaw_latest_version");
     if (cacheValid && cachedOpenclawVersion) {
@@ -201,9 +209,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (openclawLatestVersion && openclawInstalled !== "unknown" && openclawInstalled !== "installed") {
-      const installed = openclawInstalled.replace(/^v/, "").replace(/[^0-9.]/g, "");
-      const latest = openclawLatestVersion.replace(/^v/, "").replace(/[^0-9.]/g, "");
-      openclawUpdateAvailable = installed !== latest && latest > installed;
+      openclawUpdateAvailable = compareVersions(openclawLatestVersion, openclawInstalled) > 0;
     }
 
     // Save last checked time

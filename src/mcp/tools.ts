@@ -325,7 +325,7 @@ const tools: ToolDefinition[] = [
   {
     name: "manage_access",
     description:
-      "Add or remove entries in ClawNex access control lists (allow/deny lists for IPs and domains).",
+      "Add or remove entries in ClawNex IP/domain deny lists.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -336,8 +336,8 @@ const tools: ToolDefinition[] = [
         },
         list_type: {
           type: "string",
-          enum: ["allow", "deny"],
-          description: "Which list to modify",
+          enum: ["deny"],
+          description: "Which list to modify. ClawNex currently supports deny lists only.",
         },
         entry_type: {
           type: "string",
@@ -357,7 +357,7 @@ const tools: ToolDefinition[] = [
     },
     handler: async (params: {
       action: "add" | "remove";
-      list_type: "allow" | "deny";
+      list_type: "deny";
       entry_type: "IP" | "DOMAIN";
       value: string;
       reason?: string;

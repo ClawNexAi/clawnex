@@ -130,7 +130,7 @@ export const AUDIT_LOG = [
   { ts: "14:15:00", actor: "deploy_agent", action: "config_change", resource: "k8s/deployment.yaml", detail: "Replica count: 3 → 5", source: "agent", severity: "LOW" },
   { ts: "14:12:00", actor: "system", action: "audit_generate", resource: "report:RPT-034", detail: "Weekly compliance report", source: "scheduler", severity: "INFO" },
   { ts: "14:10:00", actor: "cert_monitor", action: "cert_expiry_warn", resource: "*.clawnexai.com", detail: "Expires in 48 hours", source: "infra", severity: "HIGH" },
-  { ts: "14:05:00", actor: "admin_agent", action: "acl_update", resource: "10.0.2.0/24", detail: "Added to allowlist", source: "access", severity: "MEDIUM" },
+  { ts: "14:05:00", actor: "admin_agent", action: "acl_update", resource: "10.0.2.0/24", detail: "Added to deny list", source: "access", severity: "MEDIUM" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -461,15 +461,15 @@ export const BLAST_RADIUS_DEMO = {
     { id: "surf-kubectl", name: "kubectl", type: "tool", integrationStatus: "shipped", reachability: [{ agentId: "deploy-assistant", confidence: "high" }], effectiveBlastRadius: { numeric: 84, band: "high", drivers: ["cluster-admin RBAC", "no namespace scope"], confidence: "high", rawFactors: { reach: 1, capability: "orchestration", scope: "cluster" } } },
     { id: "surf-network-scan", name: "network_scan", type: "tool", integrationStatus: "shipped", reachability: [{ agentId: "pentest-agent", confidence: "high" }], effectiveBlastRadius: { numeric: 71, band: "high", drivers: ["raw socket access", "internal-network reach"], confidence: "high", rawFactors: { reach: 1, capability: "recon", scope: "vpc" } } },
     { id: "surf-file-write", name: "file_write", type: "tool", integrationStatus: "shipped", reachability: [{ agentId: "code-review-bot", confidence: "high" }, { agentId: "deploy-assistant", confidence: "high" }, { agentId: "incident-responder", confidence: "high" }], effectiveBlastRadius: { numeric: 58, band: "moderate", drivers: ["scoped to workspace"], confidence: "high", rawFactors: { reach: 3, capability: "write", scope: "agent-dir" } } },
-    { id: "surf-api-call", name: "api_call", type: "tool", integrationStatus: "shipped", reachability: [{ agentId: "incident-responder", confidence: "high" }, { agentId: "support-agent", confidence: "high" }], effectiveBlastRadius: { numeric: 41, band: "moderate", drivers: ["allowlist enforced"], confidence: "medium", rawFactors: { reach: 2, capability: "external-api", scope: "allowlist" } } },
+    { id: "surf-api-call", name: "api_call", type: "tool", integrationStatus: "shipped", reachability: [{ agentId: "incident-responder", confidence: "high" }, { agentId: "support-agent", confidence: "high" }], effectiveBlastRadius: { numeric: 41, band: "moderate", drivers: ["egress policy enforced"], confidence: "medium", rawFactors: { reach: 2, capability: "external-api", scope: "approved-egress" } } },
     { id: "surf-db-query", name: "db_query", type: "tool", integrationStatus: "not_integrated", reachability: [], effectiveBlastRadius: { numeric: 0, band: "minimal", drivers: ["not currently bound"], confidence: "unknown", rawFactors: {} } },
   ],
   dangerousCombos: [
-    { id: "combo-1", agentId: "pentest-agent", combo: ["bash", "network_scan"], severity: "CRITICAL", evaluable: true, finding: "Shell + recon = remote code execution + lateral movement primitive.", recommendation: "Remove network_scan or scope bash to allowlist." },
+    { id: "combo-1", agentId: "pentest-agent", combo: ["bash", "network_scan"], severity: "CRITICAL", evaluable: true, finding: "Shell + recon = remote code execution + lateral movement primitive.", recommendation: "Remove network_scan or scope bash to approved endpoints." },
     { id: "combo-2", agentId: "deploy-assistant", combo: ["bash", "kubectl"], severity: "HIGH", evaluable: true, finding: "Shell + cluster-admin = full cluster takeover if compromised.", recommendation: "Replace bash with helm-only wrapper, or scope kubectl to single namespace." },
   ],
   postureLints: [
-    { id: "lint-1", severity: "HIGH", rule: "egress-filter-missing", target: "pentest-agent", message: "Agent has bash + network_scan but no outbound DNS/HTTP allowlist enforced.", remediation: "Configure egress allowlist via Configuration → Network Policy." },
+    { id: "lint-1", severity: "HIGH", rule: "egress-filter-missing", target: "pentest-agent", message: "Agent has bash + network_scan but no outbound DNS/HTTP policy enforced.", remediation: "Configure egress policy via Configuration → Network Policy." },
     { id: "lint-2", severity: "MEDIUM", rule: "tool-time-bound-missing", target: "pentest-agent", message: "High-risk tools (bash, network_scan) have no expiry — operator must explicitly extend.", remediation: "Set time_bound on Tools & Access page; reauthorize quarterly." },
     { id: "lint-3", severity: "MEDIUM", rule: "kubectl-scope-too-broad", target: "deploy-assistant", message: "kubectl bound at cluster-admin level; recommend namespace-scoped role.", remediation: "Bind agent to namespace-specific Role/RoleBinding." },
     { id: "lint-4", severity: "LOW", rule: "audit-retention-short", target: "fleet", message: "Audit log retention 30d; SOC 2 recommends 90d minimum.", remediation: "Increase audit_log retention via System → Retention Policy." },
@@ -515,7 +515,7 @@ export const POSTURE_DEMO = {
       { checkId: "CK-102", name: "UFW firewall enabled", category: "Network", status: "PASS", severity: "HIGH", detail: "Status: active" },
       { checkId: "CK-103", name: "Automatic updates", category: "Patch Mgmt", status: "PASS", severity: "MEDIUM", detail: "unattended-upgrades configured" },
       { checkId: "CK-104", name: "TLS 1.2+ only", category: "Network", status: "PASS", severity: "HIGH", detail: "All listeners require TLS 1.2 or higher" },
-      { checkId: "CK-105", name: "Outbound DNS allowlist", category: "Network", status: "FAIL", severity: "CRITICAL", detail: "No outbound DNS restriction; agents can resolve arbitrary hostnames", remediation: "Configure systemd-resolved with explicit upstream allowlist." },
+      { checkId: "CK-105", name: "Outbound DNS restriction", category: "Network", status: "FAIL", severity: "CRITICAL", detail: "No outbound DNS restriction; agents can resolve arbitrary hostnames", remediation: "Configure systemd-resolved with explicit upstream policy." },
       { checkId: "CK-106", name: "Audit log immutability", category: "Audit", status: "PASS", severity: "HIGH", detail: "audit.log set chattr +a" },
       { checkId: "CK-107", name: "Session log retention 90d", category: "Audit", status: "WARN", severity: "MEDIUM", detail: "Currently set to 30d" },
       { checkId: "CK-108", name: "Disk encryption at rest", category: "Storage", status: "PASS", severity: "HIGH", detail: "LUKS active on all data volumes" },
@@ -545,7 +545,7 @@ export const POSTURE_DEMO = {
     },
   },
   remediations: [
-    { checkId: "CK-105", priority: "P0", effort: "S", remediation: "Configure systemd-resolved with explicit upstream allowlist." },
+    { checkId: "CK-105", priority: "P0", effort: "S", remediation: "Configure systemd-resolved with explicit upstream policy." },
     { checkId: "CK-110", priority: "P1", effort: "S", remediation: "Enable Caddy rate_limit handler on /api/* paths." },
     { checkId: "CK-115", priority: "P1", effort: "M", remediation: "Install AppArmor and load default profiles." },
     { checkId: "CK-107", priority: "P2", effort: "S", remediation: "Increase auditd retention to 90 days." },

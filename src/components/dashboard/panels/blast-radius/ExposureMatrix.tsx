@@ -281,12 +281,6 @@ function SurfaceDetail({
               >
                 → Tools & Access
               </button>
-              <button
-                onClick={() => onDrillTo("accessLists")}
-                style={drillButtonStyle}
-              >
-                → Access Lists
-              </button>
               <button onClick={() => onDrillTo("agents")} style={drillButtonStyle}>
                 → Agents
               </button>

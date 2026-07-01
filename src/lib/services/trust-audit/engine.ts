@@ -115,6 +115,7 @@ export async function runTrustAudit(): Promise<AuditReport> {
 
   // Step 1: Discovery
   const context = buildAuditContext();
+  const preflightFindings: Finding[] = [];
 
   // Step 1b (v0.7.1): attach permissiveness report so rules can consume
   // dangerous-combo and posture-lint findings as Trust Audit findings.
@@ -125,10 +126,24 @@ export async function runTrustAudit(): Promise<AuditReport> {
   } catch (err) {
     console.warn('[trust-audit] permissiveness scan failed; comm-surface-permissiveness rule will skip:', err);
     context.permissivenessReport = undefined;
+    preflightFindings.push({
+      id: 'ERR-permissiveness-scan',
+      ruleId: 'comm-surface-permissiveness',
+      severity: 'medium',
+      title: 'Permissiveness scan failed to execute',
+      capabilityPath: [],
+      containmentState: 'unknown',
+      assetHints: [],
+      whyItMatters: 'Trust Audit could not inspect communication-surface permissiveness, so its reachability and blast-radius findings may be incomplete.',
+      blastRadius: 'Unknown — communication surfaces could be more permissive than the current report proves.',
+      recommendedFix: 'Check server logs, rerun the permissiveness scan, then rerun Trust Audit.',
+      evidence: [`Error: ${err instanceof Error ? err.message : String(err)}`],
+      confidence: 'unknown',
+    });
   }
 
   // Step 2: Run all rules
-  const allFindings: Finding[] = [];
+  const allFindings: Finding[] = [...preflightFindings];
   for (const rule of AUDIT_RULES) {
     try {
       const ruleFindings = rule.evaluate(context);
@@ -138,7 +153,7 @@ export async function runTrustAudit(): Promise<AuditReport> {
       allFindings.push({
         id: `ERR-${rule.id}`,
         ruleId: rule.id,
-        severity: 'info',
+        severity: 'medium',
         title: `Rule "${rule.name}" failed to execute`,
         capabilityPath: [],
         containmentState: 'unknown',
@@ -147,6 +162,7 @@ export async function runTrustAudit(): Promise<AuditReport> {
         blastRadius: 'Unknown — rule could not complete evaluation.',
         recommendedFix: 'Check system logs for details. This may indicate missing data or a configuration issue.',
         evidence: [`Error: ${err instanceof Error ? err.message : String(err)}`],
+        confidence: 'unknown',
       });
     }
   }

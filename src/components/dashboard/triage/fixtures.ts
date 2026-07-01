@@ -226,7 +226,7 @@ export const approvedMockTriageGraph: TriageGraph = {
       previewFields: [
         { label: "target",           value: "Configuration → Policies & Rules" },
         { label: "control",          value: "OUT-PII-PHONE_US" },
-        { label: "suggested_action", value: "Tune detection threshold or add allowlist entry" },
+        { label: "suggested_action", value: "Tune detection threshold or add a policy exception" },
         { label: "permission",       value: "policies:write" },
       ],
       primaryAction: {

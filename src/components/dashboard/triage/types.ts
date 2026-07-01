@@ -55,7 +55,7 @@ export interface TriagePreviewField {
  * artifact. The Shield server-side-redacts these fields before storage
  * (matched-span context with PII masked); the triage card surfaces them
  * behind a default-collapsed "Show match span" toggle so operators can make
- * a fast allow/block decision without drilling into Audit & Evidence.
+ * a fast permit/deny decision without drilling into Audit & Evidence.
  *
  * Spec §10 amendment 2026-05-07: pre-redacted snippet_before / snippet_match
  * / snippet_after MAY be surfaced in the Evidence stage. Raw bulk-payload

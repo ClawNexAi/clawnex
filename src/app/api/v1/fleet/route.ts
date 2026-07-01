@@ -14,6 +14,7 @@ import { getFullSystemReport } from '@/lib/services/system-metrics';
 import { queryOne, queryAll } from '@/lib/db/index';
 import { activeAlertSqlClause, productionOriginSqlClause } from '@/lib/dashboard/metric-semantics';
 import { getLatestClawkeeperPosture } from '@/lib/services/posture-service';
+import { getOpenClawInstalledVersion } from '@/lib/openclaw-version';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -115,7 +116,7 @@ export async function GET(request: NextRequest) {
       sessionCount = fs.readdirSync(sessDir).filter(f => f.endsWith('.jsonl')).length;
     } catch { /* ignore */ }
 
-    const ocVersion = (ocConfig?.meta as { lastTouchedVersion?: string })?.lastTouchedVersion || 'unknown';
+    const ocVersion = getOpenClawInstalledVersion() || 'unknown';
 
     // Posture score (Phase 3): canonical Host Security hardening score.
     // Returns null when no scan has been run yet — public API consumers

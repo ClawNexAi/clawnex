@@ -18,7 +18,7 @@ interface GovernanceDoc {
 }
 
 const OVERVIEW_DOCS: GovernanceDoc[] = [
-  { path: "governance-one-pager.md", label: "Governance One-Pager", description: "Leadership-facing summary: security posture, compliance trajectory (SOC 2 ~42%, ISO 27001 ~38%, NIST Tier 2), and the 90-day roadmap." },
+  { path: "governance-one-pager.md", label: "Governance One-Pager", description: "Leadership-facing summary: security posture, compliance trajectory (SOC 2 ~55-60%, ISO 27001 ~50-55%, NIST Tier 2), and the 90-day roadmap." },
   { path: "governance-index.md", label: "Governance Index", description: "Master entry point to every governance artifact — policies, registers, templates, summaries." },
   { path: "policy-evidence-checklist.md", label: "Policy Evidence Checklist", description: "Every clause across all 14 policies mapped to a concrete artifact or flagged as a gap with a named closure path." },
 ];
@@ -42,7 +42,7 @@ const POLICY_DOCS: GovernanceDoc[] = [
 ];
 
 const REGISTER_DOCS: GovernanceDoc[] = [
-  { path: "registers/risk-register.md", label: "Risk Register", description: "23 active risks with priority (P0: 3, P1: 12, P2: 5), owner, target date, status, and linked evidence." },
+  { path: "registers/risk-register.md", label: "Risk Register", description: "Current risk register summary: P0: 0 active, P1: 10 active, P2: 10 active, P3: 1 closed, Closed: 16." },
   { path: "registers/vendor-inventory-register.md", label: "Vendor Inventory Register", description: "Third-party and supply-chain inventory grouped by dependency category, reconciled against the live codebase." },
 ];
 

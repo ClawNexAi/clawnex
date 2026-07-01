@@ -110,6 +110,7 @@ Environment=PATH=/home/${SERVICE_USER}/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOSTNAME=127.0.0.1
 Environment=PORT=${DASHBOARD_PORT}
 Environment=DATABASE_PATH=${INSTALL_DIR}/clawnex.db
+Environment=CLAWNEX_LOG_DIR=${INSTALL_DIR}/logs
 ExecStart=/usr/bin/node ${INSTALL_DIR}/.next/standalone/server.js
 Restart=always
 RestartSec=5

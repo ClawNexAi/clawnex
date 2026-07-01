@@ -30,6 +30,8 @@ interface Props {
   onNavigate: (tab: TabId, focusOrOpts?: NavigateOpts) => void;
 }
 
+const ACTIVE_STATUS_FILTER = ["open", "acknowledged", "investigating"];
+
 // ---------------------------------------------------------------------------
 // Static configuration (targets, labels, formulas)
 // ---------------------------------------------------------------------------
@@ -273,9 +275,9 @@ export function OperationalPosture({ demoMode, range, onNavigate }: Props) {
    */
   function handleRowClick(r: PostureRow) {
     if (r.id === "incidentHygiene") {
-      // Navigate to alertsIncidents with open-status filter.
-      // UrlState.status is string[] so { status: ["open"] } is valid Partial<UrlState>.
-      onNavigate(r.clickTarget.tab, { filter: { status: ["open"] }, fromMissionControl: true });
+      // Navigate to alertsIncidents with the same canonical active population
+      // used by Mission Control's Active Incidents KPI.
+      onNavigate(r.clickTarget.tab, { filter: { status: ACTIVE_STATUS_FILTER, productionOnly: "true" }, fromMissionControl: true });
       return;
     }
     if (r.clickTarget.opts?.focus) {
@@ -291,6 +293,7 @@ export function OperationalPosture({ demoMode, range, onNavigate }: Props) {
 
   return (
     <div
+      className="mc-panel-surface mc-operational-posture"
       style={{
         background: C.glassChrome,
         backdropFilter: "blur(18px)",

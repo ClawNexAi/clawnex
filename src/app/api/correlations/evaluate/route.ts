@@ -14,7 +14,7 @@ import { getSetting } from "@/lib/services/config-service";
 import { createAlert } from "@/lib/services/alert-manager";
 import { broadcast } from "@/lib/events";
 import { v4 as uuid } from "uuid";
-import { activeAlertSqlClause } from "@/lib/dashboard/metric-semantics";
+import { activeAlertSqlClause, productionOriginSqlClause } from "@/lib/dashboard/metric-semantics";
 import {
   applySuppressions as applyRiskSuppressions,
   autoExpire as autoExpireRiskAcceptances,
@@ -59,6 +59,14 @@ function loadWeights(): Record<string, number> {
 // ---------------------------------------------------------------------------
 
 function gatherState(): PlatformState {
+  const shieldProductionClause = productionOriginSqlClause("detail");
+  const alertProductionClause = productionOriginSqlClause("metadata");
+  const shieldFixtureClause =
+    "(COALESCE(json_extract(detail, '$.simulation'), 0) != 1 AND COALESCE(json_extract(detail, '$.simulation_source'), '') != 'dashboard-traffic-fixture')";
+  const alertFixtureClause =
+    "(COALESCE(json_extract(metadata, '$.simulation'), 0) != 1 AND COALESCE(json_extract(metadata, '$.simulation_source'), '') != 'dashboard-traffic-fixture')";
+  const proxyProductionClause = "COALESCE(source, '') != 'dashboard-traffic-fixture'";
+  const nonCorrelationAlertClause = "source != 'correlation-engine'";
   const state: PlatformState = {
     shield: { blocked24h: 0, reviewed24h: 0, total24h: 0, categoriesHit: [] },
     traffic: { total24h: 0, blocked24h: 0, avgTokens: 0, topModel: "" },
@@ -76,19 +84,32 @@ function gatherState(): PlatformState {
         SUM(CASE WHEN threat_level = 'BLOCK' THEN 1 ELSE 0 END) as blocked,
         SUM(CASE WHEN threat_level = 'REVIEW' THEN 1 ELSE 0 END) as reviewed,
         COUNT(*) as total
-      FROM shield_scans WHERE scanned_at >= datetime('now', '-24 hours')`
+      FROM shield_scans
+      WHERE scanned_at >= datetime('now', '-24 hours')
+        AND ${shieldProductionClause}
+        AND ${shieldFixtureClause}`
     );
     if (s) { state.shield.blocked24h = s.blocked || 0; state.shield.reviewed24h = s.reviewed || 0; state.shield.total24h = s.total || 0; }
 
     const cats = queryAll<{ layers_triggered: string }>(
-      `SELECT DISTINCT layers_triggered FROM shield_scans WHERE threat_level IN ('BLOCK','REVIEW') AND scanned_at >= datetime('now', '-24 hours') AND layers_triggered != 'none'`
+      `SELECT DISTINCT layers_triggered
+       FROM shield_scans
+       WHERE threat_level IN ('BLOCK','REVIEW')
+         AND scanned_at >= datetime('now', '-24 hours')
+         AND layers_triggered != 'none'
+         AND ${shieldProductionClause}
+         AND ${shieldFixtureClause}`
     );
     state.shield.categoriesHit = cats.map(c => c.layers_triggered).filter(Boolean);
   } catch {}
 
   try {
     const t = queryOne<{ cnt: number; blocked: number; avg_tok: number }>(
-      `SELECT COUNT(*) as cnt, SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END) as blocked, COALESCE(AVG(total_tokens), 0) as avg_tok FROM proxy_traffic WHERE timestamp >= datetime('now', '-24 hours') AND source != 'session-watcher'`
+      `SELECT COUNT(*) as cnt, SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END) as blocked, COALESCE(AVG(total_tokens), 0) as avg_tok
+       FROM proxy_traffic
+       WHERE timestamp >= datetime('now', '-24 hours')
+         AND source != 'session-watcher'
+         AND ${proxyProductionClause}`
     );
     if (t) { state.traffic.total24h = t.cnt; state.traffic.blocked24h = t.blocked || 0; state.traffic.avgTokens = Math.round(t.avg_tok); }
   } catch {}
@@ -106,11 +127,23 @@ function gatherState(): PlatformState {
         SUM(CASE WHEN severity = 'CRITICAL' THEN 1 ELSE 0 END) as crit,
         SUM(CASE WHEN severity = 'HIGH' THEN 1 ELSE 0 END) as high,
         COUNT(*) as total
-      FROM alerts WHERE ${activeAlertSqlClause()}`
+      FROM alerts
+      WHERE ${activeAlertSqlClause()}
+        AND ${alertProductionClause}
+        AND ${alertFixtureClause}
+        AND ${nonCorrelationAlertClause}`
     );
     if (a) { state.alerts.openCritical = a.crit || 0; state.alerts.openHigh = a.high || 0; state.alerts.openTotal = a.total || 0; }
 
-    const recent = queryOne<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM alerts WHERE created_at >= datetime('now', '-10 minutes')`);
+    const recent = queryOne<{ cnt: number }>(
+      `SELECT COUNT(*) as cnt
+       FROM alerts
+       WHERE created_at >= datetime('now', '-10 minutes')
+         AND ${activeAlertSqlClause()}
+         AND ${alertProductionClause}
+         AND ${alertFixtureClause}
+         AND ${nonCorrelationAlertClause}`
+    );
     if (recent) state.alerts.newLast10min = recent.cnt;
   } catch {}
 
@@ -132,13 +165,30 @@ function gatherState(): PlatformState {
 
   try {
     const tok = queryOne<{ total: number }>(
-      `SELECT COALESCE(SUM(total_tokens), 0) as total FROM proxy_traffic WHERE timestamp >= datetime('now', '-24 hours')`
+      `SELECT COALESCE(SUM(total_tokens), 0) as total
+       FROM proxy_traffic
+       WHERE timestamp >= datetime('now', '-24 hours')
+         AND ${proxyProductionClause}`
     );
     if (tok) state.tokens.total24h = tok.total;
 
     // Check for token anomaly (current hour vs average)
-    const currentHour = queryOne<{ cnt: number }>(`SELECT COALESCE(SUM(total_tokens), 0) as cnt FROM proxy_traffic WHERE timestamp >= datetime('now', '-1 hour')`);
-    const avgHour = queryOne<{ avg: number }>(`SELECT COALESCE(AVG(hourly_tokens), 0) as avg FROM (SELECT SUM(total_tokens) as hourly_tokens FROM proxy_traffic WHERE timestamp >= datetime('now', '-24 hours') GROUP BY strftime('%H', timestamp))`);
+    const currentHour = queryOne<{ cnt: number }>(
+      `SELECT COALESCE(SUM(total_tokens), 0) as cnt
+       FROM proxy_traffic
+       WHERE timestamp >= datetime('now', '-1 hour')
+         AND ${proxyProductionClause}`
+    );
+    const avgHour = queryOne<{ avg: number }>(
+      `SELECT COALESCE(AVG(hourly_tokens), 0) as avg
+       FROM (
+         SELECT SUM(total_tokens) as hourly_tokens
+         FROM proxy_traffic
+         WHERE timestamp >= datetime('now', '-24 hours')
+           AND ${proxyProductionClause}
+         GROUP BY strftime('%H', timestamp)
+       )`
+    );
     if (currentHour && avgHour && avgHour.avg > 0 && currentHour.cnt > avgHour.avg * 5) {
       state.tokens.anomaly = true;
     }
@@ -206,6 +256,92 @@ function calculateScore(
   };
 }
 
+function buildEvaluationPayload(
+  state: PlatformState,
+  rules: RuleResult[],
+  weights: Record<string, number>,
+) {
+  const triggeredRules = rules.filter((r) => r.triggered);
+  const partition = applyRiskSuppressions(triggeredRules, (r) => ({
+    source_panel: "correlations" as const,
+    rule_id: r.rule,
+    agent_id: null,
+    surface_id: null,
+    evidence: [...r.sources].sort(),
+  }));
+  const activeRules = [...partition.active, ...rules.filter((r) => !r.triggered)];
+  const suppressedTriggered = partition.suppressed;
+
+  const grossScore = calculateScore(rules, weights);
+  const activeScore = calculateScore(activeRules, weights);
+
+  return {
+    payload: {
+      // Active is the headline (back-compat-friendly: clients reading
+      // `threat_score` see the active number). Gross + suppressed
+      // exposed as separate fields.
+      threat_score: activeScore.score,
+      threat_score_gross: grossScore.score,
+      threat_score_active: activeScore.score,
+      level: activeScore.level,
+      breakdown: activeScore.breakdown,
+      breakdown_gross: grossScore.breakdown,
+      weights_applied: activeScore.weights_applied,
+      correlation_multiplier: activeScore.correlation_multiplier,
+      raw_score: activeScore.raw_score,
+      raw_score_gross: grossScore.raw_score,
+      triggered_count: partition.active.length,
+      triggered_count_gross: grossScore.triggered_count,
+      suppressed_count: suppressedTriggered.length,
+      unique_sources: activeScore.unique_sources,
+      triggered_rules: partition.active.length,
+      total_rules: rules.length,
+      rules: activeRules.map((r) => ({
+        rule: r.rule,
+        severity: r.severity,
+        triggered: r.triggered,
+        score: r.score,
+        description: r.description,
+        sources: r.sources,
+        events: r.events,
+      })),
+      suppressedRules: suppressedTriggered.map((s) => ({
+        rule: s.finding.rule,
+        severity: s.finding.severity,
+        score: s.finding.score,
+        description: s.finding.description,
+        sources: s.finding.sources,
+        acceptance: {
+          id: s.acceptance.id,
+          scope_level: s.acceptance.scope_level,
+          accepted_by: s.acceptance.accepted_by,
+          accepted_at: s.acceptance.accepted_at,
+          reason: s.acceptance.reason,
+          expires_at: s.acceptance.expires_at,
+        },
+      })),
+      state_summary: {
+        shield_blocks_24h: state.shield.blocked24h,
+        shield_reviews_24h: state.shield.reviewed24h,
+        active_alerts: state.alerts.openTotal,
+        // Back-compat alias for older clients; this count is the canonical
+        // active population (open + acknowledged + investigating), not only
+        // status='open'.
+        open_alerts: state.alerts.openTotal,
+        critical_alerts: state.alerts.openCritical,
+        cpu: state.infra.cpuPercent,
+        memory: state.infra.memPercent,
+        break_glass_active: state.breakGlass.active,
+        token_anomaly: state.tokens.anomaly,
+      },
+      evaluated_at: new Date().toISOString(),
+    },
+    activeRules,
+    suppressedTriggered,
+    triggeredRules,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Persist correlations
 // ---------------------------------------------------------------------------
@@ -260,23 +396,7 @@ export async function POST(request: NextRequest) {
     const weights = loadWeights();
     const state = gatherState();
     const rules = evaluateRules(state);
-
-    // v0.8.0: partition triggered rules into active + suppressed via risk
-    // acceptance. Non-triggered rules are unaffected (no risk to suppress).
-    // Score is recomputed from the active set; gross score retained alongside.
-    const triggeredRules = rules.filter((r) => r.triggered);
-    const partition = applyRiskSuppressions(triggeredRules, (r) => ({
-      source_panel: "correlations" as const,
-      rule_id: r.rule,
-      agent_id: null,
-      surface_id: null,
-      evidence: [...r.sources].sort(),
-    }));
-    const activeRules = [...partition.active, ...rules.filter((r) => !r.triggered)];
-    const suppressedTriggered = partition.suppressed;
-
-    const grossScore = calculateScore(rules, weights);
-    const activeScore = calculateScore(activeRules, weights);
+    const { payload, triggeredRules, suppressedTriggered } = buildEvaluationPayload(state, rules, weights);
 
     // Persist new correlations (gross — every triggered rule is recorded
     // even when suppressed; suppression is a UI/score concept, not a
@@ -288,75 +408,20 @@ export async function POST(request: NextRequest) {
     try {
       run(
         `INSERT INTO metric_snapshots (source, metric_name, metric_value, recorded_at) VALUES ('correlation-engine', 'threat_score', ?, datetime('now'))`,
-        [activeScore.score]
+        [payload.threat_score]
       );
     } catch {}
 
     // Broadcast score update (active)
     try {
-      broadcast("threat_score", { score: activeScore.score, level: activeScore.level });
+      broadcast("threat_score", { score: payload.threat_score, level: payload.level });
     } catch {}
 
     // Fresh evaluation — stale GET cache no longer valid
     invalidateScoreCache();
 
-    console.log(`[api/correlations/evaluate:POST] ${Date.now() - __t0}ms triggered=${triggeredRules.length} active=${partition.active.length} suppressed=${suppressedTriggered.length}`);
-    return NextResponse.json({
-      // Active is the headline (back-compat-friendly: clients reading
-      // `threat_score` see the active number). Gross + suppressed
-      // exposed as separate fields.
-      threat_score: activeScore.score,
-      threat_score_gross: grossScore.score,
-      threat_score_active: activeScore.score,
-      level: activeScore.level,
-      breakdown: activeScore.breakdown,
-      breakdown_gross: grossScore.breakdown,
-      weights_applied: activeScore.weights_applied,
-      correlation_multiplier: activeScore.correlation_multiplier,
-      raw_score: activeScore.raw_score,
-      raw_score_gross: grossScore.raw_score,
-      triggered_count: partition.active.length,
-      triggered_count_gross: grossScore.triggered_count,
-      suppressed_count: suppressedTriggered.length,
-      unique_sources: activeScore.unique_sources,
-      triggered_rules: partition.active.length,
-      total_rules: rules.length,
-      rules: activeRules.map(r => ({
-        rule: r.rule,
-        severity: r.severity,
-        triggered: r.triggered,
-        score: r.score,
-        description: r.description,
-        sources: r.sources,
-        events: r.events,
-      })),
-      suppressedRules: suppressedTriggered.map((s) => ({
-        rule: s.finding.rule,
-        severity: s.finding.severity,
-        score: s.finding.score,
-        description: s.finding.description,
-        sources: s.finding.sources,
-        acceptance: {
-          id: s.acceptance.id,
-          scope_level: s.acceptance.scope_level,
-          accepted_by: s.acceptance.accepted_by,
-          accepted_at: s.acceptance.accepted_at,
-          reason: s.acceptance.reason,
-          expires_at: s.acceptance.expires_at,
-        },
-      })),
-      state_summary: {
-        shield_blocks_24h: state.shield.blocked24h,
-        shield_reviews_24h: state.shield.reviewed24h,
-        open_alerts: state.alerts.openTotal,
-        critical_alerts: state.alerts.openCritical,
-        cpu: state.infra.cpuPercent,
-        memory: state.infra.memPercent,
-        break_glass_active: state.breakGlass.active,
-        token_anomaly: state.tokens.anomaly,
-      },
-      evaluated_at: new Date().toISOString(),
-    });
+    console.log(`[api/correlations/evaluate:POST] ${Date.now() - __t0}ms triggered=${triggeredRules.length} active=${payload.triggered_count} suppressed=${suppressedTriggered.length}`);
+    return NextResponse.json(payload);
   } catch (err) {
     console.error(`[api/correlations/evaluate:POST] failed after ${Date.now() - __t0}ms:`, err);
     return NextResponse.json({ error: "Evaluation failed" }, { status: 500 });
@@ -387,20 +452,7 @@ export async function GET(request: NextRequest) {
     const weights = loadWeights();
     const state = gatherState();
     const rules = evaluateRules(state);
-    const { score, level, breakdown, weights_applied, correlation_multiplier, raw_score, triggered_count, unique_sources } = calculateScore(rules, weights);
-
-    const payload = {
-      threat_score: score,
-      level,
-      breakdown,
-      weights_applied,
-      correlation_multiplier,
-      raw_score,
-      triggered_count,
-      unique_sources,
-      triggered_rules: rules.filter(r => r.triggered).length,
-      evaluated_at: new Date().toISOString(),
-    };
+    const { payload } = buildEvaluationPayload(state, rules, weights);
     setCachedScore(payload);
     console.log(`[api/correlations/evaluate:GET] ${Date.now() - __t0}ms cache=miss`);
     return NextResponse.json(payload);

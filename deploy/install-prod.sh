@@ -407,6 +407,7 @@ Environment=HOSTNAME=127.0.0.1
 # database inside the build dir — which setup.sh wipes on every rebuild
 # (operator data loss; live finding on Crucible 2026-06-13).
 Environment=DATABASE_PATH=${INSTALL_DIR}/clawnex.db
+Environment=CLAWNEX_LOG_DIR=${INSTALL_DIR}/logs
 ExecStart=${DASHBOARD_EXEC}
 Restart=always
 RestartSec=5

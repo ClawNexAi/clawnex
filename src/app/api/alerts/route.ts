@@ -7,9 +7,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/guard';
 import { requireLocalhost } from "@/lib/middleware/localhost-guard";
-import { listAlerts, createAlert } from '@/lib/services/alert-manager';
+import { listAlerts, countAlerts, createAlert } from '@/lib/services/alert-manager';
 import { logEvent } from '@/lib/services/audit-logger';
-import { isAlertScope } from '@/lib/dashboard/metric-semantics';
+import { isAlertScope, productionOriginSqlClause } from '@/lib/dashboard/metric-semantics';
 import { queryOne } from '@/lib/db/index';
 
 export const runtime = 'nodejs';
@@ -73,13 +73,16 @@ export async function GET(request: NextRequest) {
     if (searchParams.get('productionOnly') === 'true') filters.productionOnly = true;
 
     let alerts = listAlerts(filters as { status?: string; scope?: 'active' | 'terminal' | 'all'; severity?: string; source?: string; since?: string; limit?: number; include_suppressed?: boolean; productionOnly?: boolean });
+    let total = countAlerts(filters as { status?: string; scope?: 'active' | 'terminal' | 'all'; severity?: string; source?: string; since?: string; include_suppressed?: boolean; productionOnly?: boolean });
 
     // Instance-level filtering: hermes-local shows only hermes-watcher alerts,
     // openclaw / other instances exclude hermes-watcher alerts.
     if (instance === 'hermes-local') {
       alerts = alerts.filter(a => a.source === 'hermes-watcher');
+      total = alerts.length;
     } else if (instance && instance !== 'all') {
       alerts = alerts.filter(a => a.source !== 'hermes-watcher');
+      total = alerts.length;
     }
 
     // internal reviewer metric-corroboration #3 (2026-04-29): surface the *effective*
@@ -95,6 +98,18 @@ export async function GET(request: NextRequest) {
       filters.include_suppressed ? 'all' :
       'legacy-default';
 
+    const aggregateWhere: string[] = [];
+    const aggregateParams: unknown[] = [];
+    if (filters.productionOnly) aggregateWhere.push(productionOriginSqlClause('metadata'));
+    if (instance === 'hermes-local') {
+      aggregateWhere.push(`source = ?`);
+      aggregateParams.push('hermes-watcher');
+    } else if (instance && instance !== 'all') {
+      aggregateWhere.push(`source != ?`);
+      aggregateParams.push('hermes-watcher');
+    }
+    const aggregateSuffix = aggregateWhere.length ? ` AND ${aggregateWhere.join(' AND ')}` : '';
+
     // Item #3 (Mission Control Incident Hygiene): two new aggregate fields.
     //
     // oldest_open_age_ms: age (ms) of the oldest open alert from now.
@@ -102,7 +117,8 @@ export async function GET(request: NextRequest) {
     let oldestOpenAgeMs = 0;
     try {
       const oldest = queryOne<{ min_created_at: string | null }>(
-        `SELECT MIN(created_at) AS min_created_at FROM alerts WHERE status = 'open'`,
+        `SELECT MIN(created_at) AS min_created_at FROM alerts WHERE status = 'open'${aggregateSuffix}`,
+        aggregateParams,
       );
       if (oldest?.min_created_at) {
         const ts = Date.parse(oldest.min_created_at);
@@ -132,8 +148,8 @@ export async function GET(request: NextRequest) {
         `SELECT COUNT(*) AS cnt FROM alerts
          WHERE status = 'acknowledged'
            AND resolved_at IS NULL
-           AND updated_at <= ?`,
-        [cutoff],
+           AND updated_at <= ?${aggregateSuffix}`,
+        [cutoff, ...aggregateParams],
       );
       ackButNotResolvedCount = ackRow?.cnt ?? 0;
     } catch {
@@ -142,7 +158,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       alerts,
-      total: alerts.length,
+      total,
       filters: { status, severity, source, since },
       scope: scopeParam ?? null,
       effectiveScope,

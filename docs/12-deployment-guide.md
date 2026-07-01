@@ -240,9 +240,9 @@ echo "*/5 * * * * /Users/$(whoami)/sentinel/scripts/watchdog.sh" | crontab -
 crontab -l
 ```
 
-### Step 13: Configure Agent Fleet
+### Step 13: Route OpenClaw Through ClawNex
 
-Point your OpenClaw agent fleet to use LiteLLM as the model proxy:
+Point OpenClaw to use LiteLLM as the model proxy:
 - Model endpoint: `http://127.0.0.1:4001/v1`
 - This ensures all agent LLM requests flow through ClawNex
 
@@ -422,20 +422,7 @@ clawnex.yourdomain.com {
 
 The production install script (`deploy/install-prod.sh`) writes this shape automatically; the minimal example above is for operators handcrafting their own Caddy config.
 
-**IP allowlisting via Caddy (optional, for restricted access):**
-```
-clawnex.yourdomain.com {
-    @allowed remote_ip 203.0.113.0/24 198.51.100.42
-    handle @allowed {
-        reverse_proxy 127.0.0.1:5001 {
-            flush_interval -1
-        }
-    }
-    handle {
-        respond "Forbidden" 403
-    }
-}
-```
+For restricted administrative exposure, keep the dashboard bound to loopback and reach it through SSH/Tailscale/VPN. Public VPS mode assumes Caddy owns the public edge and ClawNex enforces application-layer authentication and RBAC.
 
 #### 5.3.2 nginx (Alternative)
 
@@ -862,7 +849,7 @@ For SSH-driven deploys to a remote host (staging host / <qa-host> / customer ser
 **What it does, in order:**
 
 1. **Pre-flight** — verifies the local tarball (`build/clawnex-vX.Y.Z.tar.gz`) exists, the target host is reachable, and the `OPENCLAW_PRESERVED` invariant holds (aborts before touching anything if `~/.openclaw/openclaw.json` would end up missing — the "never touch OpenClaw" rule, automated).
-2. **Deep clean** (default; opt-out with `--no-deep-clean`) — removes `~/sentinel`, the systemd user unit files, `/etc/caddy/Caddyfile`, the watchdog cron entry, and `clawkeeper.sh` if ClawNex installed it. Leaves OpenClaw, LiteLLM (if external), and operator `~/.openclaw/` data alone.
+2. **Deep clean** (default; opt-out with `--no-deep-clean`) — removes `~/sentinel`, the systemd user unit files, `/etc/caddy/Caddyfile`, the watchdog cron entry, and any ClawNex-managed legacy Host Security helper. Leaves OpenClaw, LiteLLM (if external), and operator `~/.openclaw/` data alone.
 3. **Upload** — scp's the tarball into `~/`, untars to `~/sentinel/`, runs `npm ci --omit=dev`.
 4. **Build** — `next build` with the production env. Caddyfile is regenerated from the domain template (skipped on `.ts.net` — Path A hand-finishes per §5.3.3), the systemd user unit is reinstalled and enabled.
 5. **Smoke** — curl `/api/health` against the local bind, then dashboard + LiteLLM port 4001 + Caddy port 443 from the public surface.

@@ -16,6 +16,7 @@
 
 import { getHermesDb, isHermesAvailable } from './hermes-db';
 import { computeCost } from './model-pricing';
+import { costStatusFromSource, unknownRowsForStatus } from './token-cost-quality';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,6 +32,7 @@ export interface HermesModelAggregation {
   totalCost: number;
   messageCount: number;
   costSource?: string;
+  unpricedRows?: number;
 }
 
 export interface HermesAgentAggregation {
@@ -146,6 +148,7 @@ export function readHermesTokenUsage(since: string | number): HermesTokenResult 
       cost = result.cost;
       costSource = result.rate?.source || 'default';
     }
+    const rowUnpricedRows = unknownRowsForStatus(costStatusFromSource(costSource), msgCount);
 
     totalTokens += tokens;
     totalCost += cost;
@@ -154,7 +157,7 @@ export function readHermesTokenUsage(since: string | number): HermesTokenResult 
     // Aggregate by model
     let modelAgg = modelMap.get(model);
     if (!modelAgg) {
-      modelAgg = { model, totalInput: 0, totalOutput: 0, totalCacheRead: 0, totalCacheWrite: 0, totalTokens: 0, totalCost: 0, messageCount: 0, costSource };
+      modelAgg = { model, totalInput: 0, totalOutput: 0, totalCacheRead: 0, totalCacheWrite: 0, totalTokens: 0, totalCost: 0, messageCount: 0, costSource, unpricedRows: 0 };
       modelMap.set(model, modelAgg);
     }
     modelAgg.totalInput += input;
@@ -164,6 +167,8 @@ export function readHermesTokenUsage(since: string | number): HermesTokenResult 
     modelAgg.totalTokens += tokens;
     modelAgg.totalCost += cost;
     modelAgg.messageCount += msgCount;
+    modelAgg.unpricedRows = (modelAgg.unpricedRows ?? 0) + rowUnpricedRows;
+    modelAgg.costSource = pickPrimarySource(modelAgg.costSource, costSource);
 
     // Aggregate by agent + model
     let agentModels = agentModelMap.get(agentId);
@@ -173,7 +178,7 @@ export function readHermesTokenUsage(since: string | number): HermesTokenResult 
     }
     let agentModelAgg = agentModels.get(model);
     if (!agentModelAgg) {
-      agentModelAgg = { model, totalInput: 0, totalOutput: 0, totalCacheRead: 0, totalCacheWrite: 0, totalTokens: 0, totalCost: 0, messageCount: 0, costSource };
+      agentModelAgg = { model, totalInput: 0, totalOutput: 0, totalCacheRead: 0, totalCacheWrite: 0, totalTokens: 0, totalCost: 0, messageCount: 0, costSource, unpricedRows: 0 };
       agentModels.set(model, agentModelAgg);
     }
     agentModelAgg.totalInput += input;
@@ -183,6 +188,8 @@ export function readHermesTokenUsage(since: string | number): HermesTokenResult 
     agentModelAgg.totalTokens += tokens;
     agentModelAgg.totalCost += cost;
     agentModelAgg.messageCount += msgCount;
+    agentModelAgg.unpricedRows = (agentModelAgg.unpricedRows ?? 0) + rowUnpricedRows;
+    agentModelAgg.costSource = pickPrimarySource(agentModelAgg.costSource, costSource);
   }
 
   // Build byAgent array
@@ -211,4 +218,17 @@ export function readHermesTokenUsage(since: string | number): HermesTokenResult 
     },
     scannedSessions: rows.length,
   };
+}
+
+function pickPrimarySource(left: string | undefined, right: string | undefined): string | undefined {
+  const rank = (source: string | undefined) => {
+    if (source === 'actual') return 5;
+    if (source === 'estimated') return 4;
+    if (source === 'openclaw') return 3;
+    if (source === 'litellm') return 2;
+    if (source === 'fallback') return 1;
+    if (source === 'default') return 0;
+    return -1;
+  };
+  return rank(right) > rank(left) ? right : left;
 }

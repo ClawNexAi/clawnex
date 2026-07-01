@@ -116,6 +116,7 @@ function usePolledFetch<T>({ fetcher, strategy, deps = [] }: UsePolledFetchOpts<
 export interface ActiveIncidentsData {
   total: number;
   open: number;
+  acknowledged: number;
   investigating: number;
   suppressed: number;
   critical: number;
@@ -131,23 +132,22 @@ export function useActiveIncidents(): PolledResult<ActiveIncidentsData> {
   return usePolledFetch<ActiveIncidentsData>({
     strategy: "poll_30s",
     fetcher: async () => {
-      const res = await fetch("/api/alerts?scope=active");
+      const res = await fetch("/api/alerts?scope=active&productionOnly=true&limit=500");
       if (!res.ok) throw new Error(`/api/alerts failed: ${res.status}`);
       const body = await res.json();
       // Route returns body.alerts[] with alert.status and alert.severity fields
       // (confirmed in src/app/api/alerts/route.ts — NextResponse.json({ alerts, ... })).
-      const allAlerts: Array<{ status?: string; severity?: string }> = body?.alerts ?? [];
-      // Spec §5.1 semantics: count = status IN ('open', 'investigating', 'suppressed').
-      // /api/alerts?scope=active currently includes 'acknowledged' and excludes
-      // 'suppressed'; client-side filter enforces the spec count.
-      const alerts = allAlerts.filter((a) =>
-        a.status === "open" || a.status === "investigating" || a.status === "suppressed"
-      );
+      // Canonical active scope is enforced by /api/alerts: open +
+      // acknowledged + investigating. Suppressed/terminal alerts are handled
+      // separately by the Alerts panel and risk-acceptance views.
+      const alerts: Array<{ status?: string; severity?: string }> = body?.alerts ?? [];
+      const total = typeof body?.total === "number" ? body.total : alerts.length;
       return {
-        total: alerts.length,
+        total,
         open: alerts.filter((a) => a.status === "open").length,
+        acknowledged: alerts.filter((a) => a.status === "acknowledged").length,
         investigating: alerts.filter((a) => a.status === "investigating").length,
-        suppressed: alerts.filter((a) => a.status === "suppressed").length,
+        suppressed: 0,
         critical: alerts.filter((a) => a.severity === "CRITICAL").length,
         high: alerts.filter((a) => a.severity === "HIGH").length,
         medium: alerts.filter((a) => a.severity === "MEDIUM").length,
@@ -180,15 +180,12 @@ export function useEvidenceConfidence(): PolledResult<EvidenceConfidenceData> {
   return usePolledFetch<EvidenceConfidenceData>({
     strategy: "poll_30s",
     fetcher: async () => {
-      const res = await fetch("/api/alerts?scope=active");
+      const res = await fetch("/api/alerts?scope=active&productionOnly=true&limit=500");
       if (!res.ok) throw new Error(`/api/alerts failed: ${res.status}`);
       const body = await res.json();
-      const allAlerts: Array<{ id: string; status?: string }> = body?.alerts ?? [];
-      // Spec §5.1 semantics: only count status IN ('open', 'investigating', 'suppressed').
-      // Evidence confidence should reflect the same population as the Active Incidents KPI.
-      const alerts = allAlerts.filter((a) =>
-        a.status === "open" || a.status === "investigating" || a.status === "suppressed"
-      );
+      // Evidence confidence reflects the same canonical active production
+      // population as the Active Incidents KPI.
+      const alerts: Array<{ id: string; status?: string }> = body?.alerts ?? [];
       if (alerts.length === 0) {
         return { total: 0, exact: 0, fallback: 0, missingSnippet: 0, percentage: 0, outsideWindowFetchable: 0 };
       }
@@ -446,16 +443,12 @@ export function useActiveAlerts(): PolledResult<ActiveAlert[]> {
   return usePolledFetch<ActiveAlert[]>({
     strategy: "poll_30s",
     fetcher: async () => {
-      const res = await fetch("/api/alerts?scope=active");
+      const res = await fetch("/api/alerts?scope=active&productionOnly=true&limit=500");
       if (!res.ok) throw new Error(`/api/alerts failed: ${res.status}`);
       const body = await res.json();
-      // Route wraps alerts under body.alerts[] (confirmed in route.ts).
-      // Spec §5.1 semantics: Action Queue should only include status IN
-      // ('open', 'investigating', 'suppressed') — same population as KPI §5.1.
-      const all = (body?.alerts ?? []) as ActiveAlert[];
-      return all.filter((a) =>
-        a.status === "open" || a.status === "investigating" || a.status === "suppressed"
-      );
+      // Route wraps alerts under body.alerts[] and applies canonical active
+      // scope + production filtering server-side.
+      return (body?.alerts ?? []) as ActiveAlert[];
     },
   });
 }

@@ -31,7 +31,7 @@ export type AdapterWarningKind =
   | 'unknown_warning';
 
 // Per-row flags. Ordered set; small, predefined values only.
-export type RowFlag = 'unsupported_currency';
+export type RowFlag = 'unsupported_currency' | 'invalid_cost';
 
 export type SourceStatus = 'ok' | 'unavailable';
 

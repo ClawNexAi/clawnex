@@ -101,7 +101,7 @@ function getRuleCatalog(): Array<{ rule: string; desc: string; status: string; s
     { rule: "PATH-002", desc: "Block sensitive file access", status: "active", sev: "CRITICAL", category: "path_guard" },
     { rule: "URL-001", desc: "Block non-HTTPS URLs", status: "active", sev: "HIGH", category: "url_safety" },
     { rule: "URL-002", desc: "Block internal IP access (SSRF)", status: "active", sev: "HIGH", category: "url_safety" },
-    { rule: "NET-001", desc: "Egress domain allowlist", status: "active", sev: "MEDIUM", category: "network" },
+    { rule: "NET-001", desc: "Egress domain deny-list enforcement", status: "active", sev: "MEDIUM", category: "network" },
     { rule: "FS-001", desc: "File boundary enforcement", status: "active", sev: "HIGH", category: "filesystem" },
     ...Array.from(categories.entries()).map(([cat, data], i) => ({
       rule: `SHD-${String(i + 1).padStart(3, "0")}`,

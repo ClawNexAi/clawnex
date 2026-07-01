@@ -12,6 +12,7 @@
 //   source     — CSV of source values
 //   status     — CSV of status values
 //   scope      — CSV of scope values (used by RiskAcceptances)
+//   productionOnly — scalar "true" when a drilldown must keep demo/fixture rows out
 //   actor      — CSV of actor values (used by Audit & Evidence)
 //   id         — deep-link to a specific row (filters list to that row)
 //   highlight  — pulse a specific row but do not filter
@@ -54,6 +55,7 @@ export interface UrlState {
   source?: string[];
   status?: string[];
   scope?: string[];
+  productionOnly?: string;
   actor?: string[];
   /** Evidence-level confidence (Trust Audit, Blast Radius). Reserved key
    *  added in v0.8.2 alongside the initial filter rollout so the URL param
@@ -75,7 +77,7 @@ export interface UrlState {
 }
 
 const CSV_KEYS = ["severity", "source", "status", "scope", "actor", "confidence", "age"] as const;
-const SCALAR_KEYS = ["tab", "q", "id", "highlight", "min", "max"] as const;
+const SCALAR_KEYS = ["tab", "q", "id", "highlight", "min", "max", "productionOnly"] as const;
 const ALL_KEYS = [...CSV_KEYS, ...SCALAR_KEYS] as const;
 
 // ---------------------------------------------------------------------------

@@ -403,9 +403,9 @@ Legend: **Y** = permission granted, **—** = permission denied.
 
 ---
 
-### 6.6 Enterprise Features
+### 6.6 Enterprise Roadmap
 
-The following capabilities are badged as **Enterprise** in the ClawNex UI. They represent advanced security controls for organizations with elevated compliance or operational requirements.
+The following capabilities are roadmap items for organizations with elevated compliance or operational requirements. They are not part of the current open-source dashboard unless explicitly shipped in a release note.
 
 | Feature | Description |
 |---------|-------------|
@@ -417,7 +417,7 @@ The following capabilities are badged as **Enterprise** in the ClawNex UI. They 
 | **User Access Control + IP/Domain Deny Lists** | Define denied IPs/domains in the Access Lists panel and manage user-level access restrictions where available |
 | **SOC2 / ISO27001 Compliance Reports** | Generate compliance-ready reports in the Executive Reports panel for audit and certification purposes |
 
-Enterprise features are visible in the UI with an "Enterprise" badge. Contact ClawNex for licensing.
+For general questions, contact `contact@clawnexai.com`.
 
 ---
 
@@ -1271,18 +1271,16 @@ No manual config file editing is required.
 
 ## 18. Fleet Connectors
 
-The Configuration panel consolidates all agent gateway connections into a single **Fleet Connectors** card with four collapsible sections:
+The Configuration panel consolidates released agent gateway connections into a single **Fleet Connectors** card:
 
 | Section | Status | Description |
 |---------|--------|-------------|
 | **OpenClaw** | LIVE | OpenClaw agent gateway — real-time session monitoring, agent fleet visibility, and traffic routing |
 | **Hermes** | LIVE | Hermes-Agent (Nous Research) gateway — session scanning, token aggregation, and fleet filtering |
-| **Paperclip** | COMING SOON | Paperclip task orchestration connector — plugin and task coordination |
-| **NemoClaw** | ALPHA | NemoClaw connector — early-access integration |
 
-Each section is independently collapsible. LIVE connectors show connection status, instance management (add/remove), and health indicators. COMING SOON and ALPHA sections show placeholder descriptions with expected availability.
+Each released connector section is independently collapsible. Live connectors show connection status, instance management (add/remove), and health indicators. ClawNex does not show disabled connector placeholders for unreleased adapters.
 
-**Sticky collapse (added 2026-05-01).** Each section's expand/collapse state is now persisted to `localStorage` via the `useStickyBoolean` hook. If you only ever look at OpenClaw, collapse the other three once and they'll stay that way across reloads — the dashboard remembers your preferred Connectors layout per browser.
+**Sticky collapse (added 2026-05-01).** Each released connector section's expand/collapse state is persisted to `localStorage` via the `useStickyBoolean` hook. If you only ever look at OpenClaw, collapse Hermes once and it will stay that way across reloads — the dashboard remembers your preferred Connectors layout per browser.
 
 ### 18.1 OpenClaw 4.12 Device-Identity Handshake
 
@@ -1669,7 +1667,7 @@ Operator-readable definitions for `IncidentFamily`, `ActionVerb`, `EvidenceConfi
 | 1.0 | 2026-04-02 | ClawNex Engineering | Initial release |
 | 1.1 | 2026-04-05 | ClawNex Engineering | v0.5.2-alpha: CVE database section, system management (archive/purge/migrate/uninstall), floating avatar guide. |
 | 1.2 | 2026-04-13 | ClawNex Engineering | v0.6.0: Operator Management & RBAC section — operator lifecycle, progressive lockout, session management, SETUP_SECRET, enterprise features. |
-| 1.3 | 2026-04-13 | ClawNex Engineering | v0.6.1: Mail Configuration (Resend/SMTP password reset), Model Selection Toggle (interactive add/remove), Fleet Connectors card (OpenClaw, Hermes, Paperclip, NemoClaw). |
+| 1.3 | 2026-04-13 | ClawNex Engineering | v0.6.1: Mail Configuration (Resend/SMTP password reset), Model Selection Toggle (interactive add/remove), Fleet Connectors card for released OpenClaw and Hermes connector management. |
 | 1.4 | 2026-04-22 | ClawNex Engineering | v0.6.1-alpha: Trust Boundary Audit section (14 rules, discovery, matrix, surfaces, remediation), Scheduled Reports section, Custom Correlation Rules section, Caddy HTTPS section, MCP tools updated to 10 (5 new tools documented), 3 new Config panel cards, API section updated for RBAC session auth with curl examples, new API route examples for trust-audit/reports/correlations/https. Role name corrected from "Analyst" to "Security Manager". |
 | 1.5 | 2026-04-22 | ClawNex Engineering | Enterprise review: Added §6.5 Permission Reference (complete 5 roles × 28 permissions matrix as of v0.6.x) with permission enforcement summary and audit trail guarantee. Renumbered existing Enterprise Features to §6.6. Audit trail note clarified to enumerate every admin surface. Added cross-references to `docs/04 §8` (REQ-to-permission map), `docs/14 audit_log` schema, and `docs/10` per-endpoint permission requirements. *Permission count grew to 32 with the policy framework (`policies:read`, `policies:write`, `policies:test`, plus an additional permission added during the v0.9.x cycle); see the live matrix in `src/lib/rbac/types.ts` for the authoritative list.* |
 | 1.6 | 2026-04-22 | ClawNex Engineering | v0.6.2-alpha hardening pass: Custom Correlation Rules productized with risk-weight UI. MCP tool invocations now audit-logged. Trust Audit uses cached results by default (`?refresh=true` to force). See CHANGELOG §[0.6.2-alpha]. |

@@ -415,14 +415,14 @@ the header ribbon.
 
 ### 3.11 access_lists
 
-**Purpose:** IP and domain allowlists/blocklists.
+**Purpose:** IP and domain deny-list entries used by access-list controls.
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | id | TEXT | NO | — | Primary key (UUID) |
-| list_type | TEXT | NO | — | `allow` or `block` |
-| entry_type | TEXT | NO | — | `ip`, `domain`, `cidr` |
-| value | TEXT | NO | — | The IP, domain, or CIDR value |
+| list_type | TEXT | NO | — | Currently `deny` |
+| entry_type | TEXT | NO | — | `IP` or `DOMAIN` |
+| value | TEXT | NO | — | The IP address or domain value |
 | reason | TEXT | YES | NULL | Why this entry was added |
 | added_by | TEXT | YES | NULL | Who added it |
 | created_at | TEXT | NO | `datetime('now')` | ISO-8601 timestamp |

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { C, F } from "../constants";
-import { CollapsibleCard, EnterprisePill } from "../shared";
+import { CollapsibleCard } from "../shared";
 import { Tooltip } from "../tooltip";
 import type { DashboardFilters } from "../types";
 
@@ -327,7 +327,7 @@ export function ExecutiveReportsPanel({ filters, demoMode }: { filters: Dashboar
                 padding: "8px 0", borderBottom: `1px solid ${C.glassBorderSubtle}`,
               }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>{r.title}{(r.key === "soc2" || r.key === "iso27001") && <EnterprisePill />}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>{r.title}</div>
                   <div style={{ fontSize: 10, color: C.txT, fontFamily: F.mono, marginTop: 1 }}>
                     {r.frequency} &middot; {formatGenTime(r.key)}
                   </div>

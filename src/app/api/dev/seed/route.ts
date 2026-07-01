@@ -1,6 +1,6 @@
 /**
  * Developer Tools seed endpoint.
- * POST /api/dev/seed -- runs scripts/dashboard-traffic-fixture.ts via
+ * POST /api/dev/seed -- runs the dashboard traffic fixture via
  *                      the seedDashboardTraffic() export. Three-layer
  *                      gate (env + DB toggle + RBAC system:manage).
  *                      Audit-logged.
@@ -21,7 +21,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { checkDevToolsGate } from '@/lib/services/dev-tools-gate';
-import { seedDashboardTraffic } from '../../../../../scripts/dashboard-traffic-fixture';
+import { seedDashboardTraffic } from '@/lib/dev/dashboard-traffic-fixture';
 import { logEvent } from '@/lib/services/audit-logger';
 
 export const runtime = 'nodejs';

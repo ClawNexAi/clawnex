@@ -3,8 +3,8 @@
  *
  * Returns the installed versions of ClawNex (always available — read from
  * package.json via src/lib/version.ts) and the colocated OpenClaw install
- * (best-effort — read from `meta.lastTouchedVersion` in openclaw.json,
- * `null` when no install is detected).
+ * (best-effort — prefer installed CLI/package version, `null` when no install
+ * is detected).
  *
  * Used by the Mission Control Action Queue's update-cve producer to
  * populate `UpdateCveFinding.currentVersion` with the real installed
@@ -30,7 +30,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/guard';
 import { requireLocalhost } from '@/lib/middleware/localhost-guard';
 import { CLAWNEX_VERSION } from '@/lib/version';
-import { readOpenClawConfig } from '@/lib/openclaw-paths';
+import { getOpenClawInstalledVersion } from '@/lib/openclaw-version';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,17 +46,7 @@ export async function GET(request: NextRequest) {
     if (guard) return guard;
   }
 
-  // OpenClaw version — best-effort. Absent when no install detected,
-  // unparseable openclaw.json, or no `meta.lastTouchedVersion` field.
-  let openclaw: string | null = null;
-  try {
-    const config = readOpenClawConfig();
-    const meta = config?.meta as { lastTouchedVersion?: unknown } | undefined;
-    const v = meta?.lastTouchedVersion;
-    if (typeof v === 'string' && v.length > 0) openclaw = v;
-  } catch {
-    // Swallow — null openclaw is the contract for "couldn't read".
-  }
+  const openclaw = getOpenClawInstalledVersion();
 
   return NextResponse.json({
     clawnex: CLAWNEX_VERSION,

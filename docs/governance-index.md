@@ -1,9 +1,9 @@
 # ClawNex Governance Index
 
 Document ID: CLAWNEX-GOV-INDEX
-Version: 1.3
+Version: 1.5
 Date Created: 2026-04-22
-Last Updated: 2026-05-08
+Last Updated: 2026-06-30
 Owner: Project owner
 Purpose: Single entry point for all ClawNex governance, policy, register, template, and readiness artifacts.
 

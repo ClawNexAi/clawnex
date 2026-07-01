@@ -31,10 +31,26 @@ const SOURCE_LABEL: Record<Source, string> = {
 // prefer rows when present and non-empty, and fall back to the legacy
 // costByAgent shape otherwise so older endpoints / tests keep working.
 type CardData = {
-  costByAgent: Array<{ agent: string; model: string; requests: number; inputTokens: number; outputTokens: number; totalTokens: number; cost: number }>;
+  costByAgent: Array<{ agent: string; model: string; requests: number; inputTokens: number; outputTokens: number; totalTokens: number; cost: number; costStatus?: 'known' | 'unknown' | 'invalid' | 'mixed'; invalidCostRows?: number; unpricedRows?: number }>;
   defaultModel: string;
   rows?: NormalizedRow[];
 };
+
+function CostQualityBadge({ status, unknownRows }: { status?: string; unknownRows?: number }) {
+  if (status === 'invalid') return <Badge label="INVALID COST" color={C.danger} />;
+  if (status === 'mixed') return <Badge label="MIXED COST" color={C.warn} />;
+  if (status === 'unknown' || (unknownRows || 0) > 0) return <Badge label="COST UNKNOWN" color={C.txT} />;
+  return null;
+}
+
+function normalizedRowCostQuality(row: NormalizedRow, display: number | null): 'known' | 'unknown' | 'invalid' {
+  if (row.row_flags.includes('invalid_cost')) return 'invalid';
+  const costValues = [row.actual_cost_usd, row.estimated_cost_usd, row.recomputed_cost_usd];
+  if (costValues.some((value) => typeof value === 'number' && (!Number.isFinite(value) || value < 0))) {
+    return 'invalid';
+  }
+  return display === null ? 'unknown' : 'known';
+}
 
 export function CostByAgentCard({ globalFilters, demoMode, hideDeliveryMirror = false }: { globalFilters: DashboardFilters; demoMode?: boolean; hideDeliveryMirror?: boolean }) {
   const [localRange, setLocalRange] = useState<string | null>(null);
@@ -87,23 +103,27 @@ export function CostByAgentCard({ globalFilters, demoMode, hideDeliveryMirror = 
   // Per-source totals must NEVER be summed (internal reviewer #4); we compute one total per
   // (source, agent) row and sort, but never output a combined sum.
   const byAgentSource = useMemo(() => {
-    const map = new Map<string, { source: Source; agent: string; count: number; totalUsd: number; tokens: number }>();
+    const map = new Map<string, { source: Source; agent: string; count: number; totalUsd: number; tokens: number; unknownCostRows: number; invalidCostRows: number }>();
     for (const row of data?.rows ?? []) {
-      // Hermes rows where agent=null are excluded — Hermes doesn't populate
-      // agent in v1, so those rows belong on a different surface.
-      if (!row.agent) continue;
       // Render-time delivery-mirror filter — see TokenCostPanel.hideDeliveryMirror
       // state declaration. Applied BEFORE bucketing so the (agent, source) row
       // count and totals match what an operator would expect post-toggle.
       if (hideDeliveryMirror && row.model === 'delivery-mirror') continue;
-      const key = `${row.source}::${row.agent}`;
+      // Some sources, especially Hermes v1, do not provide agent identity. Keep
+      // those rows visible as an unattributed per-source bucket so mixed actual
+      // + default/unpriced cost quality cannot disappear from the agent view.
+      const agent = row.agent || `Unattributed ${row.source}`;
+      const key = `${row.source}::${agent}`;
       const display = display_cost_usd(row);
-      if (!map.has(key)) map.set(key, { source: row.source, agent: row.agent, count: 0, totalUsd: 0, tokens: 0 });
+      const quality = normalizedRowCostQuality(row, display);
+      if (!map.has(key)) map.set(key, { source: row.source, agent, count: 0, totalUsd: 0, tokens: 0, unknownCostRows: 0, invalidCostRows: 0 });
       const cur = map.get(key)!;
       cur.count++;
       // display_cost_usd returns null for token_only / unknown / unsupported_currency
       // — those rows count toward the call count but not the cost total.
       if (display !== null) cur.totalUsd += display;
+      if (quality === 'invalid') cur.invalidCostRows++;
+      else if (quality === 'unknown') cur.unknownCostRows++;
       cur.tokens += (row.input_tokens ?? 0) + (row.output_tokens ?? 0);
     }
     return Array.from(map.values()).sort((a, b) => b.totalUsd - a.totalUsd);
@@ -163,6 +183,11 @@ export function CostByAgentCard({ globalFilters, demoMode, hideDeliveryMirror = 
                 <span style={{ fontSize: 11, color: C.txT, fontFamily: F.mono, textAlign: "right" }}>{entry.count}</span>
                 <span style={{ fontSize: 11, fontWeight: 700, color: C.brand, fontFamily: F.mono, textAlign: "right" }}>{entry.tokens.toLocaleString()}</span>
                 <span style={{ fontSize: 12, fontWeight: 800, color: C.warn, fontFamily: F.mono, textAlign: "right" }}>${entry.totalUsd.toFixed(4)}</span>
+                {(entry.invalidCostRows > 0 || entry.unknownCostRows > 0) && (
+                  <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", marginTop: -2, marginBottom: 2 }}>
+                    <CostQualityBadge status={entry.invalidCostRows > 0 ? "invalid" : "unknown"} unknownRows={entry.unknownCostRows} />
+                  </div>
+                )}
               </div>
             ));
           })()}
@@ -218,6 +243,7 @@ export function CostByAgentCard({ globalFilters, demoMode, hideDeliveryMirror = 
         const totalCost = models.reduce((s, m) => s + m.cost, 0);
         const totalTokens = models.reduce((s, m) => s + m.totalTokens, 0);
         const totalReqs = models.reduce((s, m) => s + m.requests, 0);
+        const costStatus = models.some(m => m.costStatus === 'invalid') ? 'invalid' : models.some(m => m.costStatus === 'mixed') ? 'mixed' : models.some(m => m.costStatus === 'unknown') ? 'unknown' : 'known';
         const hasUnsanctioned = defaultModel && models.some(m => m.model !== defaultModel && m.model !== "unknown");
 
         return (
@@ -225,6 +251,7 @@ export function CostByAgentCard({ globalFilters, demoMode, hideDeliveryMirror = 
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: C.tx, flex: 1 }}>{agent}</span>
               {hasUnsanctioned && <Badge label="NON-DEFAULT MODEL" color={C.warn} />}
+              <CostQualityBadge status={costStatus} unknownRows={models.reduce((s, m) => s + (m.unpricedRows || 0), 0)} />
               <span style={{ fontSize: 11, color: C.txT, fontFamily: F.mono }}>{totalReqs} reqs</span>
               <span style={{ fontSize: 11, fontWeight: 700, color: C.brand, fontFamily: F.mono }}>{totalTokens.toLocaleString()} tokens</span>
               <span style={{ fontSize: 12, fontWeight: 800, color: C.warn, fontFamily: F.mono }}>${totalCost.toFixed(4)}</span>
@@ -237,6 +264,7 @@ export function CostByAgentCard({ globalFilters, demoMode, hideDeliveryMirror = 
                   {!isDefault && <span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 2, background: `${C.warn}18`, border: `1px solid ${C.warn}33`, color: C.warn, fontWeight: 700 }}>!</span>}
                   <span style={{ fontSize: 10, color: C.txT, fontFamily: F.mono }}>{m.requests} reqs</span>
                   <span style={{ fontSize: 10, color: C.txS, fontFamily: F.mono }}>{m.totalTokens.toLocaleString()}</span>
+                  <CostQualityBadge status={m.costStatus} unknownRows={m.unpricedRows} />
                   <span style={{ fontSize: 10, fontWeight: 700, color: C.warn, fontFamily: F.mono }}>${m.cost.toFixed(4)}</span>
                 </div>
               );

@@ -112,12 +112,14 @@ assert_grep src/lib/litellm/sync.ts 'nvidia_nim' "LiteLLM sync maps NVIDIA provi
 assert_grep src/lib/services/config-service.ts 'integrate\.api\.nvidia\.com' "provider SSRF allowlist permits NVIDIA NIM API host"
 
 echo "[2b] package dependency pins"
-assert_grep package.json '"postcss": "8\.4\.31"' "postcss pin uses conservative version already present in Next lock graph"
-assert_nogrep package.json '"postcss": "8\.5\.' "unresolved postcss 8.5.x pins retired"
+assert_grep package.json '"postcss": "8\.5\.16"' "postcss pin uses patched advisory-free version"
+assert_grep package.json '"overrides":' "package.json carries dependency overrides"
+assert_grep package.json '"js-cookie": "3\.0\.8"' "transitive js-cookie advisory is patched by override"
 
 echo "[3] local service layers"
 assert_grep deploy/lib-linux-local.sh 'ClawNex Local Linux Deploy' "Linux local service layer exists"
 assert_grep deploy/lib-linux-local.sh 'Environment=HOSTNAME=127\.0\.0\.1' "Linux local dashboard binds loopback"
+assert_grep deploy/lib-linux-local.sh 'Environment=CLAWNEX_LOG_DIR=\$\{INSTALL_DIR\}/logs' "Linux local dashboard writes structured logs outside standalone artifact"
 assert_grep deploy/lib-linux-local.sh '\-\-host 127\.0\.0\.1 \-\-port \$\{LITELLM_PORT\}' "Linux local LiteLLM binds loopback"
 assert_grep deploy/lib-linux-local.sh 'Dashboard did not answer /api/health after 120s' "Linux local health check retries before failing"
 assert_grep deploy/lib-linux-local.sh 'journalctl -u clawnex-dashboard -n 40' "Linux local health failure prints dashboard journal"
@@ -126,6 +128,9 @@ assert_grep deploy/lib-macos.sh 'io\.clawnex\.dashboard' "dashboard launchd labe
 assert_grep deploy/lib-macos.sh 'io\.clawnex\.litellm'   "litellm launchd label"
 assert_grep deploy/lib-macos.sh 'KeepAlive'              "KeepAlive set"
 assert_grep deploy/lib-macos.sh 'DASHBOARD_BIND="127\.0\.0\.1"' "macOS dashboard always binds loopback"
+assert_grep deploy/lib-macos.sh 'CLAWNEX_LOG_DIR="\$INSTALL_DIR/logs"' "macOS dashboard writes structured logs outside standalone artifact"
+assert_grep deploy/install-prod.sh 'Environment=CLAWNEX_LOG_DIR=\$\{INSTALL_DIR\}/logs' "Public VPS dashboard writes structured logs outside standalone artifact"
+assert_grep clawnex 'CLAWNEX_LOG_DIR="\$INSTALL_DIR/logs"' "CLI dashboard launcher writes structured logs outside standalone artifact"
 
 echo "[4] uninstall parity"
 assert_grep scripts/uninstall.sh 'io\.clawnex\.litellm\.plist' "uninstall removes litellm plist"
@@ -178,7 +183,7 @@ echo "[6] stale installers retired"
 [ ! -f deploy/deploy.sh ]   && pass "deploy/deploy.sh deleted"   || fail "deploy/deploy.sh still present (legacy)"
 
 echo "[7] bash syntax"
-for f in install.sh setup.sh deploy/lib-linux-local.sh deploy/lib-macos.sh deploy/install-prod.sh scripts/uninstall.sh; do
+for f in install.sh setup.sh deploy/lib-linux-local.sh deploy/lib-macos.sh deploy/install-prod.sh scripts/uninstall.sh scripts/postbuild-standalone-hygiene.sh; do
     [ -f "$f" ] || { fail "$f missing"; continue; }
     bash -n "$f" && pass "bash -n $f" || fail "bash -n $f"
 done

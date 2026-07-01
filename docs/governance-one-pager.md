@@ -1,19 +1,21 @@
 # ClawNex — Governance & Security Summary
 
 **Document ID:** CLAWNEX-GOV-001
-**Version:** 1.3
-**Date:** 2026-05-08
+**Version:** 1.5
+**Date:** 2026-06-30
 **Product Version:** v0.15.0-alpha
 **Owner & Maintainer:** Project owner
 **Audience:** Leadership, VC, prospective enterprise pilots, security questionnaires
 
 ## What ClawNex is
 
-ClawNex is an LLM security dashboard and proxy gateway. It routes AI traffic through a LiteLLM-based gateway with a 163-rule pre/post scan pipeline, exposes 25 operator panels with RBAC, an MCP tool surface (10 tools), and a 58-event audit catalog. Every security-relevant action is logged and mirrored to stdout for external ingest.
+ClawNex is an LLM security dashboard and proxy gateway. It routes AI traffic through a LiteLLM-based gateway with a 163-rule pre/post scan pipeline, exposes 26 operator panels with RBAC, an MCP tool surface (10 tools), and a 58-event audit catalog. Every security-relevant action is logged and mirrored to stdout for external ingest.
+
+Public repository: `https://github.com/ClawNexAi/clawnex`.
 
 ## Stage
 
-Alpha. Single-maintainer open-source project preparing for an Apache 2.0 public release. **Not yet pilot-ready for regulated enterprise data.** Reference deployments are local dev host (local dev), staging host (VPS provider QA, currently LIVE at https://<qa-host> running v0.11.6-alpha), and test host (Mac dev-box reserve).
+Alpha. Single-maintainer open-source project released under Apache 2.0. **Not yet pilot-ready for regulated enterprise data.** Reference deployments are local dev host (local dev), QA host (VPS provider QA, currently LIVE at https://qa.clawnexai.com running v0.15.0-alpha), and test host (Mac dev-box reserve).
 
 ## Security posture (as of 2026-04-22)
 
@@ -32,7 +34,7 @@ Alpha. Single-maintainer open-source project preparing for an Apache 2.0 public 
 | Artifact | Count / State |
 |---|---|
 | Approved policies | 14 (Information Security, Access Control, Incident Response, Change Management, Vendor Risk, Risk Management, Secure SDLC, Data Classification, Data Retention, BCP/DR, Crypto Controls, Asset Management, Vuln Management, Acceptable Use) |
-| Risk register | 23 active + 2 closed (P0: 2, P1: 11, P2: 9, P3: 1, Closed: 2) |
+| Risk register | Current summary: P0: 0 active, P1: 10 active, P2: 10 active, P3: 1 closed, Closed: 16 |
 | Vendor inventory | Live-reconciled against codebase; grouped by bundled / embedded / optional / supply-chain / deployment |
 | Operational templates | Incident record, tabletop exercise, DR test record, quarterly access review |
 | Governance index | `docs/governance-index.md` |
@@ -47,7 +49,7 @@ Policies are signed off by Owner & Maintainer pending a named alternate approver
 | ISO 27001:2022 | ~50-55% (honest-estimate) | Full DPA set, audit trail longevity, external validation |
 | NIST CSF 2.0 | Tier 2 today | Tier 3 requires formal risk integration + measurable outcomes |
 
-These numbers come from the 2026-04-22 security audit's control-mapping section. The governance lane landed in v0.6.3-alpha (14 approved policies, 2 live registers, 4 templates, in-dashboard Governance panel) and remains current at v0.11.6-alpha. Numbers are honest-estimate only; no external audit has been performed.
+These numbers come from the 2026-04-22 security audit's control-mapping section. The governance lane landed in v0.6.3-alpha (14 approved policies, 2 live registers, 4 templates, in-dashboard Governance panel) and remains current at v0.15.0-alpha. Numbers are honest-estimate only; no external audit has been performed.
 
 ## What a prospective enterprise user should know — straight answers
 
@@ -58,17 +60,16 @@ These numbers come from the 2026-04-22 security audit's control-mapping section.
 5. **Single-file secret storage** (`.env.local`, chmod 600). Adequate for alpha; not yet KMS-backed. Tracked as R-021.
 6. **Trust Audit discovery fidelity** — current discovery derives agent identity from `session_id` and tool inventory from `TOOLS.md` files. Findings are explicitly labeled with confidence pills so operators know what to trust; a discovery rewrite is its own workstream. Tracked as R-024.
 
-## What's changing in the next 90 days
+## Near-term pilot-readiness focus
 
-- **Public OSS launch on github.com/operator** (Apache 2.0 + DCO) — gated on the launch checklist at `docs/go-live-checklist.md`. Deployment-testing pass + governance audit pass + macOS install-path fix are the final gates.
-- **macOS local `next build` failure** — fixable launch-prep item; affects `setup.sh:1232` for any macOS operator running the tarball install. Pre-existed back to v0.11.2-alpha base; tracked on the launch checklist (Phase 2). Linux deploys (staging host) unaffected.
-- **Named alternate approver + secret-escrow plan (R-019)** — pre-OSS priority.
+- **Regression coverage and docs accuracy** — keep installer paths, dashboard panels, and operator docs aligned with the public release.
+- **Named alternate approver + secret-escrow plan (R-019)** — reduce single-maintainer operational risk.
 - **First tabletop exercise** using `docs/templates/tabletop-exercise-template.md`.
 - **First DR / restore exercise** using `docs/templates/dr-test-record-template.md` (closes R-022).
-- **OSS license audit against SBOM** + NOTICE file generation (pre-launch gate for R-020).
 - **External penetration test** scoping and vendor selection (R-017).
-- **Trust Audit discovery rewrite (R-024)** — separate workstream.
-- **Remaining v0.7.0 security items**: H-4 clawkeeper signed installer, H-5 Next.js 15 upgrade, H-13 source-signed shield whitelist.
+- **Provider DPA review** for external model, email, and media services (R-018).
+- **KMS-backed secret storage plan** to replace single-file `.env.local` storage for regulated deployments (R-021).
+- **Trust Audit discovery rewrite (R-024)** — separate workstream to improve agent identity and tool-inventory fidelity.
 
 ## Where to look (evidence map, one level deep)
 
@@ -88,7 +89,7 @@ These numbers come from the 2026-04-22 security audit's control-mapping section.
 
 ## One-paragraph takeaway for a reader in a hurry
 
-ClawNex is an alpha-stage LLM security platform with a serious, documented security posture (0 open Criticals, 4 of 13 Highs deferred with published rationale), a fully-landed governance starter pack readable inline in the dashboard itself (14 approved policies, 25-entry risk register with 2 closed and an auditable change log, live vendor inventory, four operational templates), safe-by-default authentication with four providers shipped through v0.9.x (passkeys, GitHub OAuth, Magic Link, local password as break-glass) plus 5-role RBAC, and a published roadmap to pilot readiness (external pen test, DPAs, alternate approver, KMS). The honest gating items for enterprise use are external validation and operating history — not architectural.
+ClawNex is an alpha-stage LLM security platform with a serious, documented security posture (0 open Criticals, 4 of 13 Highs deferred with published rationale), a fully-landed governance starter pack readable inline in the dashboard itself (14 approved policies, a current risk register with P0: 0 active, P1: 10 active, P2: 10 active, P3: 1 closed, and 16 closed items, live vendor inventory, four operational templates), safe-by-default authentication with four providers shipped through v0.9.x (passkeys, GitHub OAuth, Magic Link, local password as break-glass) plus 5-role RBAC, and a published roadmap to pilot readiness (external pen test, DPAs, alternate approver, KMS). The honest gating items for enterprise use are external validation and operating history — not architectural.
 
 ---
 
@@ -97,7 +98,8 @@ ClawNex is an alpha-stage LLM security platform with a serious, documented secur
 | Version | Date | Editor | Summary |
 |---|---|---|---|
 | 1.0 | 2026-04-22 | Claude | Initial one-pager produced from governance handoff; cross-referenced against v0.6.2-alpha state, audit report, and live registers. |
-| 1.1 | 2026-04-22 | Claude | Bumped to reflect v0.6.3-alpha state: risk register counts updated (23 active + 2 closed); SOC 2 / ISO 27001 honest-estimate readiness refreshed (42→55-60%, 38→50-55%) after governance lane landed; straight-answers section expanded with R-024/R-025/R-021; 90-day roadmap reordered with 2026-04-23 pairing session at the top. |
+| 1.1 | 2026-04-22 | Claude | Bumped to reflect v0.6.3-alpha state: risk register counts updated for that release; SOC 2 / ISO 27001 honest-estimate readiness refreshed after governance lane landed; straight-answers section expanded with R-024/R-025/R-021; 90-day roadmap reordered with 2026-04-23 pairing session at the top. |
 | 1.2 | 2026-04-25 | Project owner | Pre-merge sign-off pass; no body change. |
-| 1.3 | 2026-05-05 | Internal reviewer (audit pass) | Source-truth verification pass for current product state at v0.11.6-alpha (staging host LIVE on https://<qa-host>). Updates: Date 2026-04-25 → 2026-05-05; Product Version v0.10.0-alpha → v0.11.6-alpha; "163-rule pre/post scan" → 163 rules; "23 operator panels" → 25; "42-event audit catalog" → 58 (auth/passkey/github events added through v0.9.x); reference deployments hostname mapping corrected (local dev host = local dev, staging host = QA, test host = Mac dev-box reserve); `verify-pre-oss.sh` description corrected (13 reachability routes, not "11 checks"); governance-artifacts header updated to "live as of 2026-05-05; underlying policies signed off 2026-04-22"; 90-day roadmap rewritten for current state (OSS launch on github.com/operator, macOS install-path fix, alternate approver, tabletop, DR test, license audit, external pen test, Trust Audit discovery rewrite, v0.7.0 carryover); v0.6.3-alpha governance-lane reference clarified ("landed in v0.6.3-alpha and remains current at v0.11.6-alpha"); "safe-by-default authentication as of v0.6.3-alpha" expanded to "four providers shipped through v0.9.x (passkeys, GitHub OAuth, Magic Link, local password) plus 5-role RBAC". |
+| 1.3 | 2026-05-05 | Internal reviewer (audit pass) | Source-truth verification pass for the then-current QA staging state. Updated rule count, panel count, audit-event catalog count, reference deployment wording, release-verification script description, governance-artifacts header, roadmap, governance-lane note, and authentication/RBAC summary. |
 | 1.4 | 2026-05-13 | Internal reviewer | Docker install path removed for v1.0 OSS launch — ClawNex consolidated to Linux bare-metal + macOS only. R-016 (Docker smoke-test) and R-025 (Docker BUILD ARG) removed from the straight-answers list; corresponding R-numbers closed in `docs/registers/risk-register.md`. 90-day roadmap pruned. |
+| 1.5 | 2026-06-30 | Codex | Refreshed risk-register summary from `docs/registers/risk-register.md`: P0: 0 active, P1: 10 active, P2: 10 active, P3: 1 closed, Closed: 16. |

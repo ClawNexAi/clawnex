@@ -483,7 +483,7 @@ export function ActionQueue({ demoMode, range, onNavigate, operator }: Props) {
   ];
 
   return (
-    <div style={{
+    <div className="mc-panel-surface mc-action-queue" style={{
       background: C.glassChrome,
       backdropFilter: "blur(18px)",
       WebkitBackdropFilter: "blur(18px)",
@@ -1434,7 +1434,7 @@ function suggestedActionForFinding(f: TrustAuditFinding): SuggestedAction {
       return { verb: "Restrict capability", target: "recovery path",
                detail: "Tighten recovery path; require human approval to invoke." };
     case "prompt-capability-mismatch":
-      return { verb: "Update policy", target: "prompt allowlist",
+      return { verb: "Update policy", target: "prompt policy",
                detail: "Align allowed prompts with the agent's actual capabilities." };
     case "trust-drift":
       return { verb: "Review exposure", target: "trust drift",
@@ -1655,6 +1655,7 @@ function DemoActionQueueSkeleton({
 
   return (
     <div
+      className="mc-panel-surface mc-action-queue"
       style={{
         background: C.glassChrome,
         backdropFilter: "blur(18px)",

@@ -14,6 +14,7 @@ import { queryOne, queryAll } from "@/lib/db/index";
 import { activeAlertSqlClause, productionOriginSqlClause } from "@/lib/dashboard/metric-semantics";
 import { getLatestClawkeeperPosture } from "@/lib/services/posture-service";
 import { readOpenClawConfig as readOpenClawConfigHelper, resolveOpenClawPaths } from "@/lib/openclaw-paths";
+import { getOpenClawInstalledVersion } from "@/lib/openclaw-version";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -141,8 +142,9 @@ export async function GET(request: NextRequest) {
     }
   } catch {}
 
-  // OpenClaw version
-  const ocVersion = (ocConfig?.meta as { lastTouchedVersion?: string })?.lastTouchedVersion || "unknown";
+  // OpenClaw version — prefer the installed CLI/package over
+  // openclaw.json meta.lastTouchedVersion, which can lag after upgrades.
+  const ocVersion = getOpenClawInstalledVersion() || "unknown";
 
   // Calculate cost
   let totalCost = 0;

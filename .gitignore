@@ -34,6 +34,10 @@ yarn-error.log*
 # config from other workflows, not part of the ClawNex repo.
 /.gstack/
 
+# local analysis outputs
+/.codex-security/
+/graphify-out/
+
 # local env files
 .env*.local
 .env

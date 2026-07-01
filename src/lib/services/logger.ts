@@ -41,14 +41,23 @@ export interface LogEntry {
 // Configuration
 // ---------------------------------------------------------------------------
 
-/** Resolve the log file path relative to the project root. */
-function getLogPath(): string {
-  return path.resolve(process.cwd(), 'logs', 'clawnex.jsonl');
+function defaultLogsDir(): string {
+  const cwd = process.cwd();
+  if (path.basename(cwd) === 'standalone' && path.basename(path.dirname(cwd)) === '.next') {
+    return path.resolve(cwd, '..', '..', 'logs');
+  }
+  return path.resolve(cwd, 'logs');
+}
+
+/** Resolve the log file path relative to the project root or service log dir. */
+export function getStructuredLogPath(): string {
+  const configuredDir = process.env.CLAWNEX_LOG_DIR;
+  return path.resolve(configuredDir || defaultLogsDir(), 'clawnex.jsonl');
 }
 
 /** Resolve the logs directory, creating it if necessary. */
 function ensureLogsDir(): void {
-  const dir = path.resolve(process.cwd(), 'logs');
+  const dir = process.env.CLAWNEX_LOG_DIR ? path.resolve(process.env.CLAWNEX_LOG_DIR) : defaultLogsDir();
   if (!fs.existsSync(dir)) {
     try {
       fs.mkdirSync(dir, { recursive: true });
@@ -84,7 +93,7 @@ export function log(
   try {
     ensureLogsDir();
 
-    const filePath = getLogPath();
+    const filePath = getStructuredLogPath();
 
     // Rotate before writing if the file is over the size limit
     maybeRotate(filePath);

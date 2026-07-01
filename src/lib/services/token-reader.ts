@@ -74,6 +74,7 @@ export interface AgentAggregation {
     totalTokens: number;
     totalCost: number;
     messageCount: number;
+    costSource?: string;
   }>;
   totalTokens: number;
   totalCost: number;
@@ -99,6 +100,7 @@ export interface SessionAggregation {
     totalTokens: number;
     totalCost: number;
     messageCount: number;
+    costSource?: string;
   }>;
   totalTokens: number;
   totalCost: number;
@@ -305,7 +307,8 @@ export function readTokenUsage(since?: string, maxFiles = 500): TokenReaderResul
     .sort((a, b) => b.totalCost - a.totalCost || b.totalTokens - a.totalTokens);
 
   // ---- Aggregate by agent ----
-  const agentMap = new Map<string, AgentAggregation & { _sessions: Set<string> }>();
+  type AgentModelBucket = AgentAggregation['models'][string] & { _sourceSet: Set<string> };
+  const agentMap = new Map<string, Omit<AgentAggregation, 'models'> & { models: Record<string, AgentModelBucket>; _sessions: Set<string> }>();
   for (const e of entries) {
     let bucket = agentMap.get(e.agentId);
     if (!bucket) {
@@ -330,6 +333,7 @@ export function readTokenUsage(since?: string, maxFiles = 500): TokenReaderResul
         totalTokens: 0,
         totalCost: 0,
         messageCount: 0,
+        _sourceSet: new Set<string>(),
       };
       bucket.models[e.model] = mBucket;
     }
@@ -340,6 +344,7 @@ export function readTokenUsage(since?: string, maxFiles = 500): TokenReaderResul
     mBucket.totalTokens += e.totalTokens;
     mBucket.totalCost += e.cost;
     mBucket.messageCount += 1;
+    if (e.costSource) mBucket._sourceSet.add(e.costSource);
 
     bucket.totalTokens += e.totalTokens;
     bucket.totalCost += e.cost;
@@ -351,7 +356,8 @@ export function readTokenUsage(since?: string, maxFiles = 500): TokenReaderResul
       // Round cost fields for clean JSON.
       const models: AgentAggregation['models'] = {};
       for (const [m, v] of Object.entries(rest.models)) {
-        models[m] = { ...v, totalCost: round6(v.totalCost) };
+        const { _sourceSet, ...modelRest } = v;
+        models[m] = { ...modelRest, totalCost: round6(modelRest.totalCost), costSource: pickPrimarySource(_sourceSet) };
       }
       return {
         ...rest,
@@ -374,7 +380,8 @@ export function readTokenUsage(since?: string, maxFiles = 500): TokenReaderResul
   // cost into the first agent's bucket. Compounding with agentId enforces
   // the per-agent-dir uniqueness guarantee that exists at the filesystem
   // layer.
-  const sessionMap = new Map<string, SessionAggregation>();
+  type SessionModelBucket = SessionAggregation['models'][string] & { _sourceSet: Set<string> };
+  const sessionMap = new Map<string, Omit<SessionAggregation, 'models'> & { models: Record<string, SessionModelBucket> }>();
   for (const e of entries) {
     const sessionKey = `${e.agentId}:${e.sessionId}`;
     let bucket = sessionMap.get(sessionKey);
@@ -401,6 +408,7 @@ export function readTokenUsage(since?: string, maxFiles = 500): TokenReaderResul
         totalTokens: 0,
         totalCost: 0,
         messageCount: 0,
+        _sourceSet: new Set<string>(),
       };
       bucket.models[e.model] = mBucket;
     }
@@ -411,6 +419,7 @@ export function readTokenUsage(since?: string, maxFiles = 500): TokenReaderResul
     mBucket.totalTokens += e.totalTokens;
     mBucket.totalCost += e.cost;
     mBucket.messageCount += 1;
+    if (e.costSource) mBucket._sourceSet.add(e.costSource);
 
     bucket.totalTokens += e.totalTokens;
     bucket.totalCost += e.cost;
@@ -424,7 +433,8 @@ export function readTokenUsage(since?: string, maxFiles = 500): TokenReaderResul
     .map(s => {
       const models: SessionAggregation['models'] = {};
       for (const [m, v] of Object.entries(s.models)) {
-        models[m] = { ...v, totalCost: round6(v.totalCost) };
+        const { _sourceSet, ...modelRest } = v;
+        models[m] = { ...modelRest, totalCost: round6(modelRest.totalCost), costSource: pickPrimarySource(_sourceSet) };
       }
       return { ...s, models, totalCost: round6(s.totalCost) };
     })

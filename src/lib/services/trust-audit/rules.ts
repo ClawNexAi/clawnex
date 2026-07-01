@@ -588,53 +588,77 @@ const browserAuthReachability: AuditRule = {
       });
     }
 
-    // Check Clawkeeper host hardening
-    const latestScan = queryAll<{ check_name: string; status: string; category: string; detail: string }>(
-      `SELECT cr.check_name, cr.status, cr.category, cr.detail
+    // Check ClawNex Host Security posture from the latest non-fixture
+    // persisted scan. Dashboard traffic fixtures insert synthetic
+    // security_scans rows for UI testing; Trust Audit must not treat those as
+    // real host-hardening evidence.
+    const latestScan = queryAll<{
+      check_name: string;
+      status: string;
+      category: string;
+      severity: string | null;
+      detail: string;
+      scan_id: string;
+      scanned_at: string;
+    }>(
+      `SELECT cr.check_name, cr.status, cr.category, cr.severity, cr.detail, cr.scan_id, s.scanned_at
        FROM security_check_results cr
        JOIN security_scans s ON cr.scan_id = s.id
-       ORDER BY s.scanned_at DESC LIMIT 50`
+       WHERE cr.scan_id = (
+         SELECT id
+         FROM security_scans
+         WHERE scanner != 'dashboard-traffic-fixture'
+           AND COALESCE(json_extract(parsed_results, '$.simulation'), 0) != 1
+         ORDER BY scanned_at DESC
+         LIMIT 1
+       )
+       ORDER BY cr.category ASC, cr.check_name ASC`
     );
 
-    const failedHostChecks = latestScan.filter(c => c.status.toUpperCase() === 'FAIL' && c.category === 'Host Hardening');
-    const failedNetworkChecks = latestScan.filter(c => c.status.toUpperCase() === 'FAIL' && c.category === 'Network');
-
-    if (failedHostChecks.length > 0) {
+    if (latestScan.length === 0) {
       findings.push({
         id: findingId(),
         ruleId: this.id,
         severity: 'medium',
-        title: `${failedHostChecks.length} failed host hardening check(s)`,
-        capabilityPath: ['host-hardening'],
+        title: 'No ClawNex Host Security scan results found',
+        capabilityPath: ['host-security'],
         containmentState: 'unknown',
         assetHints: [],
-        whyItMatters: 'Failed host hardening checks from the bundled scanner indicate the underlying system is not fully secured. This widens the blast radius if an agent or the dashboard itself is compromised.',
-        blastRadius: 'Host-level vulnerabilities can be exploited to escalate from application-level compromise to system-level access.',
-        recommendedFix: 'Review failed checks in Security Posture panel and apply the recommended remediations.',
-        evidence: [
-          `security_check_results rows with status='fail' AND category='Host Hardening': ${failedHostChecks.length}`,
-          ...failedHostChecks.slice(0, 5).map(c => `FAIL: ${c.check_name} — ${c.detail?.slice(0, 80) || 'no detail'}`),
-        ],
-        // Derived from the latest persisted Clawkeeper scan rows.
-        confidence: 'verified_config',
+        whyItMatters: 'Without a current host-security scan, Trust Audit cannot prove the local runtime is hardened before granting agents access to tools, sessions, and files.',
+        blastRadius: 'Unknown host posture can hide configuration mistakes that widen the blast radius of an agent or dashboard compromise.',
+        recommendedFix: 'Run a Security Posture scan, then rerun Trust Audit.',
+        evidence: ['No rows found in security_check_results for the latest security_scans entry.'],
+        confidence: 'unknown',
       });
     }
 
-    if (failedNetworkChecks.length > 0) {
+    const failedChecks = latestScan.filter(c => c.status.toUpperCase() === 'FAIL');
+    const byCategory = new Map<string, typeof failedChecks>();
+    for (const check of failedChecks) {
+      const category = check.category || 'Uncategorized';
+      const existing = byCategory.get(category) ?? [];
+      existing.push(check);
+      byCategory.set(category, existing);
+    }
+
+    for (const [category, checks] of byCategory) {
+      const criticalOrHigh = checks.filter(c => ['CRITICAL', 'HIGH'].includes((c.severity || '').toUpperCase())).length;
+      const severity: Severity = checks.length >= 20 || criticalOrHigh > 0 ? 'high' : 'medium';
       findings.push({
         id: findingId(),
         ruleId: this.id,
-        severity: 'medium',
-        title: `${failedNetworkChecks.length} failed network security check(s)`,
-        capabilityPath: ['network-security'],
+        severity,
+        title: `${checks.length} failed ClawNex Host Security check(s) in ${category}`,
+        capabilityPath: ['host-security', category.toLowerCase().replace(/[^a-z0-9]+/g, '-')],
         containmentState: 'unknown',
         assetHints: [],
-        whyItMatters: 'Failed network checks indicate firewall, port exposure, or encryption issues that increase the attack surface for remote exploitation.',
-        blastRadius: 'Network-level exposure could allow external attackers to reach the dashboard or agent communication channels.',
-        recommendedFix: 'Review failed network checks in Security Posture and enable the host firewall at minimum.',
+        whyItMatters: 'Failed host-security checks indicate the underlying system is not fully secured. This widens the blast radius if an agent, tool surface, or dashboard session is compromised.',
+        blastRadius: 'Host-level weaknesses can turn application-level compromise into filesystem, network, credential, or process-level access depending on the failed checks.',
+        recommendedFix: 'Review the failed checks in Security Posture and apply the listed remediation guidance before accepting the Trust Audit risk.',
         evidence: [
-          `security_check_results rows with status='fail' AND category='Network': ${failedNetworkChecks.length}`,
-          ...failedNetworkChecks.slice(0, 5).map(c => `FAIL: ${c.check_name} — ${c.detail?.slice(0, 80) || 'no detail'}`),
+          `latest scan ${checks[0]?.scan_id || 'unknown'} at ${checks[0]?.scanned_at || 'unknown'}: ${checks.length} FAIL row(s) in category "${category}"`,
+          `critical/high checks in category: ${criticalOrHigh}`,
+          ...checks.slice(0, 8).map(c => `FAIL: ${c.check_name} [${c.severity || 'unknown'}] — ${c.detail?.slice(0, 100) || 'no detail'}`),
         ],
         confidence: 'verified_config',
       });

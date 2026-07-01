@@ -141,6 +141,14 @@ interface CorrelationsListResponse {
 // ---------------------------------------------------------------------------
 
 async function fetchThreatSummary(): Promise<ThreatScoreSummary> {
+  const res = await fetch("/api/correlations/evaluate", { method: "GET" });
+  if (!res.ok) {
+    throw new Error(`Threat summary failed: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<ThreatScoreSummary>;
+}
+
+async function evaluateThreatSummary(): Promise<ThreatScoreSummary> {
   const res = await fetch("/api/correlations/evaluate", { method: "POST" });
   if (!res.ok) {
     throw new Error(`Evaluate failed: HTTP ${res.status}`);
@@ -185,6 +193,8 @@ export function CorrelationsPanel({ filters, demoMode, onNavigate }: { filters: 
   const [expandedCorrs, setExpandedCorrs] = useState<Set<string>>(new Set());
   const [corrPageSize, setCorrPageSize] = useState(10);
   const [corrPage, setCorrPage] = useState(0);
+  const [manualEvaluating, setManualEvaluating] = useState(false);
+  const [manualEvaluateError, setManualEvaluateError] = useState<string | null>(null);
 
   // --- Summary (threat score) state ---
   // Note: the evaluate endpoint returns `evaluated_at`; we use that as the
@@ -212,13 +222,26 @@ export function CorrelationsPanel({ filters, demoMode, onNavigate }: { filters: 
   const lastEvalIso = summary?.evaluated_at ?? summaryQuery.lastUpdated?.toISOString() ?? null;
   const summaryStale = isStale(lastEvalIso, STALE_THRESHOLD_MS);
 
-  // Re-evaluate both summary + list. Summary is the expensive one; findings
-  // auto-refresh on their own interval but we also kick them here so the list
-  // reflects any new correlations the evaluation just persisted.
-  const reevaluateAll = useCallback(() => {
+  const refreshReadOnly = useCallback(() => {
     refreshSummary();
     refreshList();
   }, [refreshSummary, refreshList]);
+
+  // Explicit operator action: persist new correlation findings and then refresh
+  // the read-only summary/list. Passive polling must never POST because it
+  // creates correlation_events and alerts.
+  const reevaluateAll = useCallback(async () => {
+    setManualEvaluating(true);
+    setManualEvaluateError(null);
+    try {
+      await evaluateThreatSummary();
+      refreshReadOnly();
+    } catch (err) {
+      setManualEvaluateError(err instanceof Error ? err.message : "Evaluation failed");
+    } finally {
+      setManualEvaluating(false);
+    }
+  }, [refreshReadOnly]);
 
   // --- Custom rule count (gates the starter-templates empty-state card) ---
   // Separate from the evaluator's `total_rules` which includes built-ins.
@@ -362,7 +385,7 @@ export function CorrelationsPanel({ filters, demoMode, onNavigate }: { filters: 
           <PanelStateBar
             state={summaryStale && summaryState === "ready" ? "stale" : summaryState}
             lastUpdated={lastEvalIso}
-            onRefresh={reevaluateAll}
+            onRefresh={refreshReadOnly}
           />
         }
       >
@@ -388,7 +411,7 @@ export function CorrelationsPanel({ filters, demoMode, onNavigate }: { filters: 
                 value={level}
                 color={levelColor}
                 small
-                tooltip={`Severity band derived from score. Bands: CRITICAL ≥ 80, HIGH ≥ 60, MEDIUM ≥ 40, LOW ≥ 20, MINIMAL otherwise. Source: /api/correlations/evaluate.level.`}
+                tooltip={`Severity band derived from score. Bands: CRITICAL ≥ 76, HIGH ≥ 51, MEDIUM ≥ 26, LOW otherwise. Source: /api/correlations/evaluate.level.`}
               />
               <Stat
                 label="Triggered Rules"
@@ -472,6 +495,17 @@ export function CorrelationsPanel({ filters, demoMode, onNavigate }: { filters: 
                   {formatTimeAgo(lastEvalIso)}
                 </span>
               </span>
+              {manualEvaluateError && (
+                <span style={{
+                  display: "inline-flex", alignItems: "center", gap: 5,
+                  padding: "2px 8px", borderRadius: 4,
+                  background: `${C.danger}18`, border: `1px solid ${C.danger}44`,
+                  color: C.danger, fontSize: 10, fontWeight: 700,
+                  textTransform: "uppercase", letterSpacing: "0.06em",
+                }}>
+                  <Dot color={C.danger} size={6} /> {manualEvaluateError}
+                </span>
+              )}
               {summaryStale && (
                 <span style={{
                   display: "inline-flex", alignItems: "center", gap: 5,
@@ -490,18 +524,18 @@ export function CorrelationsPanel({ filters, demoMode, onNavigate }: { filters: 
             <Tooltip placement="left" variant="detail" content={<span>Recompute the threat score and re-fire every enabled correlation rule against the recent event window. Bypasses the 5-second cache. Previous result stays visible during the recompute so you don&apos;t lose your place. Logged to audit.</span>}>
               <button
                 onClick={reevaluateAll}
-                disabled={refreshing}
+                disabled={refreshing || manualEvaluating}
                 style={{
                   padding: "7px 16px", borderRadius: 10,
                   border: 0,
-                  background: refreshing ? `${C.brand}22` : `linear-gradient(135deg, ${C.cyan}, ${C.glassGreen})`,
-                  color: refreshing ? C.brand : "#06121f", fontSize: 11, fontWeight: 850, fontFamily: F.mono,
-                  cursor: refreshing ? "wait" : "pointer",
+                  background: (refreshing || manualEvaluating) ? `${C.brand}22` : `linear-gradient(135deg, ${C.cyan}, ${C.glassGreen})`,
+                  color: (refreshing || manualEvaluating) ? C.brand : "#06121f", fontSize: 11, fontWeight: 850, fontFamily: F.mono,
+                  cursor: (refreshing || manualEvaluating) ? "wait" : "pointer",
                   textTransform: "uppercase" as const, letterSpacing: "0.08em",
                   whiteSpace: "nowrap" as const,
                 }}
               >
-                {refreshing ? "Evaluating…" : "Re-evaluate Now"}
+                {(refreshing || manualEvaluating) ? "Evaluating…" : "Re-evaluate Now"}
               </button>
             </Tooltip>
           </div>

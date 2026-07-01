@@ -167,41 +167,6 @@ export function CountBadge({ count, color, pulse: shouldPulse }: { count: number
   );
 }
 
-/** Inline enterprise pill — small "ENT" badge for tab buttons and labels. */
-export function EnterprisePill() {
-  return (
-    <Tooltip placement="top" variant="detail" content={<span><strong>Enterprise feature</strong> — available in the paid ClawNex tier. The OSS edition shows the placeholder so you know what&apos;s on the roadmap; the actual surface ships with the commercial license.</span>}>
-      <span style={{
-        fontSize: 8, fontWeight: 700, color: C.purp, background: `${C.purp}18`,
-        border: `1px solid ${C.purp}44`, borderRadius: 3, padding: "1px 4px",
-        letterSpacing: "0.05em", marginLeft: 4, verticalAlign: "middle",
-      }}>ENT</span>
-    </Tooltip>
-  );
-}
-
-/** Enterprise feature card — block-level overlay for gated features. */
-export function EnterpriseCard({ feature, description }: { feature: string; description: string }) {
-  return (
-    <div style={{
-      padding: "24px 20px", borderRadius: 10, textAlign: "center",
-      background: `linear-gradient(135deg, ${C.srf}, ${C.bg})`,
-      border: `1px solid ${C.purp}33`, marginBottom: 12,
-    }}>
-      <div style={{
-        display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 12px",
-        background: `${C.purp}18`, border: `1px solid ${C.purp}44`, borderRadius: 20,
-        marginBottom: 10,
-      }}>
-        <span style={{ fontSize: 12 }}>{"\uD83D\uDD12"}</span>
-        <span style={{ fontSize: 11, fontWeight: 700, color: C.purp, fontFamily: F.mono, letterSpacing: "0.06em" }}>ENTERPRISE</span>
-      </div>
-      <div style={{ fontSize: 14, fontWeight: 700, color: C.tx, marginBottom: 6 }}>{feature}</div>
-      <div style={{ fontSize: 12, color: C.txT, lineHeight: 1.6, maxWidth: 420, margin: "0 auto" }}>{description}</div>
-    </div>
-  );
-}
-
 /** SLA countdown timer with severity-colored background. */
 export function SLATimer({ time, severity }: { time: string; severity: string }) {
   const color = severity === "CRITICAL" ? C.danger : severity === "HIGH" ? C.orange : C.warn;
@@ -271,6 +236,7 @@ export function Stat({ label, value, sub, color, small, tooltip }: { label: stri
   const isLight = isLightMode();
   return (
     <div
+      className="cn-stat-tile"
       title={tooltip}
       style={{
       position: "relative",
@@ -342,7 +308,7 @@ export function Card({ title, accent, children, actions, glow, dimGlow }: { titl
     : `inset 0 1px 0 rgba(255,255,255,0.04)`;
 
   return (
-    <div style={{
+    <div className="cn-card-surface" style={{
       ...G.card,
       position: "relative",
       overflow: "hidden",
@@ -438,7 +404,7 @@ export function CollapsibleCard({ title, accent, children, actions, glow, defaul
     : `inset 0 1px 0 rgba(255,255,255,0.04)`;
 
   return (
-    <div ref={ref} style={{
+    <div ref={ref} className="cn-collapsible-card" style={{
       ...G.card,
       position: "relative",
       overflow: "hidden",
@@ -545,7 +511,7 @@ export function CategorySection({
   const tint = accent || C.brd;
 
   return (
-    <div style={{ marginBottom: open ? 4 : 0 }}>
+    <div className="cn-category-section" style={{ marginBottom: open ? 4 : 0 }}>
       <div
         onClick={toggle}
         style={{
@@ -605,7 +571,7 @@ export function Table({ headers, rows }: { headers: React.ReactNode[]; rows: Rea
   const altBg = isLight ? "rgba(0,0,0,0.02)" : "rgba(16,29,52,0.25)";
 
   return (
-    <div style={{ overflowX: "auto" }}>
+    <div className="cn-table-wrap" style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
         <thead>
           <tr>

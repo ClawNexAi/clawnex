@@ -65,6 +65,7 @@ export interface DashboardFilters {
   selectedInstance: string;
   selectedClient: string;
   selectedSeverity: string;
+  productionOnly?: string;
 }
 
 // ---------------------------------------------------------------------------

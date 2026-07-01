@@ -661,7 +661,7 @@ function buildFixControlArtifact(
     previewFields.push({ label: "control", value: ruleKey, tone: "default" });
     previewFields.push({
       label: "suggested_action",
-      value: "Tune detection threshold or add allowlist entry",
+      value: "Tune detection threshold or add a policy exception",
       tone: "default",
     });
   } else {

@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/guard';
 import { requireLocalhost } from '@/lib/middleware/localhost-guard';
 import { queryAll, queryOne } from "@/lib/db/index";
+import { getOpenClawInstalledVersion } from "@/lib/openclaw-version";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,16 +55,10 @@ export async function GET(request: NextRequest) {
       "SELECT COUNT(*) as cnt FROM cve_records WHERE severity = 'HIGH'"
     );
 
-    // Check installed version against affected versions
-    let installedVersion = "unknown";
-    try {
-      const fs = require("node:fs");
-      const path = require("node:path");
-      const os = require("node:os");
-      const ocPath = path.join(os.homedir(), ".openclaw", "openclaw.json");
-      const ocConfig = JSON.parse(fs.readFileSync(ocPath, "utf-8"));
-      installedVersion = ocConfig?.meta?.lastTouchedVersion || "unknown";
-    } catch {}
+    // Check installed version against affected versions. Prefer the actual
+    // installed CLI/package because openclaw.json metadata can lag after an
+    // upgrade.
+    const installedVersion = getOpenClawInstalledVersion() || "unknown";
 
     return NextResponse.json({
       cves,

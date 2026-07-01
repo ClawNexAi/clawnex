@@ -65,7 +65,7 @@ http://127.0.0.1:5001
 
 ### 2.1a First-Run: The Welcome Wizard (RBAC Disabled)
 
-On a fresh install, **Fleet Command** opens directly into the **Welcome Wizard** — a guided 7-step checklist that gets you from zero to a fully-operational SOC. The wizard keeps reappearing on every browser refresh until every step is complete AND you click the **Get Started** button on the completion screen, so you can't accidentally click past it.
+On a fresh install, **Fleet Command** opens directly into the **Welcome Wizard** — a guided 7-step checklist that gets you from zero to a working ClawNex control layer. The wizard keeps reappearing on every browser refresh until every step is complete AND you click the **Get Started** button on the completion screen, so you can't accidentally click past it.
 
 | Step | What You Do | Where It Takes You |
 |------|-------------|--------------------|

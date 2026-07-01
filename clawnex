@@ -140,7 +140,7 @@ cmd_start() {
         dashboard_pid="$(_pid_on $DASHBOARD_PORT)"
     elif [ -f "$_standalone" ] && [ -d "$_standalone_static" ]; then
         mkdir -p "$INSTALL_DIR/logs"
-        PORT="$DASHBOARD_PORT" HOSTNAME="$BIND_HOST" \
+        PORT="$DASHBOARD_PORT" HOSTNAME="$BIND_HOST" CLAWNEX_LOG_DIR="$INSTALL_DIR/logs" \
             nohup node "$_standalone" \
             > "$INSTALL_DIR/logs/dashboard.log" 2>&1 &
         local _dpid=$!

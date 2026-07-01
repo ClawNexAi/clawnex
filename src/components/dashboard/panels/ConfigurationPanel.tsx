@@ -248,15 +248,6 @@ function BreakGlassDialog({ onClose, onActivated }: { onClose: () => void; onAct
           />
         </div>
 
-        {/* Two-Person Authorization — Enterprise */}
-        <div style={{ padding: "10px 12px", marginBottom: 12, borderRadius: 8, background: `${C.purp}08`, border: `1px solid ${C.purp}22`, display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 10 }}>{"\uD83D\uDD12"}</span>
-          <span style={{ fontSize: 11, color: C.txT }}>
-            <span style={{ fontWeight: 700, color: C.purp, fontSize: 8, background: `${C.purp}18`, border: `1px solid ${C.purp}44`, borderRadius: 3, padding: "1px 4px", letterSpacing: "0.05em", marginRight: 6 }}>ENTERPRISE</span>
-            Two-person authorization — require a second admin to approve break-glass activation.
-          </span>
-        </div>
-
         {error && <div style={{ fontSize: 12, color: C.danger, marginBottom: 12, fontFamily: F.mono }}>{error}</div>}
 
         {/* Buttons */}
@@ -300,7 +291,7 @@ function BreakGlassSection() {
           </div>
           <Tooltip placement="left" variant="detail" content={
             <span>
-              <strong style={{ color: C.danger }}>Turns the Prompt Shield off completely</strong> for a set time window. Every agent request during that window is allowed through unchecked, but each one is logged with a clear &quot;break-glass&quot; tag so you can review them after the fact in Audit &amp; Evidence. Use this <strong>only</strong> when a real incident needs immediate access — it requires two-person approval and a stated reason. The bypass auto-expires when the window ends, and an alert fires the moment it does.
+              <strong style={{ color: C.danger }}>Turns the Prompt Shield off completely</strong> for a set time window. Every agent request during that window is allowed through unchecked, but each one is logged with a clear &quot;break-glass&quot; tag so you can review them after the fact in Audit &amp; Evidence. Use this <strong>only</strong> when a real incident needs immediate access — it requires an operator confirmation and a stated reason. The bypass auto-expires when the window ends, and an alert fires the moment it does.
             </span>
           }>
             <button
@@ -3693,8 +3684,6 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   // 2026-05-01: "I never use Hermes, hide it."
   const [fcOpenClaw, setFcOpenClaw] = useStickyBoolean("clawnex_fc_openclaw", true);
   const [fcHermes, setFcHermes] = useStickyBoolean("clawnex_fc_hermes", true);
-  const [fcPaperclip, setFcPaperclip] = useStickyBoolean("clawnex_fc_paperclip", false);
-  const [fcNemoClaw, setFcNemoClaw] = useStickyBoolean("clawnex_fc_nemoclaw", false);
 
   // Operator management state (RBAC)
   const [rbacOperators, setRbacOperators] = useState<Array<{
@@ -4555,60 +4544,9 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
         </div>}
         </div>
 
-        {/* --- Paperclip --- */}
-        <div style={{ marginBottom: 20 }}>
-          <div onClick={() => setFcPaperclip(!fcPaperclip)} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: fcPaperclip ? 10 : 0, paddingBottom: 6, borderBottom: `1px solid ${C.glassBorderSubtle}`, cursor: "pointer" }}>
-            <span style={{ fontSize: 10, color: C.txT, display: "inline-block", transform: fcPaperclip ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>{"\u25B6"}</span>
-            <span style={{ fontSize: 13, fontWeight: 800, color: C.cyan, letterSpacing: "0.04em" }}>PAPERCLIP</span>
-            <span style={{ fontSize: 9, fontWeight: 700, color: C.cyan, background: `${C.cyan}18`, border: `1px solid ${C.cyan}44`, borderRadius: 3, padding: "2px 6px", letterSpacing: "0.06em" }}>COMING SOON</span>
-          </div>
-          {fcPaperclip && (
-          <div style={{ opacity: 0.4, pointerEvents: "none" }}>
-            <div style={{ fontSize: 12, color: C.txT, marginBottom: 8 }}>Agent orchestration platform — task delegation, governance workflows, and multi-agent coordination.</div>
-            <div style={{ padding: "12px", background: `${C.cyan}04`, borderRadius: 8, border: `1px dashed ${C.txT}33` }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                <div><div style={{ fontSize: 11, color: C.txT, marginBottom: 3 }}>NAME</div><input disabled placeholder="Production Paperclip" style={{ width: "100%", padding: "8px 10px", background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6, color: C.txT, fontFamily: F.mono, fontSize: 12, outline: "none", boxSizing: "border-box" as const, cursor: "not-allowed" }} /></div>
-                <div><div style={{ fontSize: 11, color: C.txT, marginBottom: 3 }}>API URL</div><input disabled placeholder="http://127.0.0.1:3100" style={{ width: "100%", padding: "8px 10px", background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6, color: C.txT, fontFamily: F.mono, fontSize: 12, outline: "none", boxSizing: "border-box" as const, cursor: "not-allowed" }} /></div>
-              </div>
-              <button disabled style={{ padding: "8px 16px", width: "100%", borderRadius: 6, border: "none", fontSize: 12, fontWeight: 700, background: C.glassSurfTrans, color: C.txT, cursor: "not-allowed" }}>+ Add Paperclip Instance</button>
-            </div>
-          </div>
-          )}
-        </div>
-
-        {/* --- NemoClaw --- */}
-        <div>
-          <div onClick={() => setFcNemoClaw(!fcNemoClaw)} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: fcNemoClaw ? 10 : 0, paddingBottom: 6, borderBottom: `1px solid ${C.glassBorderSubtle}`, cursor: "pointer" }}>
-            <span style={{ fontSize: 10, color: C.txT, display: "inline-block", transform: fcNemoClaw ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>{"\u25B6"}</span>
-            <span style={{ fontSize: 13, fontWeight: 800, color: C.txT, letterSpacing: "0.04em" }}>NEMOCLAW</span>
-            <span style={{ fontSize: 9, fontWeight: 700, color: C.cyan, background: `${C.cyan}18`, border: `1px solid ${C.cyan}44`, borderRadius: 3, padding: "2px 6px", letterSpacing: "0.06em" }}>COMING SOON</span>
-          </div>
-          {fcNemoClaw && (
-          <div>
-            {/* Honest "what's planned" preamble — visible (not greyed) so the
-                operator knows this surface is roadmap, not vapor. NemoClaw =
-                NVIDIA NeMo Agent fleet integration; the connector adapter
-                already returns honest not_integrated placeholders for the
-                trust-audit / permissiveness layers (see
-                src/lib/services/permissiveness/index.ts buildNotIntegrated).
-                The Configuration card stays disabled until the live adapter
-                ships. */}
-            <div style={{ padding: "10px 12px", background: `${C.cyan}08`, border: `1px solid ${C.cyan}33`, borderRadius: 6, marginBottom: 10, fontSize: 12, color: C.tx, lineHeight: 1.5 }}>
-              <div style={{ fontWeight: 700, color: C.cyan, marginBottom: 4 }}>NVIDIA NeMo Agent fleet — coming soon</div>
-              Track NeMo agent deployments alongside OpenClaw, Hermes, and Paperclip — unified LiteLLM routing, shield scanning across the whole fleet, and trust-audit coverage. The connector adapter is roadmapped; this card stays disabled until that lands so we never claim coverage we don&rsquo;t have.
-            </div>
-            <div style={{ opacity: 0.4, pointerEvents: "none" }}>
-              <div style={{ fontSize: 12, color: C.txT, marginBottom: 8 }}>Preview of the Add-Instance form (disabled until the connector ships):</div>
-              <div style={{ padding: "12px", background: `${C.txT}04`, borderRadius: 8, border: `1px dashed ${C.txT}33` }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                  <div><div style={{ fontSize: 11, color: C.txT, marginBottom: 3 }}>NAME</div><input disabled placeholder="NeMo Production" style={{ width: "100%", padding: "8px 10px", background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6, color: C.txT, fontFamily: F.mono, fontSize: 12, outline: "none", boxSizing: "border-box" as const, cursor: "not-allowed" }} /></div>
-                  <div><div style={{ fontSize: 11, color: C.txT, marginBottom: 3 }}>GATEWAY URL</div><input disabled placeholder="http://nemo-host:8000" style={{ width: "100%", padding: "8px 10px", background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6, color: C.txT, fontFamily: F.mono, fontSize: 12, outline: "none", boxSizing: "border-box" as const, cursor: "not-allowed" }} /></div>
-                </div>
-                <button disabled style={{ padding: "8px 16px", width: "100%", borderRadius: 6, border: "none", fontSize: 12, fontWeight: 700, background: C.glassSurfTrans, color: C.txT, cursor: "not-allowed" }}>+ Add NemoClaw Instance (coming soon)</button>
-              </div>
-            </div>
-          </div>
-          )}
+        <div style={{ fontSize: 12, color: C.txT, lineHeight: 1.5 }}>
+          Additional fleet connectors are managed through released integrations only.
+          ClawNex does not show disabled connector cards until an adapter is available.
         </div>
       </CollapsibleCard>
   );
@@ -4819,10 +4757,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
                 })()}
               </div>
               <div>
-                <div style={{ fontSize: 11, color: C.txT, marginBottom: 3, display: "flex", alignItems: "center", gap: 6 }}>
-                  ROLE
-                  <span style={{ fontSize: 8, fontWeight: 700, color: C.purp, background: `${C.purp}18`, border: `1px solid ${C.purp}44`, borderRadius: 3, padding: "1px 4px", letterSpacing: "0.05em", cursor: "default" }} title="Custom roles available in ClawNex Enterprise">CUSTOM ROLES — ENT</span>
-                </div>
+                <div style={{ fontSize: 11, color: C.txT, marginBottom: 3, display: "flex", alignItems: "center", gap: 6 }}>ROLE</div>
                 <select value={newOperatorRole} onChange={e => setNewOperatorRole(e.target.value)}
                   style={{ width: "100%", padding: "8px 10px", background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6, color: C.tx, fontFamily: F.mono, fontSize: 13, outline: "none", boxSizing: "border-box" as const }}>
                   <option value="admin">Admin</option>
@@ -4899,13 +4834,6 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
             </div>
             <div style={{ fontSize: 10, color: C.txT, marginTop: 4 }}>
               How long an operator stays logged in before needing to re-authenticate. Range: 1–720 hours (30 days). Takes effect on next login.
-            </div>
-
-            {/* Session IP Binding — Enterprise */}
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.glassBorderSubtle}`, display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 12, color: C.txT, minWidth: 120, opacity: 0.5 }}>IP binding:</span>
-              <span style={{ fontSize: 12, color: C.txT, opacity: 0.5 }}>Lock sessions to originating IP</span>
-              <span style={{ fontSize: 8, fontWeight: 700, color: C.purp, background: `${C.purp}18`, border: `1px solid ${C.purp}44`, borderRadius: 3, padding: "1px 4px", letterSpacing: "0.05em" }}>ENTERPRISE</span>
             </div>
           </div>
         </CollapsibleCard>

@@ -99,7 +99,6 @@ export async function scan(opts: ScanOpts = {}): Promise<PermissivenessReport> {
 
   // Honest placeholders.
   const webhook = buildNotIntegrated("webhook", "Webhook");
-  const nemoclaw = buildNotIntegrated("nemoclaw", "NemoClaw");
 
   const surfaces: Surface[] = [
     discord,
@@ -107,7 +106,6 @@ export async function scan(opts: ScanOpts = {}): Promise<PermissivenessReport> {
     slack,
     ...runtimeSurfaces,
     webhook,
-    nemoclaw,
   ];
 
   // Populate reachability edges per comm surface (Hermes profile posture + OpenClaw bindings).
@@ -693,7 +691,6 @@ function buildSurfaceRanking(surfaces: Surface[]): RankedSurface[] {
       blastRadius: s.effectiveBlastRadius,
       drillLinks: [
         { label: "Tools & Access", tabId: "toolsAccess" },
-        { label: "Access Lists", tabId: "accessLists" },
         { label: "Agents", tabId: "agents" },
         { label: "Routing", tabId: "routing" },
       ],

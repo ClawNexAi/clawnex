@@ -14,8 +14,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/guard';
 import fs from "node:fs";
-import path from "node:path";
 import { requireLocalhost } from "@/lib/middleware/localhost-guard";
+import { getStructuredLogPath } from "@/lib/services/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
     const levelFilter = (searchParams.get("level") || "").toUpperCase();
     const sourceFilter = (searchParams.get("source") || "").toLowerCase();
 
-    const logFile = path.resolve(process.cwd(), "logs", "clawnex.jsonl");
+    const logFile = getStructuredLogPath();
 
     // Read more lines than requested so we have enough after filtering
     const readCount = levelFilter || sourceFilter ? requestedLines * 5 : requestedLines;

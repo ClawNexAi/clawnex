@@ -265,6 +265,7 @@ export function DetectionTrend({ demoMode, range, onNavigate }: Props) {
 
   return (
     <div
+      className="mc-panel-surface mc-detection-trend"
       onClick={() => onNavigate("trafficMonitor", { fromMissionControl: true })}
       role="button"
       tabIndex={0}

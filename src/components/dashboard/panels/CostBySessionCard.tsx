@@ -60,6 +60,9 @@ interface SessionRow {
   firstSeen?: string;
   lastSeen?: string;
   source: 'session' | 'proxy' | 'mixed';
+  costStatus?: 'known' | 'unknown' | 'invalid' | 'mixed';
+  invalidCostRows?: number;
+  unpricedRows?: number;
 }
 
 // Local shape extending the legacy fetch payload with v1 NormalizedRow rows.
@@ -87,6 +90,22 @@ function shortSession(id: string): string {
   if (!id) return "—";
   if (id.length <= 12) return id;
   return `${id.slice(0, 8)}…${id.slice(-4)}`;
+}
+
+function CostQualityBadge({ status, unknownRows }: { status?: string; unknownRows?: number }) {
+  if (status === 'invalid') return <Badge label="INVALID COST" color={C.danger} />;
+  if (status === 'mixed') return <Badge label="MIXED COST" color={C.warn} />;
+  if (status === 'unknown' || (unknownRows || 0) > 0) return <Badge label="COST UNKNOWN" color={C.txT} />;
+  return null;
+}
+
+function normalizedRowCostQuality(row: NormalizedRow, display: number | null): 'known' | 'unknown' | 'invalid' {
+  if (row.row_flags.includes('invalid_cost')) return 'invalid';
+  const costValues = [row.actual_cost_usd, row.estimated_cost_usd, row.recomputed_cost_usd];
+  if (costValues.some((value) => typeof value === 'number' && (!Number.isFinite(value) || value < 0))) {
+    return 'invalid';
+  }
+  return display === null ? 'unknown' : 'known';
 }
 
 export function CostBySessionCard({ globalFilters, demoMode, hideDeliveryMirror = false }: { globalFilters: DashboardFilters; demoMode?: boolean; hideDeliveryMirror?: boolean }) {
@@ -144,6 +163,8 @@ export function CostBySessionCard({ globalFilters, demoMode, hideDeliveryMirror 
       count: number;
       totalUsd: number;
       tokens: number;
+      unknownCostRows: number;
+      invalidCostRows: number;
       firstSeen: string;
       lastSeen: string;
     }>();
@@ -164,6 +185,8 @@ export function CostBySessionCard({ globalFilters, demoMode, hideDeliveryMirror 
           count: 0,
           totalUsd: 0,
           tokens: 0,
+          unknownCostRows: 0,
+          invalidCostRows: 0,
           firstSeen: row.timestamp,
           lastSeen: row.timestamp,
         });
@@ -173,6 +196,9 @@ export function CostBySessionCard({ globalFilters, demoMode, hideDeliveryMirror 
       // display_cost_usd returns null for token_only / unknown / unsupported_currency
       // — those rows count toward the call count but not the cost total.
       if (display !== null) cur.totalUsd += display;
+      const quality = normalizedRowCostQuality(row, display);
+      if (quality === 'invalid') cur.invalidCostRows++;
+      else if (quality === 'unknown') cur.unknownCostRows++;
       cur.tokens += (row.input_tokens ?? 0) + (row.output_tokens ?? 0);
       if (row.timestamp < cur.firstSeen) cur.firstSeen = row.timestamp;
       if (row.timestamp > cur.lastSeen) cur.lastSeen = row.timestamp;
@@ -243,6 +269,11 @@ export function CostBySessionCard({ globalFilters, demoMode, hideDeliveryMirror 
               <span style={{ fontSize: 11, color: C.txT, fontFamily: F.mono, textAlign: "right" }}>{entry.count}</span>
               <span style={{ fontSize: 11, fontWeight: 700, color: C.brand, fontFamily: F.mono, textAlign: "right" }}>{entry.tokens.toLocaleString()}</span>
               <span style={{ fontSize: 12, fontWeight: 800, color: C.warn, fontFamily: F.mono, textAlign: "right" }}>${entry.totalUsd.toFixed(4)}</span>
+              {(entry.invalidCostRows > 0 || entry.unknownCostRows > 0) && (
+                <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", marginTop: -2, marginBottom: 2 }}>
+                  <CostQualityBadge status={entry.invalidCostRows > 0 ? "invalid" : "unknown"} unknownRows={entry.unknownCostRows} />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -283,6 +314,8 @@ export function CostBySessionCard({ globalFilters, demoMode, hideDeliveryMirror 
       totalTokens: rows.reduce((s, r) => s + r.totalTokens, 0),
       totalRequests: rows.reduce((s, r) => s + r.requests, 0),
       agent: rows[0]?.agent || "unknown",
+      costStatus: rows.some(r => r.costStatus === 'invalid') ? 'invalid' : rows.some(r => r.costStatus === 'mixed') ? 'mixed' : rows.some(r => r.costStatus === 'unknown') ? 'unknown' : 'known',
+      unpricedRows: rows.reduce((s, r) => s + (r.unpricedRows || 0), 0),
       isUnknown: (rows[0]?.agent || "unknown") === "unknown",
       firstSeen: rows.map(r => r.firstSeen).filter(Boolean).sort()[0],
       lastSeen: rows.map(r => r.lastSeen).filter(Boolean).sort().slice(-1)[0],
@@ -363,6 +396,7 @@ export function CostBySessionCard({ globalFilters, demoMode, hideDeliveryMirror 
             <span style={{ flex: 1 }} />
             <span style={{ fontSize: 11, color: C.txT, fontFamily: F.mono }}>{s.totalRequests} reqs</span>
             <span style={{ fontSize: 11, fontWeight: 700, color: C.brand, fontFamily: F.mono }}>{s.totalTokens.toLocaleString()} tokens</span>
+            <CostQualityBadge status={s.costStatus} unknownRows={s.unpricedRows} />
             <span style={{ fontSize: 12, fontWeight: 800, color: C.warn, fontFamily: F.mono }}>${s.totalCost.toFixed(4)}</span>
           </div>
           {s.rows.map(m => (
@@ -370,6 +404,7 @@ export function CostBySessionCard({ globalFilters, demoMode, hideDeliveryMirror 
               <span style={{ fontSize: 11, fontFamily: F.mono, color: C.txS, flex: 1 }}>{m.model}</span>
               <span style={{ fontSize: 10, color: C.txT, fontFamily: F.mono }}>{m.requests} reqs</span>
               <span style={{ fontSize: 10, color: C.txS, fontFamily: F.mono }}>{m.totalTokens.toLocaleString()}</span>
+              <CostQualityBadge status={m.costStatus} unknownRows={m.unpricedRows} />
               <span style={{ fontSize: 10, fontWeight: 700, color: C.warn, fontFamily: F.mono }}>${m.cost.toFixed(4)}</span>
             </div>
           ))}

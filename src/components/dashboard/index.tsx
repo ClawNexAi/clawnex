@@ -421,8 +421,8 @@ function SentinelDashboardInner() {
   const since = useMemo(() => getTimeSince(timeRange), [timeRange]);
 
   const dashboardFilters: DashboardFilters = useMemo(() => ({
-    timeRange, since, selectedInstance, selectedClient, selectedSeverity,
-  }), [timeRange, since, selectedInstance, selectedClient, selectedSeverity]);
+    timeRange, since, selectedInstance, selectedClient, selectedSeverity, productionOnly: urlState.productionOnly,
+  }), [timeRange, since, selectedInstance, selectedClient, selectedSeverity, urlState.productionOnly]);
 
   // --- Gateway instances for instance dropdown ---
   const [gatewayInstances, setGatewayInstances] = useState<Array<{ id: string; name: string; status: string; clientName: string }>>([]);
