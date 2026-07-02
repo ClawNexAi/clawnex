@@ -4,7 +4,7 @@
 **Version:** 1.9
 **Classification:** For Distribution
 **Last Updated:** 2026-05-14
-**Product Version:** v0.15.2-alpha
+**Product Version:** v0.15.5-alpha
 **Status:** Living Document
 
 ---
@@ -177,7 +177,7 @@ Open `http://YOUR_VPS_IP:5001` in your browser. Fleet Command opens directly int
 2. **Add an AI model provider** — click Open Configuration; the Model Providers card auto-expands
 3. **Enable Host Security** — click **Verify Now** right inside the wizard (or use Open Updates panel for the manual path)
 4. **Sync CVE database** — click **Sync Now** to pull the feed in place
-5. **Configure OpenClaw routing** — click Open Configuration; the OpenClaw Routing card auto-expands. If `openclaw.json` has zero LLM providers registered yet, you'll see a blue info box explaining that — register a provider in OpenClaw first.
+5. **Configure OpenClaw routing** — click Open Configuration; the OpenClaw Routing card auto-expands. If `openclaw.json` has zero LLM providers registered yet, you'll see a blue info box explaining that — register a provider in OpenClaw first. Hermes routing is configured separately from Configuration → Hermes Routing when Hermes custom providers are present.
 6. **Run first shield test** — click Open Shield Tests; run the suite to verify the 163 built-in detections are firing (plus any operator-authored custom rules you've added through the starter Shield/DLP policy framework).
 
 When every step is green, the wizard switches to a **Setup Complete** screen with a green **Get Started →** button. Click it to dismiss the wizard permanently — your dismissal is persisted in `config_defaults.wizard_dismissed`, so Fleet Command will load straight into the fleet table on every subsequent visit.
@@ -348,6 +348,7 @@ The installer detects the existing installation, archives the database, and upgr
 | LiteLLM still fails after restart | Verify `litellm/config.yaml` has a valid `model_list` (the Restart endpoint syncs providers from the DB to YAML before starting). Make sure at least one provider is configured in Configuration → Model Providers. |
 | OpenClaw Routing panel shows a blue info box | Not an error — `openclaw.json` was read successfully but has zero LLM providers registered. Register a provider in OpenClaw first, then reload the panel. |
 | OpenClaw Routing shows amber warning | `openclaw.json` couldn't be read. Verify the file exists (default `~/.openclaw/openclaw.json`) or set `OPENCLAW_HOME=/path/to/.openclaw` in `~/sentinel/.env`. |
+| Hermes Routing shows only read-only rows | Not an error — ClawNex can route writable Hermes `custom_providers`; OAuth/session-bound and watcher-only rows are retrospective inventory and cannot be rewritten safely. |
 | Welcome Wizard reappears after refresh | Intentional — the wizard stays visible until all 6 steps are complete AND you click **Get Started →** on the Setup Complete screen. Your dismissal is persisted in `config_defaults.wizard_dismissed`. |
 | Fleet Command shows wrong client name | Set Configuration → UI Preferences → Display Name. Leaving it blank reverts to `os.hostname()`. |
 | Build fails | Run `cd ~/sentinel && rm -rf .next && ./node_modules/.bin/next build` manually |

@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { PanelFilters } from "../PanelFilters";
 import { useHashState } from "../url-state";
 import { C, F } from '../constants';
-import { Badge, Card, CollapsibleCard, EmptyState, Fresh, LoadingSpinner, Table } from '../shared';
+import { Badge, BadgeLegend, Card, CollapsibleCard, EmptyState, Fresh, LoadingSpinner, Table } from '../shared';
 import type { ModelData, DashboardFilters } from '../types';
 import { MODELS } from '../mock-data';
 
@@ -62,6 +62,15 @@ function ProviderModelsCard({ provider, models }: { provider: string; models: Mo
 
   return (
     <CollapsibleCard title={provider} accent={C.cyan} count={models.length} defaultOpen={false}>
+      <BadgeLegend
+        title="Model labels"
+        items={[
+          { label: "SOURCE", color: C.purp, description: "Inventory source that reported the model." },
+          { label: "ROUTING", color: C.cyan, description: "How traffic reaches the model: local runtime or cloud provider route." },
+          { label: "YES", color: C.brand, description: "Model reports support for the capability in this column." },
+        ]}
+        style={{ marginBottom: 10 }}
+      />
       <Table
         headers={["Model", "Source", "Routing", "Context", "Reasoning"]}
         rows={pagedModels.map(m => [
@@ -224,6 +233,14 @@ export function ModelsCostPanel({ demoMode, filters }: { demoMode: boolean; filt
             onChange={(patch) => updateUrl(patch)}
             resultCount={filtered.length}
             totalCount={configModels.length}
+          />
+          <BadgeLegend
+            title="Model labels"
+            items={[
+              { label: "TYPE", color: C.purp, description: "Provider adapter family used by LiteLLM and ClawNex routing." },
+              { label: "YES", color: C.brand, description: "Model advertises support for the capability in this column." },
+            ]}
+            style={{ marginBottom: 10 }}
           />
           <Table
             headers={["Model ID", "Name", "Provider", "Type", "Context", "Reasoning"]}

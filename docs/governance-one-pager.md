@@ -3,7 +3,7 @@
 **Document ID:** CLAWNEX-GOV-001
 **Version:** 1.5
 **Date:** 2026-06-30
-**Product Version:** v0.15.2-alpha
+**Product Version:** v0.15.5-alpha
 **Owner & Maintainer:** Project owner
 **Audience:** Leadership, VC, prospective enterprise pilots, security questionnaires
 
@@ -15,7 +15,7 @@ Public repository: `https://github.com/ClawNexAi/clawnex`.
 
 ## Stage
 
-Alpha. Single-maintainer open-source project released under Apache 2.0. **Not yet pilot-ready for regulated enterprise data.** Reference deployments are local dev host (local dev), QA host (VPS provider QA, currently LIVE at https://qa.clawnexai.com running v0.15.2-alpha), and test host (Mac dev-box reserve).
+Alpha. Single-maintainer open-source project released under Apache 2.0. **Not yet pilot-ready for regulated enterprise data.** Reference deployments are local dev host (local dev), QA host (VPS provider QA, currently LIVE at https://qa.clawnexai.com running v0.15.5-alpha), and test host (Mac dev-box reserve).
 
 ## Security posture (as of 2026-04-22)
 
@@ -49,7 +49,7 @@ Policies are signed off by Owner & Maintainer pending a named alternate approver
 | ISO 27001:2022 | ~50-55% (honest-estimate) | Full DPA set, audit trail longevity, external validation |
 | NIST CSF 2.0 | Tier 2 today | Tier 3 requires formal risk integration + measurable outcomes |
 
-These numbers come from the 2026-04-22 security audit's control-mapping section. The governance lane landed in v0.6.3-alpha (14 approved policies, 2 live registers, 4 templates, in-dashboard Governance panel) and remains current at v0.15.2-alpha. Numbers are honest-estimate only; no external audit has been performed.
+These numbers come from the 2026-04-22 security audit's control-mapping section. The governance lane landed in v0.6.3-alpha (14 approved policies, 2 live registers, 4 templates, in-dashboard Governance panel) and remains current at v0.15.5-alpha. Numbers are honest-estimate only; no external audit has been performed.
 
 ## What a prospective enterprise user should know — straight answers
 

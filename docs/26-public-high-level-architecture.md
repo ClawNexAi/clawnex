@@ -3,7 +3,7 @@
 **Document ID:** CLAWNEX-PUB-HLD-001
 **Version:** 1.0
 **Classification:** Public
-**Product Version:** v0.15.2-alpha
+**Product Version:** v0.15.5-alpha
 **Status:** Public Reference
 
 ---

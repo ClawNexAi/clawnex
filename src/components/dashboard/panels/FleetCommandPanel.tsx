@@ -1005,15 +1005,15 @@ function WelcomeWizard({ onNavigate, onReload, allComplete, onAllCompleteChange 
     {
       key: "routing",
       label: "Configure OpenClaw routing",
-      description: routingMessage ?? "Wire OpenClaw to route LLM traffic through the ClawNex LiteLLM proxy at 127.0.0.1:4001/v1 so the Prompt Shield can scan every request in real time. ClawNex tracks ownership in a sidecar so this can be cleanly reverted later. After wiring, the openclaw-gateway daemon is restarted automatically so the new routing takes effect immediately. OAuth-only providers (Claude.ai, ChatGPT Pro, Gemini) can't be proxied -- skip this step if your fleet is OAuth-only.",
+      description: routingMessage ?? "Open the OpenClaw Routing card and choose exactly which OpenClaw providers/models should route through the ClawNex LiteLLM proxy at 127.0.0.1:4001/v1. Hermes has a separate Hermes Routing card for writable custom providers.",
       realDone: routingConfigured,
       isSkipped: skipped.routing,
       skippable: true,
       action: {
-        label: wiringRouting ? "Wiring + Restarting..." : (routingConfigured ? "Open Configuration" : "Wire LiteLLM"),
-        run: routingConfigured ? () => onNavigate("configuration", "openclawRouting") : wireRoutingFromWizard,
+        label: wiringRouting ? "Opening..." : (routingConfigured ? "Open Configuration" : "Choose Routing"),
+        run: () => onNavigate("configuration", "openclawRouting"),
       },
-      secondary: routingConfigured ? undefined : { label: "Open Configuration", run: () => onNavigate("configuration", "openclawRouting") },
+      secondary: routingConfigured ? undefined : { label: "Legacy Wire", run: wireRoutingFromWizard },
     },
     {
       key: "shield",

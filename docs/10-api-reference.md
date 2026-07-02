@@ -1623,7 +1623,103 @@ Dashboard chat endpoint used by the in-app assistant. Same message-shape contrac
 
 ---
 
-## 14A. OpenClaw Routing Endpoints (v0.9.3+)
+## 14A. Connector Routing Inventory Endpoints (v0.15.3+)
+
+These endpoints discover connector provider/model inventory, persist operator
+route intent, detect added/removed routes, and apply selected OpenClaw or
+Hermes custom-provider routing.
+
+OpenClaw routing is enforceable at provider endpoint level. This means OpenClaw
+routes by provider `baseUrl`, not by independent per-model switches. Selecting a
+model records operator intent for that model, but applying the route updates the
+model's provider endpoint; sibling models on the same provider follow the same
+route.
+
+Hermes routing uses the same provider-level model for writable
+`custom_providers` in `~/.hermes/config.yaml`. Applying Hermes routing updates
+the selected custom provider's `base_url` to the local LiteLLM proxy and sets
+`key_env: LITELLM_MASTER_KEY`. OAuth/session-bound and watcher-only Hermes rows
+remain read-only retrospective inventory.
+
+### GET /api/connector-routing
+
+Sync and return connector routing inventory.
+
+**Response (200):**
+```json
+{
+  "litellmTarget": "http://127.0.0.1:4001/v1",
+  "driftTotal": 1,
+  "openclaw": {
+    "status": "ok",
+    "selected": 2,
+    "drift": { "new": 1, "removed": 0, "changed": 0, "total": 1 },
+    "items": [
+      {
+        "connector": "openclaw",
+        "itemType": "model",
+        "providerId": "openrouter",
+        "modelId": "openrouter/auto",
+        "capability": "model-inventory",
+        "currentRoute": "direct",
+        "desiredRoute": "routed",
+        "present": true
+      }
+    ]
+  },
+  "hermes": {
+    "status": "ok",
+    "selected": 1,
+    "items": [
+      {
+        "connector": "hermes",
+        "itemType": "provider",
+        "providerId": "kimi",
+        "capability": "provider-routing",
+        "currentRoute": "direct",
+        "desiredRoute": "routed",
+        "present": true
+      }
+    ]
+  }
+}
+```
+
+### POST /api/connector-routing
+
+**Actions:**
+
+```json
+{ "action": "sync" }
+{ "action": "select", "connector": "openclaw", "itemIds": ["cri_..."], "desiredRoute": "routed" }
+{ "action": "select", "connector": "hermes", "itemIds": ["cri_..."], "desiredRoute": "routed" }
+{ "action": "select-all", "connector": "openclaw", "desiredRoute": "direct" }
+{ "action": "apply-openclaw" }
+{ "action": "apply-hermes" }
+{ "action": "revert-hermes" }
+```
+
+Hermes rejects `"desiredRoute": "routed"` for watcher-only, OAuth/session-bound,
+or otherwise unsupported rows. Only config-backed custom providers with
+HTTP-compatible endpoints are writable.
+
+### GET /api/hermes/gateway/restart
+
+Detect the Hermes gateway supervisor ClawNex would use for restart without
+restarting anything. Supported targets are scoped to known Hermes supervisors:
+`ai.hermes.gateway` / `ai.hermes.gateway-*` on macOS launchd and known Hermes
+user units on Linux systemd.
+
+### POST /api/hermes/gateway/restart
+
+Restart the detected Hermes gateway supervisor so Hermes reloads provider
+configuration after **Save Hermes Wire** or **Revert Hermes Wire**. RBAC
+`config:write` is required when RBAC is enabled; localhost fallback applies
+when RBAC is off.
+
+---
+
+## 14B. Legacy OpenClaw Routing Endpoints (v0.9.3+)
 
 These endpoints manage the bridge between OpenClaw and the LiteLLM proxy.
 Wiring writes a `models.providers.litellm` entry into `~/.openclaw/openclaw.json`

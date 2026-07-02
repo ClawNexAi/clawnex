@@ -256,6 +256,32 @@ CREATE TABLE IF NOT EXISTS hermes_events (
   UNIQUE(source_id, message_id)
 );
 
+-- Connector routing inventory and operator intent.
+-- Tracks provider/model items discovered from OpenClaw and Hermes so ClawNex
+-- can show what is routed, what is direct, what the operator selected, and
+-- what changed since the previous scan. Secrets are never stored here.
+CREATE TABLE IF NOT EXISTS connector_routing_items (
+  id TEXT PRIMARY KEY,
+  connector TEXT NOT NULL,
+  source_id TEXT NOT NULL DEFAULT '',
+  item_type TEXT NOT NULL CHECK(item_type IN ('provider','model')),
+  provider_id TEXT NOT NULL DEFAULT '',
+  model_id TEXT NOT NULL DEFAULT '',
+  display_name TEXT NOT NULL,
+  base_url TEXT,
+  capability TEXT NOT NULL CHECK(capability IN ('provider-routing','model-inventory','read-only','unsupported')),
+  current_route TEXT NOT NULL CHECK(current_route IN ('routed','direct','unknown','unsupported')),
+  desired_route TEXT NOT NULL DEFAULT 'direct' CHECK(desired_route IN ('routed','direct')),
+  present INTEGER NOT NULL DEFAULT 1 CHECK(present IN (0,1)),
+  fingerprint TEXT NOT NULL,
+  metadata TEXT NOT NULL DEFAULT '{}',
+  first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_changed_at TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(connector, source_id, item_type, provider_id, model_id)
+);
+
 -- Default settings
 CREATE TABLE IF NOT EXISTS config_defaults (
   key TEXT PRIMARY KEY,
@@ -294,6 +320,8 @@ CREATE INDEX IF NOT EXISTS idx_config_models_default ON config_models(is_default
 CREATE INDEX IF NOT EXISTS idx_hermes_events_source_message ON hermes_events(source_id, message_id);
 CREATE INDEX IF NOT EXISTS idx_hermes_events_session ON hermes_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_hermes_events_observed ON hermes_events(observed_at);
+CREATE INDEX IF NOT EXISTS idx_connector_routing_connector ON connector_routing_items(connector, present);
+CREATE INDEX IF NOT EXISTS idx_connector_routing_desired ON connector_routing_items(connector, desired_route);
 
 -- Proxy traffic log
 CREATE TABLE IF NOT EXISTS proxy_traffic (
@@ -564,7 +592,7 @@ export const MIGRATIONS: string[] = [
   // empty-flags case (matches "no flags" behavior).
   "ALTER TABLE policy_rules ADD COLUMN flags TEXT NOT NULL DEFAULT ''",
 
-  // 2026-07-02 (v0.15.2-alpha): durable Hermes ingestion state. The
+  // 2026-07-02 (v0.15.3-alpha): durable Hermes ingestion state. The
   // watcher previously kept its high-water mark only in memory, which made
   // restart behavior opaque and prevented richer Hermes drilldowns. These
   // tables keep the cursor and a normalized, content-hash-only event record.
@@ -599,4 +627,31 @@ export const MIGRATIONS: string[] = [
   "CREATE INDEX IF NOT EXISTS idx_hermes_events_source_message ON hermes_events(source_id, message_id)",
   "CREATE INDEX IF NOT EXISTS idx_hermes_events_session ON hermes_events(session_id)",
   "CREATE INDEX IF NOT EXISTS idx_hermes_events_observed ON hermes_events(observed_at)",
+
+  // 2026-07-02 (v0.15.3-alpha+): selective connector routing inventory.
+  // OpenClaw and config-backed Hermes custom providers are enforceable at
+  // provider level; Hermes watcher-only/OAuth-session rows remain read-only.
+  `CREATE TABLE IF NOT EXISTS connector_routing_items (
+    id TEXT PRIMARY KEY,
+    connector TEXT NOT NULL,
+    source_id TEXT NOT NULL DEFAULT '',
+    item_type TEXT NOT NULL CHECK(item_type IN ('provider','model')),
+    provider_id TEXT NOT NULL DEFAULT '',
+    model_id TEXT NOT NULL DEFAULT '',
+    display_name TEXT NOT NULL,
+    base_url TEXT,
+    capability TEXT NOT NULL CHECK(capability IN ('provider-routing','model-inventory','read-only','unsupported')),
+    current_route TEXT NOT NULL CHECK(current_route IN ('routed','direct','unknown','unsupported')),
+    desired_route TEXT NOT NULL DEFAULT 'direct' CHECK(desired_route IN ('routed','direct')),
+    present INTEGER NOT NULL DEFAULT 1 CHECK(present IN (0,1)),
+    fingerprint TEXT NOT NULL,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_changed_at TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(connector, source_id, item_type, provider_id, model_id)
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_connector_routing_connector ON connector_routing_items(connector, present)",
+  "CREATE INDEX IF NOT EXISTS idx_connector_routing_desired ON connector_routing_items(connector, desired_route)",
 ];

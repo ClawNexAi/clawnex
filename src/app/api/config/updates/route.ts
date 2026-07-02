@@ -11,6 +11,7 @@ import { requireLocalhost } from "@/lib/middleware/localhost-guard";
 import { queryOne, run } from "@/lib/db/index";
 import { findHostSecurityScanner } from "@/lib/services/host-security/scanner-path";
 import { getOpenClawInstalledVersion } from "@/lib/openclaw-version";
+import { syncConnectorRoutingInventory } from "@/lib/services/connector-routing-inventory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -209,6 +210,12 @@ export async function GET(request: NextRequest) {
       openclawUpdateAvailable = compareVersions(openclawLatestVersion, openclawInstalled) > 0;
     }
 
+    // --- Connector routing inventory drift ---
+    // This is local-only and safe to poll from the header badge. It notices
+    // OpenClaw/Hermes provider/model additions/removals so the operator can
+    // review what should route through ClawNex.
+    const routingInventory = syncConnectorRoutingInventory();
+
     // Save last checked time
     setConfigValue("updates_last_checked", now);
 
@@ -236,6 +243,14 @@ export async function GET(request: NextRequest) {
         latestDate: openclawLatestDate,
         releaseUrl: openclawReleaseUrl,
         updateAvailable: openclawUpdateAvailable,
+      },
+      connectorRouting: {
+        name: "Connector Routing",
+        currentVersion: `${routingInventory.openclaw.items.length + routingInventory.hermes.items.length} items`,
+        latestVersion: routingInventory.driftTotal > 0 ? `${routingInventory.driftTotal} change${routingInventory.driftTotal === 1 ? "" : "s"}` : null,
+        updateAvailable: routingInventory.driftTotal > 0,
+        openclawChanges: routingInventory.openclaw.drift.total,
+        hermesChanges: routingInventory.hermes.drift.total,
       },
       lastChecked: now,
     });

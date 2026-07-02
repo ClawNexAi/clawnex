@@ -4,7 +4,7 @@
 **Version:** 1.10
 **Classification:** For Distribution
 **Last Updated:** 2026-05-08
-**Product Version:** v0.15.2-alpha
+**Product Version:** v0.15.5-alpha
 **Status:** Living Document
 
 ---
@@ -74,7 +74,7 @@ On a fresh install, **Fleet Command** opens directly into the **Welcome Wizard**
 | 3. Enable Host Security | Click **Verify Now** — verifies the bundled scanner is available. Or click **Open Updates panel** for the manual path. | — (or Configuration → Updates) |
 | 4. Sync CVE database | Click **Sync Now** — pulls the feed in place | — |
 | 5. Sync Model Pricing | Click **Sync Now** — pulls the LiteLLM price snapshot in place | — |
-| 6. Configure OpenClaw routing | Click **Wire LiteLLM** — wires the bridge into `openclaw.json` AND auto-restarts `openclaw-gateway` in one click. (Or click the secondary **Open Configuration** link if you want to inspect first.) | — (or Configuration → OpenClaw Routing) |
+| 6. Configure OpenClaw routing | Click **Choose Routing** — opens Configuration → OpenClaw Routing so you can select exactly which OpenClaw providers/models route through ClawNex. Hermes routing is managed separately from Configuration → Hermes Routing. The legacy all-provider OpenClaw wire remains available as an explicit secondary action. | — (or Configuration → OpenClaw Routing) |
 | 7. Run first shield test | Click **Open Shield Tests** | Prompt Shield |
 
 Every "Open Configuration" button deep-links into the specific card you need — that card auto-expands and scrolls into view so you don't have to hunt for it.
@@ -405,14 +405,23 @@ The five **actions** in plain English: **Score** (default) feeds the threat scor
 
 **OpenClaw Routing:**
 - Shows each provider's routing status: **ROUTED** (traffic flows through LiteLLM proxy for scanning) or **DIRECT** (traffic bypasses ClawNex).
+- **OpenClaw Selective Routing** inventories OpenClaw providers/models. Tick the OpenClaw rows that should route through ClawNex, then click **Apply OpenClaw Routing**. Routing is enforced at provider endpoint level, not as independent per-model switches. If several models share one provider, selecting one model routes that provider through LiteLLM, so sibling models on that provider follow the same route.
 - **ClawNex-Managed Routing block** (added 2026-04-29) lets you wire / revert / restart from the dashboard:
-  - **Wire LiteLLM** — adds a `models.providers.litellm` entry to `~/.openclaw/openclaw.json` pointing at `http://127.0.0.1:4001/v1` so OpenClaw's traffic flows through the ClawNex shield. Also sets `agents.defaults.model.primary` to `litellm/auto` if it was unset (won't clobber an operator's pinned default). Records ownership in a sidecar at `~/.clawnex-routing-managed.json`.
+  - **Wire LiteLLM** — legacy compatibility action that adds a `models.providers.litellm` entry to `~/.openclaw/openclaw.json` pointing at `http://127.0.0.1:4001/v1`. Also sets `agents.defaults.model.primary` to `litellm/auto` if it was unset (won't clobber an operator's pinned default). Records ownership in a sidecar at `~/.clawnex-routing-managed.json`.
   - **Revert ClawNex Wire** — undoes the wire. Operator edits made after the wire to `set-if-missing` paths (like `agents.defaults.model.primary`) are preserved automatically; the engine SHA-256 fingerprints values at write time and refuses to remove a value that was changed externally.
   - **Force Wire (overwrite)** — surfaced when a `models.providers.litellm` entry exists but ClawNex doesn't have a sidecar (operator-owned or stale). Overwrites with ClawNex's canonical values and starts tracking ownership.
   - **Restart Gateway** — restarts the long-running `openclaw-gateway` daemon so it picks up the new routing without an SSH trip. Tooltipped with the auto-detected supervisor (e.g. `systemd user unit (owner: <operator-user>)` on Linux, `launchd Aqua session` on macOS). On unsupported hosts the button is replaced with a copy-paste manual command.
   - **View raw sidecar** — `<details>` disclosure showing the full `~/.clawnex-routing-managed.json` JSON inline. Lets you audit every path ClawNex is tracking and the SHA-256 fingerprint of each value without SSH.
   - Result panel below the buttons surfaces the engine's status (wired / already-wired / reverted / conflict / restarted) plus supervisor + elapsed ms and any preserved-paths the revert kept in place.
 - On a fresh install where `openclaw.json` is present but has no LLM providers registered yet, you'll see a friendly blue info box instead of an error.
+
+**Hermes Routing:**
+- Lives in its own Configuration card and is not mixed into OpenClaw Routing.
+- Inventories writable Hermes `custom_providers` from `~/.hermes/config.yaml` plus read-only observed rows from Hermes activity.
+- Tick writable custom-provider or model rows that should route through ClawNex, then click **Save Hermes Wire**. This writes the selected Hermes custom-provider endpoints to the local LiteLLM proxy and records ownership in the Hermes routing sidecar.
+- **Revert Hermes Wire** restores ClawNex-managed Hermes provider edits when the current values still match the ClawNex-managed route. Operator edits made after the wire are preserved.
+- **Restart Gateway** restarts the detected Hermes gateway supervisor so Hermes reloads `config.yaml`. On unsupported hosts, the card shows the manual restart command instead.
+- Hermes OAuth/session-bound and watcher-only rows remain read-only retrospective inventory because ClawNex cannot safely rewrite those client-owned paths.
 - If `openclaw.json` truly can't be read, an amber warning explains it.
 
 **Shield Settings:**

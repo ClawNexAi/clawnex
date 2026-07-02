@@ -855,12 +855,16 @@ echo -e "${BOLD}[7/10] Configure OpenClaw routing...${NC}"
 
 if [ -n "$OPENCLAW_PATH" ] && [ -f "$OPENCLAW_PATH/openclaw.json" ]; then
     echo ""
-    echo "  Route OpenClaw traffic through ClawNex shield?"
-    echo "  This changes the apiBase in openclaw.json to point to the LiteLLM proxy"
-    echo "  on port ${LITELLM_PORT}, enabling prompt scanning and traffic monitoring."
+    echo "  Configure OpenClaw routing?"
+    echo "  v0.15.3 introduces selective connector routing in the dashboard."
+    echo "  Use Configuration → Fleet & Routing → OpenClaw Routing to choose"
+    echo "  exactly which providers/models route through the LiteLLM proxy."
     echo ""
-    _tty_read "  Route OpenClaw traffic through ClawNex shield? (yes/no) [yes]: " ROUTE_OPENCLAW
-    ROUTE_OPENCLAW=${ROUTE_OPENCLAW:-yes}
+    echo "  Legacy all-provider wire is still available here for scripted"
+    echo "  compatibility, but it is no longer the default."
+    echo ""
+    _tty_read "  Apply legacy all-provider OpenClaw wire now? (yes/no) [no]: " ROUTE_OPENCLAW
+    ROUTE_OPENCLAW=${ROUTE_OPENCLAW:-no}
 
     if is_yes "$ROUTE_OPENCLAW"; then
         OC_JSON="$OPENCLAW_PATH/openclaw.json"
@@ -924,8 +928,8 @@ PYEOF
             echo "  Manually set baseUrl in each provider to ${NEW_API_BASE}"
         fi
     else
-        echo -e "  ${YELLOW}⚠${NC} OpenClaw traffic will NOT be scanned by ClawNex shield"
-        echo "  To enable later, update provider baseUrl in openclaw.json to http://127.0.0.1:${LITELLM_PORT}/v1"
+        echo -e "  ${CYAN}•${NC} OpenClaw routing left for dashboard selection"
+        echo "  Open Configuration → OpenClaw Routing after first sign-in and select the providers/models to route."
     fi
 else
     echo -e "  ${CYAN}•${NC} Skipped — no OpenClaw installation detected"

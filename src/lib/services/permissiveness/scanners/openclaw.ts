@@ -58,26 +58,34 @@ export interface OpenClawLayer {
   readAt: string;
 }
 
-const LITELLM_HOSTS = ["127.0.0.1", "localhost"];
+const LITELLM_HOSTS = ["127.0.0.1", "localhost", "::1", "[::1]"];
 const LITELLM_PORT_DEFAULT = "4001";
 
 function classifyRouting(baseUrl: string | undefined): "routed" | "direct" {
   if (!baseUrl) return "direct";
-  for (const host of LITELLM_HOSTS) {
-    if (baseUrl.includes(`${host}:${LITELLM_PORT_DEFAULT}`)) return "routed";
+  try {
+    const parsed = new URL(baseUrl);
+    const host = parsed.hostname.toLowerCase();
+    if (LITELLM_HOSTS.includes(host)) return "routed";
+  } catch {
+    for (const host of LITELLM_HOSTS) {
+      if (baseUrl.includes(`${host}:${LITELLM_PORT_DEFAULT}`)) return "routed";
+    }
   }
-  // Accept any localhost port as routed (LiteLLM can be configured on non-default ports).
-  if (baseUrl.includes("127.0.0.1:") || baseUrl.includes("localhost:")) return "routed";
   return "direct";
 }
 
 function buildRoutingMap(cfg: any): Record<string, "routed" | "direct"> {
   const out: Record<string, "routed" | "direct"> = {};
   const providers = cfg?.models?.providers;
-  if (!Array.isArray(providers)) return out;
-  for (const p of providers) {
-    if (!p?.name) continue;
-    out[p.name] = classifyRouting(p.base_url ?? p.baseUrl);
+  if (!providers) return out;
+  const entries = Array.isArray(providers)
+    ? providers.map((p: any) => [p?.id ?? p?.name, p] as const)
+    : Object.entries(providers);
+  for (const [rawId, p] of entries) {
+    if (!rawId || !p || typeof p !== "object") continue;
+    const id = String(rawId);
+    out[id] = classifyRouting((p as any).base_url ?? (p as any).baseUrl);
   }
   return out;
 }

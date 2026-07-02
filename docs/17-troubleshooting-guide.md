@@ -3,7 +3,7 @@
 **Document:** 17-troubleshooting-guide
 **Version:** 0.14.5
 **Last Updated:** 2026-05-08
-**Product Version:** v0.15.2-alpha
+**Product Version:** v0.15.5-alpha
 **Classification:** Operations Reference
 
 ---
@@ -556,16 +556,21 @@ Requests from OpenClaw agents are not appearing in the Traffic Monitor, and the 
 
 **Fix:**
 ```bash
-# Check current apiBase in openclaw.json
-cat ~/.openclaw/openclaw.json | grep apiBase
+# Review provider routing in OpenClaw
+jq '.models.providers' ~/.openclaw/openclaw.json
 
-# It should point to LiteLLM on port 4001:
-#   "apiBase": "http://127.0.0.1:4001/v1"
-
-# If it points to something else (e.g., the provider directly), update it:
-# Re-run setup.sh and select "yes" for OpenClaw routing in step 7
-bash ~/sentinel/setup.sh
+# In ClawNex, open the connector-specific card:
+# - Configuration → OpenClaw Routing for OpenClaw providers/models
+# - Configuration → Hermes Routing for Hermes custom providers/models
+# OpenClaw: tick rows, click Apply OpenClaw Routing, then Restart Gateway if prompted.
+# Hermes: tick writable rows, click Save Hermes Wire, then Restart Gateway.
+# Hermes also has Revert Hermes Wire for restoring ClawNex-managed provider edits.
 ```
+
+**Provider-level note:** OpenClaw and Hermes custom providers route through
+provider endpoint values (`baseUrl` / `base_url`). If multiple models share the
+same provider, selecting one model routes that provider and its sibling models.
+Hermes OAuth/session-bound and watcher-only rows remain read-only.
 
 **Verification:** After updating, send a test request through OpenClaw and check the Traffic Monitor tab in the dashboard. The request should appear within a few seconds.
 

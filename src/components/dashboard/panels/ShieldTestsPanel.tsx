@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { C, F } from '../constants';
-import { Badge, VBadge, PaginationFooter } from '../shared';
+import { Badge, BadgeLegend, VBadge, PaginationFooter } from '../shared';
 import { sevColor } from '../utils';
 import { SHIELD_TESTS } from '../mock-data';
 import type { DashboardFilters } from '../types';
@@ -192,6 +192,17 @@ export function ShieldTestsPanel({ filters }: { filters: DashboardFilters }) {
               onChange={(patch) => updateUrl(patch)}
               resultCount={filtered.length}
               totalCount={SHIELD_TESTS.length}
+            />
+            <BadgeLegend
+              title="Test labels"
+              items={[
+                { label: "LAB", color: C.warn, description: "Coverage Lab probe. It is useful coverage telemetry, but not counted as a release-grade pass/fail gate." },
+                { label: "SOURCE", color: C.txS, description: "Synthetic source family used by the test payload." },
+                { label: "CHANNEL", color: C.purp, description: "Ingress channel being simulated, such as chat, email, web, or webhook." },
+                { label: "BLOCK", color: C.danger, description: "Expected shield verdict: the payload should be refused." },
+                { label: "ALLOW", color: C.green, description: "Expected shield verdict: benign input should pass without a finding." },
+              ]}
+              style={{ marginBottom: 10 }}
             />
           </>
         );
