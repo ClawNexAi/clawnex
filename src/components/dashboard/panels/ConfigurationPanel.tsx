@@ -2611,6 +2611,17 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
       sibling models on that provider follow the same route.
     </span>
   );
+  const connectorActionStackStyle: React.CSSProperties = {
+    display: "grid",
+    gap: 8,
+    marginBottom: 10,
+  };
+  const connectorActionRowStyle: React.CSSProperties = {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+    alignItems: "center",
+  };
   const connectorRoutingLegend = [
     {
       label: "PROVIDER",
@@ -2859,32 +2870,136 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
             </div>
           )}
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-            <button
-              onClick={syncConnectorInventory}
-              disabled={connectorWorking !== null}
-              style={{
-                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                background: connectorWorking === 'sync' ? `${C.info}33` : `${C.info}14`,
-                border: `1px solid ${C.info}66`, color: C.info,
-                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
-              }}
-            >
-              {connectorWorking === 'sync' ? "Syncing..." : "Sync Inventory"}
-            </button>
-            <button
-              onClick={applySelectedOpenClawRouting}
-              disabled={connectorWorking !== null || connectorRouting.openclaw.selected === 0}
-              style={{
-                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                background: connectorWorking === 'apply-openclaw' ? `${C.brand}33` : `${C.brand}18`,
-                border: `1px solid ${C.brand}66`, color: C.brand,
-                cursor: connectorWorking || connectorRouting.openclaw.selected === 0 ? "not-allowed" : "pointer", fontFamily: F.sans,
-                opacity: connectorRouting.openclaw.selected === 0 ? 0.55 : 1,
-              }}
-            >
-              {connectorWorking === 'apply-openclaw' ? "Applying..." : `Apply OpenClaw Routing (${connectorRouting.openclaw.selected})`}
-            </button>
+          <div style={connectorActionStackStyle}>
+            <div style={connectorActionRowStyle}>
+              <button
+                onClick={syncConnectorInventory}
+                disabled={connectorWorking !== null}
+                style={{
+                  padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                  background: connectorWorking === 'sync' ? `${C.info}33` : `${C.info}14`,
+                  border: `1px solid ${C.info}66`, color: C.info,
+                  cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
+                }}
+              >
+                {connectorWorking === 'sync' ? "Syncing..." : "Sync Inventory"}
+              </button>
+              <button
+                onClick={applySelectedOpenClawRouting}
+                disabled={connectorWorking !== null || connectorRouting.openclaw.selected === 0}
+                style={{
+                  padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                  background: connectorWorking === 'apply-openclaw' ? `${C.brand}33` : `${C.brand}18`,
+                  border: `1px solid ${C.brand}66`, color: C.brand,
+                  cursor: connectorWorking || connectorRouting.openclaw.selected === 0 ? "not-allowed" : "pointer", fontFamily: F.sans,
+                  opacity: connectorRouting.openclaw.selected === 0 ? 0.55 : 1,
+                }}
+              >
+                {connectorWorking === 'apply-openclaw' ? "Applying..." : `Apply OpenClaw Routing (${connectorRouting.openclaw.selected})`}
+              </button>
+            </div>
+
+            <div style={connectorActionRowStyle}>
+              {wireState === 'unwired' && (
+                <button
+                  onClick={() => performAction('wire')}
+                  disabled={working !== null}
+                  style={{
+                    padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                    background: working === 'wire' ? `${C.brand}33` : `${C.brand}22`,
+                    border: `1px solid ${C.brand}66`, color: C.brand,
+                    cursor: working ? "wait" : "pointer", fontFamily: F.sans,
+                  }}
+                >
+                  {working === 'wire' ? "Wiring..." : "Wire LiteLLM"}
+                </button>
+              )}
+
+              {wireState === 'conflict' && (
+                <button
+                  onClick={() => performAction('force-wire')}
+                  disabled={working !== null}
+                  style={{
+                    padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                    background: working === 'force-wire' ? `${C.warn}33` : `${C.warn}22`,
+                    border: `1px solid ${C.warn}66`, color: C.warn,
+                    cursor: working ? "wait" : "pointer", fontFamily: F.sans,
+                  }}
+                >
+                  {working === 'force-wire' ? "Force-Wiring..." : "Force Wire (overwrite)"}
+                </button>
+              )}
+
+              {wireState === 'managed' && (
+                <button
+                  onClick={() => performAction('revert')}
+                  disabled={working !== null}
+                  style={{
+                    padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                    background: working === 'revert' ? `${C.warn}33` : `${C.warn}14`,
+                    border: `1px solid ${C.warn}66`, color: C.warn,
+                    cursor: working ? "wait" : "pointer", fontFamily: F.sans,
+                  }}
+                >
+                  {working === 'revert' ? "Reverting..." : "Revert ClawNex Wire"}
+                </button>
+              )}
+
+              {supervisor && supervisor.kind !== 'unsupported' && (
+                <Tooltip placement="top" variant="detail" content={
+                  <span>
+                    Restarts the long-running <span style={{ fontFamily: F.mono, color: C.cyan }}>openclaw-gateway</span> daemon
+                    via <strong>{supervisor.label}</strong> so it picks up routing changes from <span style={{ fontFamily: F.mono, color: C.cyan }}>openclaw.json</span>.
+                    No SSH required.
+                  </span>
+                }>
+                  <button
+                    onClick={performRestart}
+                    disabled={working !== null}
+                    style={{
+                      padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                      background: working === 'restart' ? `${C.cyan}33` : `${C.cyan}14`,
+                      border: `1px solid ${C.cyan}66`, color: C.cyan,
+                      cursor: working ? "wait" : "pointer", fontFamily: F.sans,
+                    }}
+                  >
+                    {working === 'restart' ? "Restarting..." : "Restart Gateway"}
+                  </button>
+                </Tooltip>
+              )}
+
+              {supervisor && supervisor.kind === 'unsupported' && (
+                <Tooltip placement="top" variant="detail" content={
+                  <span>
+                    Auto-restart is not supported on this host. Manual fallback:
+                    <span style={{ fontFamily: F.mono, color: C.cyan }}> {supervisor.manualCommand}</span>
+                  </span>
+                }>
+                  <button
+                    disabled
+                    style={{
+                      padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                      background: `${C.txT}10`, border: `1px solid ${C.glassBorderSubtle}`,
+                      color: C.txT, cursor: "not-allowed", fontFamily: F.sans,
+                    }}
+                  >
+                    Restart Gateway
+                  </button>
+                </Tooltip>
+              )}
+
+              <button
+                onClick={() => { fetchRouting(); fetchSupervisor(); fetchConnectorRouting(); }}
+                disabled={working !== null}
+                style={{
+                  padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 600,
+                  background: "transparent", border: `1px solid ${C.glassBorderSubtle}`, color: C.txS,
+                  cursor: working ? "wait" : "pointer", fontFamily: F.sans,
+                }}
+              >
+                Refresh
+              </button>
+            </div>
           </div>
 
           <div style={{ fontSize: 11, color: C.txS, lineHeight: 1.5, marginBottom: 10 }}>
@@ -2953,95 +3068,6 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
               OpenClaw has no <span style={{ fontFamily: F.mono, color: C.cyan }}>litellm</span> provider entry yet, so its agent traffic
               bypasses the LiteLLM proxy and the Prompt Shield. <strong>Wire LiteLLM</strong> adds the
               entry pointing at <span style={{ fontFamily: F.mono, color: C.brand }}>{litellmUrl}</span>.
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {wireState === 'unwired' && (
-              <button
-                onClick={() => performAction('wire')}
-                disabled={working !== null}
-                style={{
-                  padding: "6px 14px", borderRadius: 4, fontSize: 12, fontWeight: 700,
-                  background: working === 'wire' ? `${C.brand}33` : `${C.brand}22`,
-                  border: `1px solid ${C.brand}66`, color: C.brand,
-                  cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-                }}
-              >
-                {working === 'wire' ? "Wiring..." : "Wire LiteLLM"}
-              </button>
-            )}
-
-            {wireState === 'conflict' && (
-              <button
-                onClick={() => performAction('force-wire')}
-                disabled={working !== null}
-                style={{
-                  padding: "6px 14px", borderRadius: 4, fontSize: 12, fontWeight: 700,
-                  background: working === 'force-wire' ? `${C.warn}33` : `${C.warn}22`,
-                  border: `1px solid ${C.warn}66`, color: C.warn,
-                  cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-                }}
-              >
-                {working === 'force-wire' ? "Force-Wiring..." : "Force Wire (overwrite)"}
-              </button>
-            )}
-
-            {wireState === 'managed' && (
-              <button
-                onClick={() => performAction('revert')}
-                disabled={working !== null}
-                style={{
-                  padding: "6px 14px", borderRadius: 4, fontSize: 12, fontWeight: 700,
-                  background: working === 'revert' ? `${C.warn}33` : `${C.warn}14`,
-                  border: `1px solid ${C.warn}66`, color: C.warn,
-                  cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-                }}
-              >
-                {working === 'revert' ? "Reverting..." : "Revert ClawNex Wire"}
-              </button>
-            )}
-
-            {supervisor && supervisor.kind !== 'unsupported' && (
-              <Tooltip placement="top" variant="detail" content={
-                <span>
-                  Restarts the long-running <span style={{ fontFamily: F.mono, color: C.cyan }}>openclaw-gateway</span> daemon
-                  via <strong>{supervisor.label}</strong> so it picks up routing changes from <span style={{ fontFamily: F.mono, color: C.cyan }}>openclaw.json</span>.
-                  No SSH required.
-                </span>
-              }>
-                <button
-                  onClick={performRestart}
-                  disabled={working !== null}
-                  style={{
-                    padding: "6px 14px", borderRadius: 4, fontSize: 12, fontWeight: 700,
-                    background: working === 'restart' ? `${C.cyan}33` : `${C.cyan}14`,
-                    border: `1px solid ${C.cyan}66`, color: C.cyan,
-                    cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-                  }}
-                >
-                  {working === 'restart' ? "Restarting..." : "Restart Gateway"}
-                </button>
-              </Tooltip>
-            )}
-
-            <button
-              onClick={() => { fetchRouting(); fetchSupervisor(); fetchConnectorRouting(); }}
-              disabled={working !== null}
-              style={{
-                padding: "6px 14px", borderRadius: 4, fontSize: 12, fontWeight: 600,
-                background: "transparent", border: `1px solid ${C.glassBorderSubtle}`, color: C.txS,
-                cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-              }}
-            >
-              Refresh
-            </button>
-          </div>
-
-          {supervisor && supervisor.kind === 'unsupported' && (
-            <div style={{ marginTop: 8, padding: "6px 10px", background: `${C.txT}10`, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 4, fontSize: 11, color: C.txS, lineHeight: 1.5 }}>
-              Auto-restart isn&apos;t supported on this host ({supervisor.label}). After wiring, restart manually:
-              <div style={{ marginTop: 4, padding: "4px 8px", background: C.bg, borderRadius: 3, fontFamily: F.mono, fontSize: 11, color: C.brand }}>{supervisor.manualCommand}</div>
             </div>
           )}
 
@@ -3151,96 +3177,101 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
             </div>
           )}
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-            <button
-              onClick={syncConnectorInventory}
-              disabled={connectorWorking !== null}
-              style={{
-                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                background: connectorWorking === 'sync' ? `${C.info}33` : `${C.info}14`,
-                border: `1px solid ${C.info}66`, color: C.info,
-                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
-              }}
-            >
-              {connectorWorking === 'sync' ? "Syncing..." : "Sync Inventory"}
-            </button>
-            <button
-              onClick={applySelectedHermesRouting}
-              disabled={connectorWorking !== null || connectorRouting.hermes.selected === 0}
-              style={{
-                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                background: connectorWorking === 'apply-hermes' ? `${C.purp}33` : `${C.purp}18`,
-                border: `1px solid ${C.purp}66`, color: C.purp,
-                cursor: connectorWorking || connectorRouting.hermes.selected === 0 ? "not-allowed" : "pointer", fontFamily: F.sans,
-                opacity: connectorRouting.hermes.selected === 0 ? 0.55 : 1,
-              }}
-            >
-              {connectorWorking === 'apply-hermes' ? "Saving..." : `Save Hermes Wire (${connectorRouting.hermes.selected})`}
-            </button>
-            <button
-              onClick={revertHermesWire}
-              disabled={connectorWorking !== null}
-              style={{
-                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                background: connectorWorking === 'revert-hermes' ? `${C.warn}33` : `${C.warn}14`,
-                border: `1px solid ${C.warn}66`, color: C.warn,
-                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
-              }}
-            >
-              {connectorWorking === 'revert-hermes' ? "Reverting..." : "Revert Hermes Wire"}
-            </button>
-            {hermesSupervisor && hermesSupervisor.kind !== 'unsupported' && (
-              <Tooltip placement="top" variant="detail" content={
-                <span>
-                  Restarts the detected Hermes gateway supervisor so Hermes reloads provider changes from
-                  <span style={{ fontFamily: F.mono, color: C.cyan }}> config.yaml</span>.
-                  {hermesSupervisor.targets?.length ? <> Targets: <span style={{ fontFamily: F.mono, color: C.cyan }}>{hermesSupervisor.targets.join(", ")}</span>.</> : null}
-                </span>
-              }>
-                <button
-                  onClick={restartHermesGateway}
-                  disabled={connectorWorking !== null}
-                  style={{
-                    padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                    background: connectorWorking === 'restart-hermes' ? `${C.cyan}33` : `${C.cyan}14`,
-                    border: `1px solid ${C.cyan}66`, color: C.cyan,
-                    cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
-                  }}
-                >
-                  {connectorWorking === 'restart-hermes' ? "Restarting..." : "Restart Gateway"}
-                </button>
-              </Tooltip>
-            )}
-            {hermesSupervisor && hermesSupervisor.kind === 'unsupported' && (
-              <Tooltip placement="top" variant="detail" content={
-                <span>
-                  ClawNex did not detect a known Hermes gateway supervisor on this host. Manual fallback:
-                  <span style={{ fontFamily: F.mono, color: C.cyan }}> {hermesSupervisor.manualCommand}</span>
-                </span>
-              }>
-                <button
-                  disabled
-                  style={{
-                    padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                    background: `${C.txT}10`, border: `1px solid ${C.glassBorderSubtle}`,
-                    color: C.txT, cursor: "not-allowed", fontFamily: F.sans,
-                  }}
-                >
-                  Restart Gateway
-                </button>
-              </Tooltip>
-            )}
-            <button
-              onClick={fetchHermesSupervisor}
-              disabled={connectorWorking !== null}
-              style={{
-                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 600,
-                background: "transparent", border: `1px solid ${C.glassBorderSubtle}`, color: C.txS,
-                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
-              }}
-            >
-              Detect Gateway
-            </button>
+          <div style={connectorActionStackStyle}>
+            <div style={connectorActionRowStyle}>
+              <button
+                onClick={syncConnectorInventory}
+                disabled={connectorWorking !== null}
+                style={{
+                  padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                  background: connectorWorking === 'sync' ? `${C.info}33` : `${C.info}14`,
+                  border: `1px solid ${C.info}66`, color: C.info,
+                  cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
+                }}
+              >
+                {connectorWorking === 'sync' ? "Syncing..." : "Sync Inventory"}
+              </button>
+              <button
+                onClick={applySelectedHermesRouting}
+                disabled={connectorWorking !== null || connectorRouting.hermes.selected === 0}
+                style={{
+                  padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                  background: connectorWorking === 'apply-hermes' ? `${C.purp}33` : `${C.purp}18`,
+                  border: `1px solid ${C.purp}66`, color: C.purp,
+                  cursor: connectorWorking || connectorRouting.hermes.selected === 0 ? "not-allowed" : "pointer", fontFamily: F.sans,
+                  opacity: connectorRouting.hermes.selected === 0 ? 0.55 : 1,
+                }}
+              >
+                {connectorWorking === 'apply-hermes' ? "Saving..." : `Save Hermes Wire (${connectorRouting.hermes.selected})`}
+              </button>
+            </div>
+
+            <div style={connectorActionRowStyle}>
+              <button
+                onClick={revertHermesWire}
+                disabled={connectorWorking !== null}
+                style={{
+                  padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                  background: connectorWorking === 'revert-hermes' ? `${C.warn}33` : `${C.warn}14`,
+                  border: `1px solid ${C.warn}66`, color: C.warn,
+                  cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
+                }}
+              >
+                {connectorWorking === 'revert-hermes' ? "Reverting..." : "Revert Hermes Wire"}
+              </button>
+              {hermesSupervisor && hermesSupervisor.kind !== 'unsupported' && (
+                <Tooltip placement="top" variant="detail" content={
+                  <span>
+                    Restarts the detected Hermes gateway supervisor so Hermes reloads provider changes from
+                    <span style={{ fontFamily: F.mono, color: C.cyan }}> config.yaml</span>.
+                    {hermesSupervisor.targets?.length ? <> Targets: <span style={{ fontFamily: F.mono, color: C.cyan }}>{hermesSupervisor.targets.join(", ")}</span>.</> : null}
+                  </span>
+                }>
+                  <button
+                    onClick={restartHermesGateway}
+                    disabled={connectorWorking !== null}
+                    style={{
+                      padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                      background: connectorWorking === 'restart-hermes' ? `${C.cyan}33` : `${C.cyan}14`,
+                      border: `1px solid ${C.cyan}66`, color: C.cyan,
+                      cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
+                    }}
+                  >
+                    {connectorWorking === 'restart-hermes' ? "Restarting..." : "Restart Gateway"}
+                  </button>
+                </Tooltip>
+              )}
+              {hermesSupervisor && hermesSupervisor.kind === 'unsupported' && (
+                <Tooltip placement="top" variant="detail" content={
+                  <span>
+                    ClawNex did not detect a known Hermes gateway supervisor on this host. Manual fallback:
+                    <span style={{ fontFamily: F.mono, color: C.cyan }}> {hermesSupervisor.manualCommand}</span>
+                  </span>
+                }>
+                  <button
+                    disabled
+                    style={{
+                      padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                      background: `${C.txT}10`, border: `1px solid ${C.glassBorderSubtle}`,
+                      color: C.txT, cursor: "not-allowed", fontFamily: F.sans,
+                    }}
+                  >
+                    Restart Gateway
+                  </button>
+                </Tooltip>
+              )}
+              <button
+                onClick={fetchHermesSupervisor}
+                disabled={connectorWorking !== null}
+                style={{
+                  padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 600,
+                  background: "transparent", border: `1px solid ${C.glassBorderSubtle}`, color: C.txS,
+                  cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
+                }}
+              >
+                Detect Gateway
+              </button>
+            </div>
           </div>
 
           <div style={{ fontSize: 11, color: C.txS, lineHeight: 1.5, marginBottom: 10 }}>
