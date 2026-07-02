@@ -2611,16 +2611,12 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
       sibling models on that provider follow the same route.
     </span>
   );
-  const connectorActionStackStyle: React.CSSProperties = {
-    display: "grid",
-    gap: 8,
-    marginBottom: 10,
-  };
   const connectorActionRowStyle: React.CSSProperties = {
     display: "flex",
     gap: 8,
     flexWrap: "wrap",
     alignItems: "center",
+    marginBottom: 10,
   };
   const connectorRoutingLegend = [
     {
@@ -2870,50 +2866,46 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
             </div>
           )}
 
-          <div style={connectorActionStackStyle}>
-            <div style={connectorActionRowStyle}>
+          <div style={connectorActionRowStyle}>
+            <button
+              onClick={syncConnectorInventory}
+              disabled={connectorWorking !== null}
+              style={{
+                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                background: connectorWorking === 'sync' ? `${C.info}33` : `${C.info}14`,
+                border: `1px solid ${C.info}66`, color: C.info,
+                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
+              }}
+            >
+              {connectorWorking === 'sync' ? "Syncing..." : "Sync Inventory"}
+            </button>
+            <button
+              onClick={applySelectedOpenClawRouting}
+              disabled={connectorWorking !== null || connectorRouting.openclaw.selected === 0}
+              style={{
+                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                background: connectorWorking === 'apply-openclaw' ? `${C.brand}33` : `${C.brand}18`,
+                border: `1px solid ${C.brand}66`, color: C.brand,
+                cursor: connectorWorking || connectorRouting.openclaw.selected === 0 ? "not-allowed" : "pointer", fontFamily: F.sans,
+                opacity: connectorRouting.openclaw.selected === 0 ? 0.55 : 1,
+              }}
+            >
+              {connectorWorking === 'apply-openclaw' ? "Applying..." : `Apply OpenClaw Routing (${connectorRouting.openclaw.selected})`}
+            </button>
+            {wireState === 'unwired' && (
               <button
-                onClick={syncConnectorInventory}
-                disabled={connectorWorking !== null}
+                onClick={() => performAction('wire')}
+                disabled={working !== null}
                 style={{
                   padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                  background: connectorWorking === 'sync' ? `${C.info}33` : `${C.info}14`,
-                  border: `1px solid ${C.info}66`, color: C.info,
-                  cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
-                }}
-              >
-                {connectorWorking === 'sync' ? "Syncing..." : "Sync Inventory"}
-              </button>
-              <button
-                onClick={applySelectedOpenClawRouting}
-                disabled={connectorWorking !== null || connectorRouting.openclaw.selected === 0}
-                style={{
-                  padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                  background: connectorWorking === 'apply-openclaw' ? `${C.brand}33` : `${C.brand}18`,
+                  background: working === 'wire' ? `${C.brand}33` : `${C.brand}22`,
                   border: `1px solid ${C.brand}66`, color: C.brand,
-                  cursor: connectorWorking || connectorRouting.openclaw.selected === 0 ? "not-allowed" : "pointer", fontFamily: F.sans,
-                  opacity: connectorRouting.openclaw.selected === 0 ? 0.55 : 1,
+                  cursor: working ? "wait" : "pointer", fontFamily: F.sans,
                 }}
               >
-                {connectorWorking === 'apply-openclaw' ? "Applying..." : `Apply OpenClaw Routing (${connectorRouting.openclaw.selected})`}
+                {working === 'wire' ? "Wiring..." : "Wire LiteLLM"}
               </button>
-            </div>
-
-            <div style={connectorActionRowStyle}>
-              {wireState === 'unwired' && (
-                <button
-                  onClick={() => performAction('wire')}
-                  disabled={working !== null}
-                  style={{
-                    padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                    background: working === 'wire' ? `${C.brand}33` : `${C.brand}22`,
-                    border: `1px solid ${C.brand}66`, color: C.brand,
-                    cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-                  }}
-                >
-                  {working === 'wire' ? "Wiring..." : "Wire LiteLLM"}
-                </button>
-              )}
+            )}
 
               {wireState === 'conflict' && (
                 <button
@@ -2988,18 +2980,17 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
                 </Tooltip>
               )}
 
-              <button
-                onClick={() => { fetchRouting(); fetchSupervisor(); fetchConnectorRouting(); }}
-                disabled={working !== null}
-                style={{
-                  padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 600,
-                  background: "transparent", border: `1px solid ${C.glassBorderSubtle}`, color: C.txS,
-                  cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-                }}
-              >
-                Refresh
-              </button>
-            </div>
+            <button
+              onClick={() => { fetchRouting(); fetchSupervisor(); fetchConnectorRouting(); }}
+              disabled={working !== null}
+              style={{
+                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 600,
+                background: "transparent", border: `1px solid ${C.glassBorderSubtle}`, color: C.txS,
+                cursor: working ? "wait" : "pointer", fontFamily: F.sans,
+              }}
+            >
+              Refresh
+            </button>
           </div>
 
           <div style={{ fontSize: 11, color: C.txS, lineHeight: 1.5, marginBottom: 10 }}>
@@ -3177,48 +3168,44 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
             </div>
           )}
 
-          <div style={connectorActionStackStyle}>
-            <div style={connectorActionRowStyle}>
-              <button
-                onClick={syncConnectorInventory}
-                disabled={connectorWorking !== null}
-                style={{
-                  padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                  background: connectorWorking === 'sync' ? `${C.info}33` : `${C.info}14`,
-                  border: `1px solid ${C.info}66`, color: C.info,
-                  cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
-                }}
-              >
-                {connectorWorking === 'sync' ? "Syncing..." : "Sync Inventory"}
-              </button>
-              <button
-                onClick={applySelectedHermesRouting}
-                disabled={connectorWorking !== null || connectorRouting.hermes.selected === 0}
-                style={{
-                  padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                  background: connectorWorking === 'apply-hermes' ? `${C.purp}33` : `${C.purp}18`,
-                  border: `1px solid ${C.purp}66`, color: C.purp,
-                  cursor: connectorWorking || connectorRouting.hermes.selected === 0 ? "not-allowed" : "pointer", fontFamily: F.sans,
-                  opacity: connectorRouting.hermes.selected === 0 ? 0.55 : 1,
-                }}
-              >
-                {connectorWorking === 'apply-hermes' ? "Saving..." : `Save Hermes Wire (${connectorRouting.hermes.selected})`}
-              </button>
-            </div>
-
-            <div style={connectorActionRowStyle}>
-              <button
-                onClick={revertHermesWire}
-                disabled={connectorWorking !== null}
-                style={{
-                  padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                  background: connectorWorking === 'revert-hermes' ? `${C.warn}33` : `${C.warn}14`,
-                  border: `1px solid ${C.warn}66`, color: C.warn,
-                  cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
-                }}
-              >
-                {connectorWorking === 'revert-hermes' ? "Reverting..." : "Revert Hermes Wire"}
-              </button>
+          <div style={connectorActionRowStyle}>
+            <button
+              onClick={syncConnectorInventory}
+              disabled={connectorWorking !== null}
+              style={{
+                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                background: connectorWorking === 'sync' ? `${C.info}33` : `${C.info}14`,
+                border: `1px solid ${C.info}66`, color: C.info,
+                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
+              }}
+            >
+              {connectorWorking === 'sync' ? "Syncing..." : "Sync Inventory"}
+            </button>
+            <button
+              onClick={applySelectedHermesRouting}
+              disabled={connectorWorking !== null || connectorRouting.hermes.selected === 0}
+              style={{
+                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                background: connectorWorking === 'apply-hermes' ? `${C.purp}33` : `${C.purp}18`,
+                border: `1px solid ${C.purp}66`, color: C.purp,
+                cursor: connectorWorking || connectorRouting.hermes.selected === 0 ? "not-allowed" : "pointer", fontFamily: F.sans,
+                opacity: connectorRouting.hermes.selected === 0 ? 0.55 : 1,
+              }}
+            >
+              {connectorWorking === 'apply-hermes' ? "Saving..." : `Save Hermes Wire (${connectorRouting.hermes.selected})`}
+            </button>
+            <button
+              onClick={revertHermesWire}
+              disabled={connectorWorking !== null}
+              style={{
+                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                background: connectorWorking === 'revert-hermes' ? `${C.warn}33` : `${C.warn}14`,
+                border: `1px solid ${C.warn}66`, color: C.warn,
+                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
+              }}
+            >
+              {connectorWorking === 'revert-hermes' ? "Reverting..." : "Revert Hermes Wire"}
+            </button>
               {hermesSupervisor && hermesSupervisor.kind !== 'unsupported' && (
                 <Tooltip placement="top" variant="detail" content={
                   <span>
@@ -3260,18 +3247,17 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
                   </button>
                 </Tooltip>
               )}
-              <button
-                onClick={fetchHermesSupervisor}
-                disabled={connectorWorking !== null}
-                style={{
-                  padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 600,
-                  background: "transparent", border: `1px solid ${C.glassBorderSubtle}`, color: C.txS,
-                  cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
-                }}
-              >
-                Detect Gateway
-              </button>
-            </div>
+            <button
+              onClick={fetchHermesSupervisor}
+              disabled={connectorWorking !== null}
+              style={{
+                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 600,
+                background: "transparent", border: `1px solid ${C.glassBorderSubtle}`, color: C.txS,
+                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
+              }}
+            >
+              Detect Gateway
+            </button>
           </div>
 
           <div style={{ fontSize: 11, color: C.txS, lineHeight: 1.5, marginBottom: 10 }}>
