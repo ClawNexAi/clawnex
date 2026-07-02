@@ -92,6 +92,25 @@ interface HermesInstanceConfig {
   diagnostics?: HermesDiagnostics | null;
 }
 
+function normalizeHermesPathKey(value?: string | null): string {
+  return (value || "").trim().replace(/\/+$/, "");
+}
+
+function hermesStateDbFromHome(homePath?: string | null): string {
+  const home = normalizeHermesPathKey(homePath);
+  return home ? `${home}/state.db` : "";
+}
+
+function hermesInstanceMatchesDiagnostics(inst: HermesInstanceConfig, diag: HermesDiagnostics | null | undefined): boolean {
+  if (!diag) return false;
+  const instHome = normalizeHermesPathKey(inst.diagnostics?.home || inst.home_path);
+  const diagHome = normalizeHermesPathKey(diag.home);
+  const instStateDb = normalizeHermesPathKey(inst.diagnostics?.stateDbPath || hermesStateDbFromHome(inst.home_path));
+  const diagStateDb = normalizeHermesPathKey(diag.stateDbPath);
+
+  return (!!instHome && instHome === diagHome) || (!!instStateDb && instStateDb === diagStateDb);
+}
+
 // ---------------------------------------------------------------------------
 // Break-Glass Components
 // ---------------------------------------------------------------------------
@@ -3975,7 +3994,9 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
 
   const inputStyle = { width: "100%", padding: "8px 10px", background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6, color: C.tx, fontFamily: F.mono, fontSize: 13, outline: "none", boxSizing: "border-box" as const };
   const btnStyle = { padding: "8px 16px", borderRadius: 6, border: "none", fontWeight: 700, fontSize: 13, cursor: "pointer" };
-  const autoHermesSaved = !!hermesStatus && hermesInstances.some(inst => inst.home_path === hermesStatus.home);
+  const autoHermesSaved = !!hermesStatus && hermesInstances.some(inst => hermesInstanceMatchesDiagnostics(inst, hermesStatus));
+  const showAutoDetectedHermes = !!hermesStatus?.available && !autoHermesSaved;
+  const hermesConnectorCount = hermesInstances.length + (showAutoDetectedHermes ? 1 : 0);
   const renderHermesChecks = (diag: HermesDiagnostics | null | undefined) => {
     if (!diag) return null;
     const checks = [
@@ -4483,7 +4504,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   );
 
   const fleetConnectorsCard = (
-      <CollapsibleCard title={<span style={{ display: "flex", alignItems: "center", gap: 8 }}>FLEET CONNECTORS <span style={{ fontSize: 10, color: C.txT, fontFamily: F.mono }}>4 frameworks &middot; {(gateways.length > 0 ? 1 : 0) + (hermesStatus?.available ? 1 : 0) + hermesInstances.length} connected</span></span>} accent={C.brand} defaultOpen={false}>
+      <CollapsibleCard title={<span style={{ display: "flex", alignItems: "center", gap: 8 }}>FLEET CONNECTORS <span style={{ fontSize: 10, color: C.txT, fontFamily: F.mono }}>4 frameworks &middot; {(gateways.length > 0 ? 1 : 0) + hermesConnectorCount} connected</span></span>} accent={C.brand} defaultOpen={false}>
         <div style={{ fontSize: 13, color: C.txS, marginBottom: 16 }}>Manage connections to agent frameworks. Each connector enables ClawNex to monitor, scan, and protect traffic from that framework.</div>
 
         {/* --- OpenClaw --- */}
@@ -4546,7 +4567,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
             <Badge color={hermesStatus?.available ? C.green : C.txT} label={hermesStatus?.available ? "LIVE" : "NOT CONFIGURED"} />
           </div>
           {fcHermes && <div>
-          {hermesStatus?.available && (
+          {showAutoDetectedHermes && (
             <div style={{ padding: "12px 14px", marginBottom: 8, background: C.glassSurfTrans, borderRadius: 8, border: `1px solid ${C.glassBorderSubtle}`, borderLeft: `3px solid ${C.green}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

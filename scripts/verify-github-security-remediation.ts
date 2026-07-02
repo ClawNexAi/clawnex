@@ -30,6 +30,7 @@ const hermesRoute = read("src/app/api/config/hermes-instances/route.ts");
 check("Hermes instance paths are resolved through an allowlisted home-directory helper", /resolveHermesHomePath/.test(hermesRoute));
 check("Hermes instance route rejects paths outside the operator home", /must be inside this user's home directory/.test(hermesRoute));
 check("Hermes instance route checks symlink targets with realpath", /resolveRealHermesHomePath/.test(hermesRoute) && /fs\.realpathSync/.test(hermesRoute));
+check("Hermes instance route rejects duplicate saved home paths", /Hermes instance already exists for this home path/.test(hermesRoute) && /SELECT \* FROM hermes_instances WHERE home_path = \?/.test(hermesRoute));
 
 const litellmRoute = read("src/app/api/system/litellm/route.ts");
 check("LiteLLM control route uses spawn argv for fallback launch", /spawn\(command,\s*\[/.test(litellmRoute));
