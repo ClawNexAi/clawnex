@@ -26,6 +26,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefreshStrategy, TimeRange } from "./types";
 import { ALL_RULES } from "@/lib/shield/rules";
 import { checkRegexSafety } from "@/lib/shield/safe-regex";
+import { useMissionControlScope } from "./scope";
 
 /** Static count of unsafe regex patterns in ALL_RULES, computed once at
  *  module load. The shield rules are baked into the bundle, so this is
@@ -39,6 +40,24 @@ const STATIC_UNSAFE_REGEX_COUNT = ALL_RULES.filter((r) => {
   const result = checkRegexSafety(r.pattern.source, r.pattern.flags);
   return !result.ok;
 }).length;
+
+function scopedQuery(
+  selectedInstance: string,
+  params: Record<string, string | number | boolean | undefined>,
+): string {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) qs.set(key, String(value));
+  }
+  if (selectedInstance !== "all") qs.set("instance", selectedInstance);
+  return qs.toString();
+}
+
+function collectorBelongsToScope(name: string, selectedInstance: string): boolean {
+  if (selectedInstance === "all") return true;
+  const isHermes = /hermes/i.test(name);
+  return selectedInstance === "hermes-local" ? isHermes : !isHermes;
+}
 
 // ---------------------------------------------------------------------------
 // Generic polling helper
@@ -129,10 +148,13 @@ export interface ActiveIncidentsData {
 }
 
 export function useActiveIncidents(): PolledResult<ActiveIncidentsData> {
+  const { selectedInstance } = useMissionControlScope();
   return usePolledFetch<ActiveIncidentsData>({
     strategy: "poll_30s",
+    deps: [selectedInstance],
     fetcher: async () => {
-      const res = await fetch("/api/alerts?scope=active&productionOnly=true&limit=500");
+      const query = scopedQuery(selectedInstance, { scope: "active", productionOnly: true, limit: 500 });
+      const res = await fetch(`/api/alerts?${query}`);
       if (!res.ok) throw new Error(`/api/alerts failed: ${res.status}`);
       const body = await res.json();
       // Route returns body.alerts[] with alert.status and alert.severity fields
@@ -177,10 +199,13 @@ export interface EvidenceConfidenceData {
 }
 
 export function useEvidenceConfidence(): PolledResult<EvidenceConfidenceData> {
+  const { selectedInstance } = useMissionControlScope();
   return usePolledFetch<EvidenceConfidenceData>({
     strategy: "poll_30s",
+    deps: [selectedInstance],
     fetcher: async () => {
-      const res = await fetch("/api/alerts?scope=active&productionOnly=true&limit=500");
+      const query = scopedQuery(selectedInstance, { scope: "active", productionOnly: true, limit: 500 });
+      const res = await fetch(`/api/alerts?${query}`);
       if (!res.ok) throw new Error(`/api/alerts failed: ${res.status}`);
       const body = await res.json();
       // Evidence confidence reflects the same canonical active production
@@ -255,14 +280,16 @@ export interface ShieldActivityData {
 }
 
 export function useShieldActivity(range: TimeRange): PolledResult<ShieldActivityData> {
+  const { selectedInstance } = useMissionControlScope();
   return usePolledFetch<ShieldActivityData>({
     strategy: "poll_30s",
-    deps: [range],
+    deps: [range, selectedInstance],
     fetcher: async () => {
       const sinceMs = rangeSinceMs(range);
       const since = new Date(Date.now() - sinceMs).toISOString();
       // Item #1: request hourly buckets for the DetectionTrend chart.
-      const res = await fetch(`/api/shield/stats?since=${since}&bucket=hour`);
+      const query = scopedQuery(selectedInstance, { since, bucket: "hour" });
+      const res = await fetch(`/api/shield/stats?${query}`);
       if (!res.ok) throw new Error(`/api/shield/stats failed: ${res.status}`);
       const body = await res.json();
       // Route returns body.allowed / body.reviewed / body.blocked (not allow/review/block).
@@ -296,16 +323,18 @@ export interface CostRiskData {
 }
 
 export function useCostRisk(range: TimeRange): PolledResult<CostRiskData> {
+  const { selectedInstance } = useMissionControlScope();
   return usePolledFetch<CostRiskData>({
     strategy: "poll_5m",
-    deps: [range],
+    deps: [range, selectedInstance],
     fetcher: async () => {
       // Route accepts ?since= ISO timestamp, not ?range=. Convert TimeRange to a
       // since-param for the existing /api/tokens route
       // (confirmed in src/app/api/tokens/route.ts — uses searchParams.get('since')).
       const sinceMs = rangeSinceMs(range);
       const since = new Date(Date.now() - sinceMs).toISOString();
-      const res = await fetch(`/api/tokens?since=${since}`);
+      const query = scopedQuery(selectedInstance, { since });
+      const res = await fetch(`/api/tokens?${query}`);
       if (!res.ok) throw new Error(`/api/tokens failed: ${res.status}`);
       const body = await res.json();
       // headline shape: { source: Source; total: number } | null
@@ -360,8 +389,10 @@ export interface CollectorHealthData {
 }
 
 export function useCollectorHealth(): PolledResult<CollectorHealthData> {
+  const { selectedInstance } = useMissionControlScope();
   return usePolledFetch<CollectorHealthData>({
     strategy: "poll_30s",
+    deps: [selectedInstance],
     fetcher: async () => {
       const res = await fetch("/api/infrastructure");
       if (!res.ok) throw new Error(`/api/infrastructure failed: ${res.status}`);
@@ -376,7 +407,9 @@ export function useCollectorHealth(): PolledResult<CollectorHealthData> {
         last_seen_ms_ago?: number;
         version?: string;
         ingestion_summary?: string;
-      }> = body?.services ?? [];
+      }> = (body?.services ?? []).filter((s: { name?: string }) =>
+        collectorBelongsToScope(String(s.name ?? ""), selectedInstance),
+      );
       const collectors = services.map((s) => ({
         name: s.name,
         status: s.status,
@@ -440,10 +473,13 @@ export interface ActiveAlert {
 }
 
 export function useActiveAlerts(): PolledResult<ActiveAlert[]> {
+  const { selectedInstance } = useMissionControlScope();
   return usePolledFetch<ActiveAlert[]>({
     strategy: "poll_30s",
+    deps: [selectedInstance],
     fetcher: async () => {
-      const res = await fetch("/api/alerts?scope=active&productionOnly=true&limit=500");
+      const query = scopedQuery(selectedInstance, { scope: "active", productionOnly: true, limit: 500 });
+      const res = await fetch(`/api/alerts?${query}`);
       if (!res.ok) throw new Error(`/api/alerts failed: ${res.status}`);
       const body = await res.json();
       // Route wraps alerts under body.alerts[] and applies canonical active
@@ -732,13 +768,16 @@ export interface ShieldRuleData {
 }
 
 export function useShieldRuleSummary(): PolledResult<ShieldRuleData> {
+  const { selectedInstance } = useMissionControlScope();
   return usePolledFetch<ShieldRuleData>({
     strategy: "poll_5m",
+    deps: [selectedInstance],
     fetcher: async () => {
       try {
         // /api/shield/history returns recent scans, each with matched_rules[].
         // We pull a wide window and aggregate per rule. No new server route.
-        const res = await fetch("/api/shield/history?limit=500");
+        const query = scopedQuery(selectedInstance, { limit: 500 });
+        const res = await fetch(`/api/shield/history?${query}`);
         if (!res.ok) {
           return { rules: [], windowMs: 24 * 3600_000, degraded: { reason: classifyDegrade(res.status) } };
         }

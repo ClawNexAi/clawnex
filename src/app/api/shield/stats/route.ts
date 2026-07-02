@@ -11,6 +11,22 @@ import { getShieldStats, getShieldHistory, getShieldStatsHourly } from '@/lib/se
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+function hourlyBucketsFromHistory(history: Array<{ scanned_at: string; threat_level: string }>) {
+  const buckets = new Map<string, { hour: string; total: number; allowed: number; reviewed: number; blocked: number }>();
+  for (const scan of history) {
+    const ts = Date.parse(scan.scanned_at);
+    if (!Number.isFinite(ts)) continue;
+    const hour = new Date(Math.floor(ts / 3_600_000) * 3_600_000).toISOString().replace(/:\d{2}\.\d{3}Z$/, ":00Z");
+    const bucket = buckets.get(hour) ?? { hour, total: 0, allowed: 0, reviewed: 0, blocked: 0 };
+    bucket.total += 1;
+    if (scan.threat_level === "ALLOW") bucket.allowed += 1;
+    else if (scan.threat_level === "REVIEW") bucket.reviewed += 1;
+    else if (scan.threat_level === "BLOCK") bucket.blocked += 1;
+    buckets.set(hour, bucket);
+  }
+  return Array.from(buckets.values()).sort((a, b) => a.hour.localeCompare(b.hour));
+}
+
 export async function GET(request: NextRequest) {
   if (isRbacEnabled()) {
     const auth = requireSession(request);
@@ -79,9 +95,11 @@ export async function GET(request: NextRequest) {
       allowed: history.filter(s => s.threat_level === 'ALLOW').length,
       period: since ? 'custom' : '24h',
     };
+    const hourlyBuckets = bucketHour ? hourlyBucketsFromHistory(history) : undefined;
 
     return NextResponse.json({
       ...stats,
+      ...(bucketHour ? { hourlyBuckets } : {}),
       timestamp: new Date().toISOString(),
     });
   } catch (err) {

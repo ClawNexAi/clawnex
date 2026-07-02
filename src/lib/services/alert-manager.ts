@@ -45,6 +45,7 @@ export interface AlertFilters {
   status?: string;
   severity?: string;
   source?: string;
+  excludeSource?: string;
   since?: string;
   limit?: number;
   /** v0.9.3+ canonical filter. `active` = open+acknowledged+investigating
@@ -297,6 +298,10 @@ export function listAlerts(filters?: AlertFilters): AlertRecord[] {
     conditions.push('source = ?');
     params.push(filters.source);
   }
+  if (filters?.excludeSource) {
+    conditions.push('source != ?');
+    params.push(filters.excludeSource);
+  }
   if (filters?.since) {
     conditions.push('created_at >= ?');
     params.push(filters.since);
@@ -353,6 +358,10 @@ export function countAlerts(filters?: Omit<AlertFilters, 'limit'>): number {
   if (filters?.source) {
     conditions.push('source = ?');
     params.push(filters.source);
+  }
+  if (filters?.excludeSource) {
+    conditions.push('source != ?');
+    params.push(filters.excludeSource);
   }
   if (filters?.since) {
     conditions.push('created_at >= ?');

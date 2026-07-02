@@ -690,7 +690,7 @@ function SentinelDashboardInner() {
   // --- Panel renderer ---
   const renderPanel = useCallback(() => {
     switch (activeTab) {
-      case "missionControl": return <MissionControlPanel demoMode={demoMode} onNavigate={navigate} operator={operator ?? undefined} range={timeRange as MCTimeRange} />;
+      case "missionControl": return <MissionControlPanel demoMode={demoMode} onNavigate={navigate} operator={operator ?? undefined} range={timeRange as MCTimeRange} filters={dashboardFilters} />;
       case "fleet": return <FleetCommandPanel fleetApi={fleet} filters={dashboardFilters} demoMode={demoMode} threatTrend={threatTrend} onNavigate={navigate} />;
       case "instance": return <InstanceDetailPanel fleetApi={fleet} demoMode={demoMode} filters={dashboardFilters} onNavigate={navigate} />;
       case "correlations": return <CorrelationsPanel filters={dashboardFilters} demoMode={demoMode} onNavigate={navigate} />;

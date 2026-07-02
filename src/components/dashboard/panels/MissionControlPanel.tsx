@@ -1,6 +1,6 @@
 "use client";
 
-import type { TabId } from "../types";
+import type { DashboardFilters, TabId } from "../types";
 import type { NavigateOpts } from "../url-state";
 import { MissionControlHeader } from "./mission-control/MissionControlHeader";
 import { MissionControlSetupBanner } from "./mission-control/MissionControlSetupBanner";
@@ -12,6 +12,7 @@ import { SignalsAndSourceHealth } from "./mission-control/SignalsAndSourceHealth
 import { DetectionTrend } from "./mission-control/DetectionTrend";
 import type { TimeRange } from "./mission-control/types";
 import { useSetupComplete } from "../useSetupComplete";
+import { MissionControlScopeProvider } from "./mission-control/scope";
 
 interface Props {
   demoMode: boolean;
@@ -25,6 +26,9 @@ interface Props {
    *  v0.13.0+: MC consumes this directly instead of maintaining its own
    *  duplicate range picker — see operator directive 2026-05-06. */
   range: TimeRange;
+  /** Global dashboard filters. Mission Control currently consumes the selected
+   *  instance so its KPI/posture/action data matches the context bar. */
+  filters: DashboardFilters;
 }
 
 /**
@@ -53,33 +57,35 @@ interface Props {
  * (G.card, glass tokens, ::before glow overlays). MC's outer wrapper is
  * a bare <div> so children sit flush on the dashboard background.
  */
-export function MissionControlPanel({ demoMode, onNavigate, operator, range }: Props) {
+export function MissionControlPanel({ demoMode, onNavigate, operator, range, filters }: Props) {
   // operator 2026-05-07: empty cockpit pre-setup reads as "all clear" because every
   // tile shows 0. Banner makes the difference explicit so operators don't
   // mistake "no data observed yet" for "no incidents".
   const setupComplete = useSetupComplete(demoMode);
 
   return (
-    <div>
-      <MissionControlSetupBanner setupComplete={setupComplete} onNavigate={onNavigate} />
+    <MissionControlScopeProvider selectedInstance={filters.selectedInstance}>
+      <div>
+        <MissionControlSetupBanner setupComplete={setupComplete} onNavigate={onNavigate} />
 
-      <MissionControlHeader demoMode={demoMode} />
+        <MissionControlHeader demoMode={demoMode} />
 
-      <KpiRow range={range} demoMode={demoMode} onNavigate={onNavigate} />
+        <KpiRow range={range} demoMode={demoMode} onNavigate={onNavigate} />
 
-      <div className="mc-middle-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-        <OperationalPosture demoMode={demoMode} range={range} onNavigate={onNavigate} />
-        <IncidentAging demoMode={demoMode} onNavigate={onNavigate} />
+        <div className="mc-middle-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+          <OperationalPosture demoMode={demoMode} range={range} onNavigate={onNavigate} />
+          <IncidentAging demoMode={demoMode} onNavigate={onNavigate} />
+        </div>
+
+        {/* Action Queue — full-width prioritized table (Task 12) */}
+        <ActionQueue demoMode={demoMode} range={range} onNavigate={onNavigate} operator={operator} />
+
+        {/* Bottom context row — SignalsAndSourceHealth + DetectionTrend (Task 13) */}
+        <div className="mc-bottom-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+          <SignalsAndSourceHealth demoMode={demoMode} range={range} onNavigate={onNavigate} />
+          <DetectionTrend demoMode={demoMode} range={range} onNavigate={onNavigate} />
+        </div>
       </div>
-
-      {/* Action Queue — full-width prioritized table (Task 12) */}
-      <ActionQueue demoMode={demoMode} range={range} onNavigate={onNavigate} operator={operator} />
-
-      {/* Bottom context row — SignalsAndSourceHealth + DetectionTrend (Task 13) */}
-      <div className="mc-bottom-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-        <SignalsAndSourceHealth demoMode={demoMode} range={range} onNavigate={onNavigate} />
-        <DetectionTrend demoMode={demoMode} range={range} onNavigate={onNavigate} />
-      </div>
-    </div>
+    </MissionControlScopeProvider>
   );
 }
