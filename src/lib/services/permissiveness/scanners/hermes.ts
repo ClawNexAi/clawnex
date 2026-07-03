@@ -26,10 +26,20 @@
 //
 // Spec: docs/superpowers/specs/2026-04-23-blast-radius-permissiveness-design.md §8
 
-import fs from "node:fs";
+import type { Dirent } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import YAML from "yaml";
+import {
+  hermesPathExists,
+  isPathInside,
+  isSafeHermesProfileId,
+  readHermesDirectory,
+  readHermesTextFile,
+  resolveHermesChildPath,
+  resolveHermesHomePath,
+  resolveHermesProfilePath,
+} from "@/lib/hermes-paths";
 import { hashToken } from "../token-matching";
 import type {
   HermesProfileLayer,
@@ -40,10 +50,8 @@ import type {
 } from "../types";
 
 const HOME = os.homedir();
-const HERMES_ROOT = process.env.HERMES_HOME ?? path.join(HOME, ".hermes");
-const PROFILES_ROOT = path.join(HERMES_ROOT, "profiles");
-const ACTIVE_PROFILE_FILE = path.join(HERMES_ROOT, "active_profile");
-const ROOT_ENV_FILE = path.join(HERMES_ROOT, ".env");
+const HERMES_ROOT_RESULT = resolveHermesHomePath(process.env.HERMES_HOME ?? path.join(HOME, ".hermes"));
+const HERMES_ROOT = HERMES_ROOT_RESULT.ok ? HERMES_ROOT_RESULT.path : null;
 
 type ConfidenceLevel =
   | "verified_config"
@@ -61,6 +69,22 @@ function prov(source: string, level: ConfidenceLevel = "verified_config"): Prove
 
 function pv<T>(value: T | null, provenance: Provenance): PostureValue<T> {
   return { value, provenance };
+}
+
+function emptyScan(scannedAt: string): HermesScanResult {
+  return { profiles: [], rootEnv: null, channelDirectory: null, scannedAt };
+}
+
+function resolveProfilesRoot(): string | null {
+  if (!HERMES_ROOT) return null;
+  const profilesRoot = resolveHermesChildPath(HERMES_ROOT, "profiles");
+  return profilesRoot.ok ? profilesRoot.path : null;
+}
+
+function resolveRootChild(...segments: string[]): string | null {
+  if (!HERMES_ROOT) return null;
+  const resolved = resolveHermesChildPath(HERMES_ROOT, ...segments);
+  return resolved.ok ? resolved.path : null;
 }
 
 // ---------- dotenv + yaml parsing ----------
@@ -128,32 +152,36 @@ export interface HermesScanResult {
 
 export function scanHermes(): HermesScanResult {
   const scannedAt = nowIso();
+  const profilesRoot = resolveProfilesRoot();
 
-  if (!fs.existsSync(PROFILES_ROOT)) {
-    return { profiles: [], rootEnv: null, channelDirectory: null, scannedAt };
+  if (!HERMES_ROOT || !profilesRoot || !hermesPathExists(profilesRoot)) {
+    return emptyScan(scannedAt);
   }
 
-  const profileIds = fs
-    .readdirSync(PROFILES_ROOT, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && !d.name.startsWith("."))
+  const profileIds = readHermesDirectory(profilesRoot)
+    .filter((d) => d.isDirectory() && isSafeHermesProfileId(d.name) && resolveHermesProfilePath(HERMES_ROOT, d.name).ok)
     .map((d) => d.name);
 
   const { active: activeId, source: activationSource } = detectActiveProfile(profileIds);
 
-  const rootEnv = tryReadDotEnv(ROOT_ENV_FILE);
+  const rootEnv = tryReadDotEnv(resolveRootChild(".env"));
 
-  const profiles = profileIds.map((id) => buildProfile(id, id === activeId, activationSource));
+  const profiles = profileIds
+    .map((id) => buildProfile(id, id === activeId, activationSource))
+    .filter((profile): profile is HermesProfileScan => profile !== null);
 
   // Channel directory — read the active profile's first; fall back to the HERMES_ROOT-level file if present.
   let channelDirectory: unknown = null;
+  const activeProfileDir = activeId ? resolveHermesProfilePath(HERMES_ROOT, activeId) : null;
+  const activeChannelDirectory = activeProfileDir?.ok ? resolveHermesChildPath(activeProfileDir.path, "channel_directory.json") : null;
   const cdCandidates = [
-    activeId ? path.join(PROFILES_ROOT, activeId, "channel_directory.json") : null,
-    path.join(HERMES_ROOT, "channel_directory.json"),
+    activeChannelDirectory?.ok ? activeChannelDirectory.path : null,
+    resolveRootChild("channel_directory.json"),
   ].filter(Boolean) as string[];
   for (const cdPath of cdCandidates) {
-    if (fs.existsSync(cdPath)) {
+    if (hermesPathExists(cdPath)) {
       try {
-        channelDirectory = JSON.parse(fs.readFileSync(cdPath, "utf8"));
+        channelDirectory = JSON.parse(readHermesTextFile(cdPath));
         break;
       } catch {
         /* keep trying */
@@ -170,10 +198,11 @@ function detectActiveProfile(profileIds: string[]): {
   active: string | null;
   source: "active_profile_file" | "default" | "unknown";
 } {
+  const activeProfileFile = resolveRootChild("active_profile");
   try {
-    if (fs.existsSync(ACTIVE_PROFILE_FILE)) {
-      const name = fs.readFileSync(ACTIVE_PROFILE_FILE, "utf8").trim();
-      if (profileIds.includes(name)) return { active: name, source: "active_profile_file" };
+    if (activeProfileFile && hermesPathExists(activeProfileFile)) {
+      const name = readHermesTextFile(activeProfileFile).trim();
+      if (isSafeHermesProfileId(name) && profileIds.includes(name)) return { active: name, source: "active_profile_file" };
     }
   } catch {
     /* ignore */
@@ -188,62 +217,68 @@ function buildProfile(
   id: string,
   active: boolean,
   activationSource: "active_profile_file" | "default" | "unknown",
-): HermesProfileScan {
-  const profileDir = path.join(PROFILES_ROOT, id);
-  const envPath = path.join(profileDir, ".env");
-  const yamlPath = path.join(profileDir, "config.yaml");
-  const pairingDir = path.join(profileDir, "platforms", "pairing");
+): HermesProfileScan | null {
+  if (!HERMES_ROOT) return null;
+  const profileDir = resolveHermesProfilePath(HERMES_ROOT, id);
+  if (!profileDir.ok) return null;
+  const envPath = resolveHermesChildPath(profileDir.path, ".env");
+  const yamlPath = resolveHermesChildPath(profileDir.path, "config.yaml");
+  const pairingDir = resolveHermesChildPath(profileDir.path, "platforms", "pairing");
 
-  const env = tryReadDotEnv(envPath) ?? {};
-  const yamlDoc = tryReadYaml(yamlPath) ?? {};
+  const env = tryReadDotEnv(envPath.ok ? envPath.path : null) ?? {};
+  const yamlDoc = tryReadYaml(yamlPath.ok ? yamlPath.path : null) ?? {};
 
-  const discordPaired = readPairing(pairingDir, "discord");
-  const telegramPaired = readPairing(pairingDir, "telegram");
-  const slackPaired = readPairing(pairingDir, "slack");
+  const discordPaired = readPairing(pairingDir.ok ? pairingDir.path : null, "discord");
+  const telegramPaired = readPairing(pairingDir.ok ? pairingDir.path : null, "telegram");
+  const slackPaired = readPairing(pairingDir.ok ? pairingDir.path : null, "slack");
 
-  const skillScan = scanProfileSkills(profileDir);
+  const skillScan = scanProfileSkills(profileDir.path);
 
   return {
     id,
     active,
     activationSource: active ? activationSource : "unknown",
-    source: profileDir,
-    discord: buildHermesDiscord(env, yamlDoc, profileDir, discordPaired),
-    slack: buildHermesSlack(env, yamlDoc, profileDir, slackPaired),
-    telegram: buildHermesTelegram(env, yamlDoc, profileDir, telegramPaired),
+    source: profileDir.path,
+    discord: buildHermesDiscord(env, yamlDoc, profileDir.path, discordPaired),
+    slack: buildHermesSlack(env, yamlDoc, profileDir.path, slackPaired),
+    telegram: buildHermesTelegram(env, yamlDoc, profileDir.path, telegramPaired),
     skills: skillScan.skills,
     toolUnion: skillScan.toolUnion,
     skillsScannedDir: skillScan.scannedDir,
   };
 }
 
-function tryReadDotEnv(p: string): Record<string, string> | null {
+function tryReadDotEnv(p: string | null): Record<string, string> | null {
   try {
-    if (!fs.existsSync(p)) return null;
-    return parseDotEnv(fs.readFileSync(p, "utf8"));
+    if (!p) return null;
+    if (!hermesPathExists(p)) return null;
+    return parseDotEnv(readHermesTextFile(p));
   } catch {
     return null;
   }
 }
 
-function tryReadYaml(p: string): Record<string, any> | null {
+function tryReadYaml(p: string | null): Record<string, any> | null {
   try {
-    if (!fs.existsSync(p)) return null;
-    return YAML.parse(fs.readFileSync(p, "utf8")) ?? {};
+    if (!p) return null;
+    if (!hermesPathExists(p)) return null;
+    return YAML.parse(readHermesTextFile(p)) ?? {};
   } catch {
     return null;
   }
 }
 
-function readPairing(dir: string, platform: string): {
+function readPairing(dir: string | null, platform: string): {
   userId: string;
   userName: string;
   approvedAt: string;
 }[] {
-  const file = path.join(dir, `${platform}-approved.json`);
-  if (!fs.existsSync(file)) return [];
+  if (!dir) return [];
+  const file = resolveHermesChildPath(dir, `${platform}-approved.json`);
+  if (!file.ok) return [];
+  if (!hermesPathExists(file.path)) return [];
   try {
-    const doc = JSON.parse(fs.readFileSync(file, "utf8"));
+    const doc = JSON.parse(readHermesTextFile(file.path));
     return Object.entries(doc).map(([userId, meta]: [string, any]) => ({
       userId,
       userName: typeof meta?.user_name === "string" ? meta.user_name : "",
@@ -532,7 +567,7 @@ export function extractToolsFromSkillBody(body: string): string[] {
 function parseSkillFile(filePath: string): string[] {
   let raw: string;
   try {
-    raw = fs.readFileSync(filePath, "utf8");
+    raw = readHermesTextFile(filePath);
   } catch {
     return [];
   }
@@ -547,37 +582,55 @@ function parseSkillFile(filePath: string): string[] {
   return extractToolsFromSkillBody(body);
 }
 
+function resolveSkillScanProfileDir(profileDir: string): string | null {
+  if (!HERMES_ROOT) return null;
+  const profilesRoot = resolveProfilesRoot();
+  if (!profilesRoot) return null;
+  const candidate = path.resolve(profileDir);
+  if (!isPathInside(profilesRoot, candidate)) return null;
+  const relative = path.relative(profilesRoot, candidate);
+  const parts = relative.split(path.sep).filter(Boolean);
+  if (parts.length !== 1 || !isSafeHermesProfileId(parts[0])) return null;
+  const resolved = resolveHermesProfilePath(HERMES_ROOT, parts[0]);
+  return resolved.ok ? resolved.path : null;
+}
+
 /** Walk every SKILL.md under <profileDir>/skills/ and return aggregated tool union. */
 export function scanProfileSkills(profileDir: string): {
   skills: HermesSkillScan[];
   toolUnion: string[];
   scannedDir: string | null;
 } {
-  const skillsRoot = path.join(profileDir, "skills");
-  if (!fs.existsSync(skillsRoot)) {
+  const safeProfileDir = resolveSkillScanProfileDir(profileDir);
+  if (!safeProfileDir) {
+    return { skills: [], toolUnion: [], scannedDir: null };
+  }
+  const skillsRoot = resolveHermesChildPath(safeProfileDir, "skills");
+  if (!skillsRoot.ok || !hermesPathExists(skillsRoot.path)) {
     return { skills: [], toolUnion: [], scannedDir: null };
   }
   const skills: HermesSkillScan[] = [];
   const unionSet = new Set<string>();
 
   function walk(dir: string) {
-    let entries: fs.Dirent[];
+    let entries: Dirent[];
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
+      entries = readHermesDirectory(dir);
     } catch {
       return;
     }
     for (const e of entries) {
-      const p = path.join(dir, e.name);
+      const child = resolveHermesChildPath(dir, e.name);
+      if (!child.ok) continue;
       if (e.isDirectory()) {
         if (e.name.startsWith(".")) continue;
-        walk(p);
+        walk(child.path);
       } else if (e.isFile() && e.name === "SKILL.md") {
-        const tools = parseSkillFile(p);
+        const tools = parseSkillFile(child.path);
         if (tools.length > 0) {
           skills.push({
-            id: path.relative(skillsRoot, path.dirname(p)) || path.basename(path.dirname(p)),
-            source: p,
+            id: path.relative(skillsRoot.path, path.dirname(child.path)) || path.basename(path.dirname(child.path)),
+            source: child.path,
             toolsExtracted: tools,
           });
           for (const t of tools) unionSet.add(t);
@@ -586,10 +639,10 @@ export function scanProfileSkills(profileDir: string): {
     }
   }
 
-  walk(skillsRoot);
+  walk(skillsRoot.path);
   return {
     skills: skills.sort((a, b) => a.id.localeCompare(b.id)),
     toolUnion: Array.from(unionSet).sort(),
-    scannedDir: skillsRoot,
+    scannedDir: skillsRoot.path,
   };
 }

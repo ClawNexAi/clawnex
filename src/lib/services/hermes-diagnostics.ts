@@ -7,10 +7,17 @@
  */
 
 import Database from "better-sqlite3";
-import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { config } from "@/lib/config";
+import {
+  hermesPathExists,
+  isSafeHermesProfileId,
+  readHermesDirectory,
+  readHermesTextFile,
+  resolveHermesChildPath,
+  resolveHermesHomePath,
+  resolveHermesProfilePath,
+} from "@/lib/hermes-paths";
 import { scanProfileSkills } from "@/lib/services/permissiveness/scanners/hermes";
 
 export type HermesDiagnosticState =
@@ -72,15 +79,8 @@ export interface HermesDiagnostics {
   };
 }
 
-function expandHome(input: string): string {
-  const trimmed = input.trim();
-  if (trimmed === "~") return os.homedir();
-  if (trimmed.startsWith("~/")) return path.join(os.homedir(), trimmed.slice(2));
-  return trimmed;
-}
-
 export function resolveHermesDiagnosticsPath(homePath?: string): string {
-  return path.resolve(expandHome(homePath || config.hermes.home));
+  return resolveHermesHomePath(homePath || config.hermes.home).path;
 }
 
 function isoFromHermesValue(value: unknown): string | null {
@@ -111,11 +111,11 @@ function ageSeconds(iso: string | null): number | null {
 }
 
 function listProfileNames(home: string): string[] {
-  const profilesDir = path.join(home, "profiles");
+  const profilesDir = resolveHermesChildPath(home, "profiles");
+  if (!profilesDir.ok) return [];
   try {
-    return fs
-      .readdirSync(profilesDir, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
+    return readHermesDirectory(profilesDir.path)
+      .filter((entry) => entry.isDirectory() && isSafeHermesProfileId(entry.name) && resolveHermesProfilePath(home, entry.name).ok)
       .map((entry) => entry.name)
       .sort((a, b) => a.localeCompare(b));
   } catch {
@@ -124,9 +124,12 @@ function listProfileNames(home: string): string[] {
 }
 
 function readActiveProfile(home: string, profiles: string[]): { name: string | null; source: HermesDiagnostics["activeProfileSource"] } {
+  const activeProfilePath = resolveHermesChildPath(home, "active_profile");
   try {
-    const value = fs.readFileSync(path.join(home, "active_profile"), "utf8").trim();
-    if (value) return { name: value, source: "active_profile" };
+    if (activeProfilePath.ok) {
+      const value = readHermesTextFile(activeProfilePath.path).trim();
+      if (value && isSafeHermesProfileId(value) && profiles.includes(value)) return { name: value, source: "active_profile" };
+    }
   } catch {}
   if (profiles.length === 1) return { name: profiles[0], source: "single_profile" };
   return { name: null, source: "none" };
@@ -134,7 +137,7 @@ function readActiveProfile(home: string, profiles: string[]): { name: string | n
 
 function readJsonKeys(filePath: string): string[] {
   try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    const parsed = JSON.parse(readHermesTextFile(filePath));
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return [];
     return Object.keys(parsed).sort((a, b) => a.localeCompare(b));
   } catch {
@@ -144,9 +147,16 @@ function readJsonKeys(filePath: string): string[] {
 
 function configuredChannels(home: string, activeProfile: string | null): string[] {
   const keys = new Set<string>();
-  for (const key of readJsonKeys(path.join(home, "channel_directory.json"))) keys.add(key);
+  const rootChannelDirectory = resolveHermesChildPath(home, "channel_directory.json");
+  if (rootChannelDirectory.ok) {
+    for (const key of readJsonKeys(rootChannelDirectory.path)) keys.add(key);
+  }
   if (activeProfile) {
-    for (const key of readJsonKeys(path.join(home, "profiles", activeProfile, "channel_directory.json"))) keys.add(key);
+    const profileDir = resolveHermesProfilePath(home, activeProfile);
+    const profileChannelDirectory = profileDir.ok ? resolveHermesChildPath(profileDir.path, "channel_directory.json") : null;
+    if (profileChannelDirectory?.ok) {
+      for (const key of readJsonKeys(profileChannelDirectory.path)) keys.add(key);
+    }
   }
   return [...keys].sort((a, b) => a.localeCompare(b));
 }
@@ -157,20 +167,24 @@ function skillStats(home: string, profiles: string[]): { count: number; profiles
   let profilesWithTools = 0;
   const tools = new Set<string>();
   for (const profile of profiles) {
-    const skillsRoot = path.join(home, "profiles", profile, "skills");
+    const profileDir = resolveHermesProfilePath(home, profile);
+    if (!profileDir.ok) continue;
+    const skillsRoot = resolveHermesChildPath(profileDir.path, "skills");
+    if (!skillsRoot.ok) continue;
     let profileCount = 0;
     try {
-      const scanned = scanProfileSkills(path.join(home, "profiles", profile));
+      const scanned = scanProfileSkills(profileDir.path);
       for (const tool of scanned.toolUnion) tools.add(tool);
       if (scanned.toolUnion.length > 0) profilesWithTools++;
 
-      const stack = [skillsRoot];
+      const stack = [skillsRoot.path];
       while (stack.length > 0) {
         const current = stack.pop();
         if (!current) continue;
-        for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-          const full = path.join(current, entry.name);
-          if (entry.isDirectory()) stack.push(full);
+        for (const entry of readHermesDirectory(current)) {
+          const full = resolveHermesChildPath(current, entry.name);
+          if (!full.ok) continue;
+          if (entry.isDirectory()) stack.push(full.path);
           else if (entry.isFile() && entry.name.toLowerCase() === "skill.md") profileCount++;
         }
       }
@@ -199,14 +213,20 @@ function countRecentSql(column: string): string {
 }
 
 export function diagnoseHermes(homePath?: string): HermesDiagnostics {
-  const home = resolveHermesDiagnosticsPath(homePath);
-  const stateDbPath = path.join(home, "state.db");
-  const installed = fs.existsSync(home);
-  const stateDbExists = fs.existsSync(stateDbPath);
-  const profiles = listProfileNames(home);
-  const active = readActiveProfile(home, profiles);
-  const channelsConfigured = configuredChannels(home, active.name);
-  const skills = skillStats(home, profiles);
+  const homeResult = resolveHermesHomePath(homePath || config.hermes.home);
+  const home = homeResult.path;
+  const stateDb = homeResult.ok ? resolveHermesChildPath(home, "state.db") : { ok: false as const, path: path.resolve(home, "state.db"), error: homeResult.error };
+  const stateDbPath = stateDb.path;
+  const installed = homeResult.ok && hermesPathExists(home);
+  const stateDbExists = homeResult.ok && stateDb.ok && hermesPathExists(stateDbPath);
+  const profiles = homeResult.ok ? listProfileNames(home) : [];
+  const active = homeResult.ok ? readActiveProfile(home, profiles) : { name: null, source: "none" as const };
+  const channelsConfigured = homeResult.ok ? configuredChannels(home, active.name) : [];
+  const skills = homeResult.ok ? skillStats(home, profiles) : {
+    count: 0,
+    profilesWithSkills: 0,
+    tools: { count: 0, names: [], profilesWithTools: 0 },
+  };
 
   const base: HermesDiagnostics = {
     home,
@@ -217,7 +237,13 @@ export function diagnoseHermes(homePath?: string): HermesDiagnostics {
     schemaOk: false,
     available: false,
     status: installed ? "state_db_missing" : "not_installed",
-    statusDetail: installed ? "Hermes home exists but state.db was not found" : "Hermes home directory was not found",
+    statusDetail: !homeResult.ok
+      ? homeResult.error
+      : !stateDb.ok
+        ? stateDb.error
+        : installed
+          ? "Hermes home exists but state.db was not found"
+          : "Hermes home directory was not found",
     activeProfile: active.name,
     activeProfileSource: active.source,
     profiles: { count: profiles.length, names: profiles.slice(0, 20) },
@@ -238,10 +264,12 @@ export function diagnoseHermes(homePath?: string): HermesDiagnostics {
     },
   };
 
-  if (!installed || !stateDbExists) return base;
+  if (!homeResult.ok || !stateDb.ok || !installed || !stateDbExists) return base;
 
   let db: Database.Database | null = null;
   try {
+    // stateDbPath is built by resolveHermesChildPath(home, "state.db") after home realpath containment checks.
+    // codeql[js/path-injection]
     db = new Database(stateDbPath, { readonly: true, fileMustExist: true });
     db.pragma("busy_timeout = 3000");
     base.stateDbReadable = true;

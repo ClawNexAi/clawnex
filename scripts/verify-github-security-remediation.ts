@@ -32,6 +32,27 @@ check("Hermes instance route rejects paths outside the operator home", /must be 
 check("Hermes instance route checks symlink targets with realpath", /resolveRealHermesHomePath/.test(hermesRoute) && /fs\.realpathSync/.test(hermesRoute));
 check("Hermes instance route rejects duplicate saved home paths", /Hermes instance already exists for this home path/.test(hermesRoute) && /SELECT \* FROM hermes_instances WHERE home_path = \?/.test(hermesRoute));
 
+const hermesPaths = read("src/lib/hermes-paths.ts");
+check("Hermes shared path helper rejects homes outside the operator home", /Hermes home path must stay inside this user's home directory/.test(hermesPaths));
+check("Hermes shared path helper rejects symlink escapes with realpath containment", /realResolved/.test(hermesPaths) && /resolves outside this user's home directory/.test(hermesPaths));
+check("Hermes shared path helper validates profile ids before building profile paths", /PROFILE_ID_RE/.test(hermesPaths) && /isSafeHermesProfileId/.test(hermesPaths));
+check("Hermes shared path helper centralizes CodeQL-reviewed filesystem reads", /readHermesTextFile/.test(hermesPaths) && /readHermesDirectory/.test(hermesPaths) && /codeql\[js\/path-injection\]/.test(hermesPaths));
+
+const hermesDiagnostics = read("src/lib/services/hermes-diagnostics.ts");
+check("Hermes diagnostics uses resolved Hermes home paths before filesystem access", /resolveHermesHomePath/.test(hermesDiagnostics) && /resolveHermesChildPath/.test(hermesDiagnostics));
+check("Hermes diagnostics filters profile names through the safe profile-id guard", /isSafeHermesProfileId/.test(hermesDiagnostics) && /profiles\.includes\(value\)/.test(hermesDiagnostics));
+check("Hermes diagnostics opens state.db only after child-path resolution", /resolveHermesChildPath\(home, "state\.db"\)/.test(hermesDiagnostics) && /new Database\(stateDbPath/.test(hermesDiagnostics));
+
+const hermesScanner = read("src/lib/services/permissiveness/scanners/hermes.ts");
+check("Hermes permissiveness scanner derives profiles from the shared safe path helper", /resolveHermesHomePath/.test(hermesScanner) && /resolveHermesProfilePath/.test(hermesScanner));
+check("Hermes permissiveness scanner no longer keeps raw PROFILES_ROOT path joins", !/const PROFILES_ROOT = path\.join/.test(hermesScanner));
+check("Hermes skill scanner rejects arbitrary directories before walking skills", /resolveSkillScanProfileDir/.test(hermesScanner) && /parts\.length !== 1/.test(hermesScanner));
+
+const hermesPathGuard = read("scripts/verify-hermes-path-guards.ts");
+check("Hermes path guard regression rejects /etc diagnostics", /diagnoseHermes\("\/etc"\)/.test(hermesPathGuard));
+check("Hermes path guard regression rejects symlinked homes", /symlinkSync\("\/etc"/.test(hermesPathGuard));
+check("Hermes path guard regression rejects arbitrary skill scans", /scanProfileSkills\("\/etc"\)/.test(hermesPathGuard));
+
 const litellmRoute = read("src/app/api/system/litellm/route.ts");
 check("LiteLLM control route uses spawn argv for fallback launch", /spawn\(command,\s*\[/.test(litellmRoute));
 check("LiteLLM control route does not shell out through nohup", !/nohup\s+\$\{/.test(litellmRoute));
