@@ -1,9 +1,9 @@
 # ClawNex Release Notes & Changelog
 
 **Document ID:** CLAWNEX-REL-001
-**Version:** 1.20
+**Version:** 1.21
 **Classification:** For Distribution
-**Last Updated:** 2026-06-12
+**Last Updated:** 2026-07-02
 **Status:** Living Document
 
 **See also:** `20-product-roadmap.md`, `21-project-history.md`, `14-data-dictionary.md`, `11-security-architecture.md`, `12-deployment-guide.md`.
@@ -29,7 +29,96 @@ Each release entry below is structured against a fixed metadata contract so that
 
 ---
 
-## Current Release: v0.15.2-alpha (2026-07-02) — Hermes first-class diagnostics + durable ingestion
+## Current Release: v0.15.5-alpha (2026-07-02) — Hermes custom-provider routing
+
+**Release Date:** 2026-07-02
+**Version:** v0.15.5-alpha
+**Type:** Alpha patch (routing control)
+**Status:** Public release line.
+**Scope:** Adds config-backed Hermes custom-provider routing in a dedicated Hermes Routing card. OpenClaw routing remains in OpenClaw Routing, while writable Hermes `custom_providers` are selected, saved, reverted, and restarted from Hermes Routing. Both route through the local LiteLLM proxy for real-time Prompt Shield scanning. Hermes OAuth/session-bound and watcher-only rows remain read-only.
+**Upgrade Path:** Source: v0.15.4-alpha. In-place upgrade (`git pull`, `npm ci`, `npm run build`, service restart). No schema migration.
+**Breaking Changes:** None.
+**Security Fixes:** Defense-in-depth: Hermes routing sidecars store only endpoint metadata and key environment variable names. API keys remain in Hermes-owned configuration/environment and are not copied into ClawNex.
+
+**Added:**
+
+- `/api/connector-routing` actions `apply-hermes` and `revert-hermes` for saving and reverting selected Hermes custom-provider routes.
+- `/api/hermes/gateway/restart` for detecting and restarting known Hermes gateway supervisors.
+- Hermes config discovery reads the default Hermes home and saved active Hermes instances, then surfaces `custom_providers` and the models that depend on them.
+- Configuration → Hermes Routing as a distinct operator panel, separate from Configuration → OpenClaw Routing.
+- `scripts/verify-connector-routing-inventory.ts` now proves Hermes custom-provider route/apply/revert behavior, LiteLLM `key_env` usage, and sidecar secret hygiene.
+
+**Changed:**
+
+- Configuration → OpenClaw Routing now shows only OpenClaw selective routing and legacy OpenClaw wire/revert controls.
+- Configuration → Hermes Routing treats writable Hermes config-backed rows as selectable and exposes **Save Hermes Wire**, **Revert Hermes Wire**, and **Restart Gateway** controls while leaving OAuth/session-bound or watcher-only Hermes rows read-only.
+- Provider-level routing guidance now applies to both OpenClaw providers and Hermes `custom_providers`: selecting a model routes its provider endpoint, so sibling models on the same provider follow that route.
+- Hermes restore is conservative. If an operator edits a provider after ClawNex routes it, ClawNex preserves that operator edit instead of blindly reverting.
+
+**Known Limits:**
+
+- Hermes providers that rely on OAuth/session auth or only appear in watcher events cannot be safely proxied by ClawNex and remain read-only/retrospective.
+- Affected agent runtimes must be restarted after saving or reverting routing so they reload their provider configuration.
+
+---
+
+## Previous: v0.15.4-alpha (2026-07-02) — Routing label clarity + proxy bridge UX
+
+**Release Date:** 2026-07-02
+**Version:** v0.15.4-alpha
+**Type:** Alpha patch (operator UX refinement)
+**Status:** Public release line.
+**Scope:** Refines repeated status labels in dense dashboard lists. Selective Connector Routing now includes a compact routing-label legend, surfaces the local LiteLLM entry as a non-selectable proxy bridge, and keeps provider-level enforcement guidance in one explanatory place instead of repeating it on every model row.
+**Upgrade Path:** Source: v0.15.3-alpha. In-place upgrade (`git pull`, `npm ci`, `npm run build`, service restart). No schema migration.
+**Breaking Changes:** None.
+**Security Fixes:** None.
+
+**Changed:**
+
+- Configuration → OpenClaw Routing now shows a compact legend defining `PROVIDER`, `MODEL`, `PROXY BRIDGE`, `ROUTED`, `DIRECT`, `SELECTED`, and `READ-ONLY`.
+- The local LiteLLM bridge appears as `PROXY BRIDGE` and is no longer presented as a selectable upstream provider.
+- Dense badge lists in Shield Tests, Models & Cost, and Tools & Access now use one nearby legend instead of relying on repeated per-row explanations.
+- Provider-level routing guidance remains available through the routing help text and help docs, but no longer clutters every model row.
+
+**Known Limits:**
+
+- OpenClaw still enforces routing at provider endpoint level. Selecting an individual model routes that model's provider; sibling models on that same provider follow the provider route.
+- Hermes currently supports inventory and drift review only; real-time Hermes rewiring is intentionally blocked until Hermes exposes a safe write/control contract.
+
+---
+
+## Previous: v0.15.3-alpha (2026-07-02) — Selective connector routing inventory
+
+**Release Date:** 2026-07-02
+**Version:** v0.15.3-alpha
+**Type:** Alpha patch (routing control + operator visibility)
+**Status:** Public release line.
+**Scope:** Adds a selective connector-routing inventory for OpenClaw and Hermes. Operators can review discovered providers/models, select the OpenClaw providers/models that should route through the local LiteLLM proxy, apply OpenClaw provider-level routing, and receive dashboard/header notifications when connector inventory changes. Hermes is surfaced with the same inventory/drift review pattern, but remains read-only until Hermes exposes a safe routing control contract.
+**Upgrade Path:** Source: v0.15.2-alpha. In-place upgrade (`git pull`, `npm ci`, `npm run build`, service restart). Additive SQLite schema migration creates `connector_routing_items`.
+**Breaking Changes:** None.
+**Security Fixes:** Defense-in-depth: selective OpenClaw routing stores only non-secret endpoint metadata in its sidecar. Provider API keys are preserved in `openclaw.json` and are not copied into ClawNex routing sidecars or API responses.
+
+**Added:**
+
+- `connector_routing_items` table for provider/model inventory, operator desired-route state, drift markers, and capability flags.
+- `/api/connector-routing` for inventory sync, OpenClaw selection updates, and OpenClaw routing application.
+- Configuration → OpenClaw Routing now includes a selective connector-routing section with checkboxes, drift badges, OpenClaw apply action, and Hermes read-only inventory.
+- Header Updates badge now counts connector-routing drift as an actionable notification and deep-links to the routing card.
+- `scripts/verify-connector-routing-inventory.ts` to prove OpenClaw selective routing, sidecar secret hygiene, restore behavior, and Hermes read-only enforcement.
+
+**Changed:**
+
+- Fresh installer orchestration no longer silently preseeds the legacy all-provider OpenClaw wire. Initial routing is now selected from the dashboard.
+- Welcome Wizard routing step opens the selective routing card first. The legacy global wire remains available as an explicit secondary action for compatibility.
+
+**Known Limits:**
+
+- OpenClaw enforces routing at provider endpoint level. Selecting an individual model routes that model's provider; sibling models on that same provider follow the provider route.
+- Hermes currently supports inventory and drift review only; real-time Hermes rewiring is intentionally blocked until Hermes exposes a safe write/control contract.
+
+---
+
+## Previous: v0.15.2-alpha (2026-07-02) — Hermes first-class diagnostics + durable ingestion
 
 **Release Date:** 2026-07-02
 **Version:** v0.15.2-alpha

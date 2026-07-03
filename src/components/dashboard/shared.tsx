@@ -132,6 +132,62 @@ export function Badge({ label, color, tip }: { label: string; color: string; tip
   );
 }
 
+export interface BadgeLegendItem {
+  label: string;
+  color: string;
+  description: React.ReactNode;
+}
+
+/**
+ * Compact legend for dense repeated badge lists. Use this once near a table or
+ * list instead of repeating the same tooltip on every badge instance.
+ */
+export function BadgeLegend({
+  items,
+  title = "Label legend",
+  detailLabel = "definitions",
+  style,
+}: {
+  items: BadgeLegendItem[];
+  title?: string;
+  detailLabel?: string;
+  style?: React.CSSProperties;
+}) {
+  if (items.length === 0) return null;
+  const content = (
+    <div style={{ display: "grid", gap: 8, maxWidth: 420 }}>
+      {items.map(item => (
+        <div key={item.label} style={{ display: "grid", gridTemplateColumns: "max-content 1fr", gap: 8, alignItems: "start" }}>
+          <Badge label={item.label} color={item.color} tip={null} />
+          <span style={{ fontSize: 11, lineHeight: 1.45, color: C.txS }}>{item.description}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      flexWrap: "wrap",
+      padding: "6px 8px",
+      border: `1px solid ${C.glassBorderSubtle}`,
+      borderRadius: 4,
+      background: C.glassSurfTrans,
+      ...style,
+    }}>
+      <span style={{ fontSize: 10, color: C.txT, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em" }}>{title}</span>
+      {items.map(item => <Badge key={item.label} label={item.label} color={item.color} tip={null} />)}
+      <Tooltip placement="top" variant="detail" content={content}>
+        <span style={{ fontSize: 10, color: C.cyan, cursor: "help", borderBottom: `1px dotted ${C.cyan}` }}>
+          {detailLabel}
+        </span>
+      </Tooltip>
+    </div>
+  );
+}
+
 /** Shield verdict badge — BLOCK (red), REVIEW (amber), ALLOW (green). */
 export function VBadge({ verdict }: { verdict: string }) {
   const color = verdict === "BLOCK" ? C.danger : verdict === "REVIEW" ? C.warn : C.green;

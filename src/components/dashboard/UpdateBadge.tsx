@@ -42,12 +42,15 @@ interface UpdateSource {
   ruleCount?: number;
   releaseUrl?: string | null;
   updateAvailable: boolean;
+  openclawChanges?: number;
+  hermesChanges?: number;
 }
 
 interface UpdateStatusResponse {
   openclaw?: UpdateSource;
   clawkeeper?: UpdateSource;
   defenseclaw?: UpdateSource;
+  connectorRouting?: UpdateSource;
   lastChecked: string;
 }
 
@@ -143,12 +146,19 @@ export function UpdateBadge({ navigate }: Props) {
   //                      "never touch OpenClaw" rule).
   //                    - ClawNex Shield Rules ship bundled with ClawNex
   //                      releases; only changing on a ClawNex version bump.
+  const connectorRoutingFocusKey =
+    data.connectorRouting?.hermesChanges && !data.connectorRouting?.openclawChanges
+      ? "hermesRouting"
+      : "openclawRouting";
+
   const sources: Array<{
     key: string;
     src: UpdateSource | undefined;
     label: string;
     kind: "actionable" | "info";
+    focusKey?: string;
   }> = [
+    { key: "clawnex-connector-routing", src: data.connectorRouting, label: "Connector Routing", kind: "actionable", focusKey: connectorRoutingFocusKey },
     { key: "clawnex-clawkeeper", src: data.clawkeeper,  label: "Host Security Scanner", kind: "info" },
     { key: "clawnex-openclaw",   src: data.openclaw,    label: "OpenClaw",            kind: "info" },
     { key: "clawnex-defenseclaw", src: data.defenseclaw, label: "ClawNex Shield Rules",  kind: "info" },
@@ -158,7 +168,8 @@ export function UpdateBadge({ navigate }: Props) {
 
   const goToUpdates = () => {
     setOpen(false);
-    if (navigate) navigate("configuration", "updates");
+    const routingNeedsReview = data.connectorRouting?.updateAvailable;
+    if (navigate) navigate("configuration", routingNeedsReview ? connectorRoutingFocusKey : "updates");
   };
 
   return (

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { C, F } from "../constants";
-import { Badge, Dot, CollapsibleCard, CategorySection, LoadingSpinner, PaginationFooter, formatTimeAgo, useStickyBoolean } from "../shared";
+import { Badge, BadgeLegend, Dot, CollapsibleCard, CategorySection, LoadingSpinner, PaginationFooter, formatTimeAgo, useStickyBoolean } from "../shared";
 import { Tooltip } from "../tooltip";
 import { timeAgo } from "../utils";
 import type { TabId } from "../types";
@@ -90,6 +90,25 @@ interface HermesInstanceConfig {
   statusDetail?: string | null;
   session_count: number;
   diagnostics?: HermesDiagnostics | null;
+}
+
+function normalizeHermesPathKey(value?: string | null): string {
+  return (value || "").trim().replace(/\/+$/, "");
+}
+
+function hermesStateDbFromHome(homePath?: string | null): string {
+  const home = normalizeHermesPathKey(homePath);
+  return home ? `${home}/state.db` : "";
+}
+
+function hermesInstanceMatchesDiagnostics(inst: HermesInstanceConfig, diag: HermesDiagnostics | null | undefined): boolean {
+  if (!diag) return false;
+  const instHome = normalizeHermesPathKey(inst.diagnostics?.home || inst.home_path);
+  const diagHome = normalizeHermesPathKey(diag.home);
+  const instStateDb = normalizeHermesPathKey(inst.diagnostics?.stateDbPath || hermesStateDbFromHome(inst.home_path));
+  const diagStateDb = normalizeHermesPathKey(diag.stateDbPath);
+
+  return (!!instHome && instHome === diagHome) || (!!instStateDb && instStateDb === diagStateDb);
 }
 
 // ---------------------------------------------------------------------------
@@ -2260,8 +2279,45 @@ interface RoutingSidecar {
   paths: Array<{ path: string[]; valueSha256: string; operation: 'set' | 'set-if-missing' }>;
 }
 
+interface ConnectorRoutingItem {
+  id: string;
+  connector: 'openclaw' | 'hermes';
+  sourceId: string;
+  itemType: 'provider' | 'model';
+  providerId: string;
+  modelId: string;
+  displayName: string;
+  baseUrl: string | null;
+  capability: 'provider-routing' | 'model-inventory' | 'read-only' | 'unsupported';
+  currentRoute: 'routed' | 'direct' | 'unknown' | 'unsupported';
+  desiredRoute: 'routed' | 'direct';
+  present: boolean;
+  metadata: Record<string, unknown>;
+  isNew?: boolean;
+  isRemoved?: boolean;
+  isChanged?: boolean;
+}
+
+interface ConnectorRoutingSummary {
+  status: 'ok' | 'missing' | 'read-only' | 'error';
+  detail: string;
+  items: ConnectorRoutingItem[];
+  drift: { new: number; removed: number; changed: number; total: number };
+  selected: number;
+  scannedAt: string;
+}
+
+interface ConnectorRoutingResponse {
+  litellmTarget: string;
+  openclaw: ConnectorRoutingSummary;
+  hermes: ConnectorRoutingSummary;
+  driftTotal: number;
+  scannedAt: string;
+}
+
 function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) {
   const [routingData, setRoutingData] = useState<{ providers: Array<{ id: string; name: string; baseUrl: string; routed: boolean }> } | null>(null);
+  const [connectorRouting, setConnectorRouting] = useState<ConnectorRoutingResponse | null>(null);
   const [sidecar, setSidecar] = useState<RoutingSidecar | null>(null);
   const [openclawVersion, setOpenClawVersion] = useState<string | null>(null);
   const [configMissing, setConfigMissing] = useState(false);
@@ -2273,10 +2329,13 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
   // / supervisor detected).
   const [working, setWorking] = useState<'wire' | 'revert' | 'force-wire' | 'restart' | null>(null);
   const [lastResult, setLastResult] = useState<{ ok: boolean; status: string; detail: string; preservedPaths?: string[][]; reclaimedDespiteEditPaths?: string[][]; restartRequired?: boolean; output?: string; elapsedMs?: number; supervisor?: string; manualCommand?: string } | null>(null);
+  const [connectorWorking, setConnectorWorking] = useState<'sync' | 'select' | 'apply-openclaw' | 'apply-hermes' | 'revert-hermes' | 'restart-hermes' | null>(null);
+  const [connectorResult, setConnectorResult] = useState<{ ok: boolean; status: string; detail: string; restartRequired?: boolean; connector?: 'openclaw' | 'hermes' | 'all' } | null>(null);
   // Gateway supervisor probe -- determines whether we render an active
   // Restart button or a "manual command" hint. Probed once on mount;
   // re-probed after any wire/revert/restart so the button stays honest.
   const [supervisor, setSupervisor] = useState<{ kind: string; label: string; manualCommand: string } | null>(null);
+  const [hermesSupervisor, setHermesSupervisor] = useState<{ kind: string; label: string; manualCommand: string; targets?: string[] } | null>(null);
 
   const fetchRouting = useCallback(async () => {
     setLoading(true);
@@ -2303,6 +2362,15 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
     setLoading(false);
   }, []);
 
+  const fetchConnectorRouting = useCallback(async () => {
+    try {
+      const res = await fetch("/api/connector-routing");
+      if (res.ok) {
+        setConnectorRouting(await res.json());
+      }
+    } catch { /* inventory is advisory; keep the OpenClaw routing card usable */ }
+  }, []);
+
   const fetchSupervisor = useCallback(async () => {
     try {
       const res = await fetch("/api/openclaw/gateway/restart");
@@ -2313,7 +2381,17 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
     } catch { /* silent -- the manual hint is the fallback */ }
   }, []);
 
-  useEffect(() => { fetchRouting(); fetchSupervisor(); }, [fetchRouting, fetchSupervisor]);
+  const fetchHermesSupervisor = useCallback(async () => {
+    try {
+      const res = await fetch("/api/hermes/gateway/restart");
+      if (res.ok) {
+        const d = await res.json();
+        if (d.ok && d.supervisor) setHermesSupervisor(d.supervisor);
+      }
+    } catch { /* silent -- Hermes restart falls back to manual guidance */ }
+  }, []);
+
+  useEffect(() => { fetchRouting(); fetchSupervisor(); fetchHermesSupervisor(); fetchConnectorRouting(); }, [fetchRouting, fetchSupervisor, fetchHermesSupervisor, fetchConnectorRouting]);
 
   const performRestart = useCallback(async () => {
     setWorking('restart');
@@ -2365,6 +2443,7 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
       });
       // Re-read state so the badges refresh (ROUTED indicator, sidecar block).
       await fetchRouting();
+      await fetchConnectorRouting();
     } catch (err) {
       setLastResult({
         ok: false,
@@ -2373,9 +2452,209 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
       });
     }
     setWorking(null);
-  }, [fetchRouting]);
+  }, [fetchRouting, fetchConnectorRouting]);
 
-  const litellmUrl = "http://127.0.0.1:4001/v1";
+  const selectConnectorItem = useCallback(async (item: ConnectorRoutingItem, desiredRoute: 'routed' | 'direct') => {
+    setConnectorWorking('select');
+    setConnectorResult(null);
+    try {
+      const res = await fetch("/api/connector-routing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "select",
+          connector: item.connector,
+          itemIds: [item.id],
+          desiredRoute,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok || !d.ok) throw new Error(d.error || "Failed to update selection");
+      await fetchConnectorRouting();
+    } catch (err) {
+      setConnectorResult({
+        ok: false,
+        status: "selection_error",
+        detail: err instanceof Error ? err.message : String(err),
+        connector: item.connector,
+      });
+    }
+    setConnectorWorking(null);
+  }, [fetchConnectorRouting]);
+
+  const syncConnectorInventory = useCallback(async () => {
+    setConnectorWorking('sync');
+    setConnectorResult(null);
+    try {
+      const res = await fetch("/api/connector-routing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync" }),
+      });
+      const d = await res.json();
+      if (!res.ok || !d.ok) throw new Error(d.error || "Failed to sync routing inventory");
+      setConnectorRouting(d as ConnectorRoutingResponse);
+      setConnectorResult({ ok: true, status: "synced", detail: `Inventory synced. ${d.driftTotal || 0} change(s) need review.`, connector: "all" });
+    } catch (err) {
+      setConnectorResult({ ok: false, status: "sync_error", detail: err instanceof Error ? err.message : String(err), connector: "all" });
+    }
+    setConnectorWorking(null);
+  }, []);
+
+  const applySelectedOpenClawRouting = useCallback(async () => {
+    setConnectorWorking('apply-openclaw');
+    setConnectorResult(null);
+    try {
+      const res = await fetch("/api/connector-routing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "apply-openclaw" }),
+      });
+      const d = await res.json();
+      if (!res.ok || !d.ok) throw new Error(d.error || d.result?.detail || "Failed to apply OpenClaw routing");
+      setConnectorResult({
+        ok: true,
+        status: d.result?.status || "applied",
+        detail: d.result?.detail || "OpenClaw routing applied.",
+        restartRequired: Boolean(d.result?.restartRequired),
+        connector: "openclaw",
+      });
+      await fetchRouting();
+      await fetchConnectorRouting();
+    } catch (err) {
+      setConnectorResult({ ok: false, status: "apply_error", detail: err instanceof Error ? err.message : String(err), connector: "openclaw" });
+    }
+    setConnectorWorking(null);
+  }, [fetchConnectorRouting, fetchRouting]);
+
+  const applySelectedHermesRouting = useCallback(async () => {
+    setConnectorWorking('apply-hermes');
+    setConnectorResult(null);
+    try {
+      const res = await fetch("/api/connector-routing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "apply-hermes" }),
+      });
+      const d = await res.json();
+      if (!res.ok || !d.ok) throw new Error(d.error || d.result?.detail || "Failed to apply Hermes routing");
+      setConnectorResult({
+        ok: true,
+        status: d.result?.status || "applied",
+        detail: d.result?.detail || "Hermes routing applied.",
+        restartRequired: Boolean(d.result?.restartRequired),
+        connector: "hermes",
+      });
+      await fetchConnectorRouting();
+    } catch (err) {
+      setConnectorResult({ ok: false, status: "apply_error", detail: err instanceof Error ? err.message : String(err), connector: "hermes" });
+    }
+    setConnectorWorking(null);
+  }, [fetchConnectorRouting]);
+
+  const revertHermesWire = useCallback(async () => {
+    setConnectorWorking('revert-hermes');
+    setConnectorResult(null);
+    try {
+      const res = await fetch("/api/connector-routing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "revert-hermes" }),
+      });
+      const d = await res.json();
+      if (!res.ok || !d.ok) throw new Error(d.error || d.result?.detail || "Failed to revert Hermes wire");
+      setConnectorResult({
+        ok: true,
+        status: d.result?.status || "reverted",
+        detail: d.result?.detail || "Hermes wire reverted.",
+        restartRequired: Boolean(d.result?.restartRequired),
+        connector: "hermes",
+      });
+      await fetchConnectorRouting();
+    } catch (err) {
+      setConnectorResult({ ok: false, status: "revert_error", detail: err instanceof Error ? err.message : String(err), connector: "hermes" });
+    }
+    setConnectorWorking(null);
+  }, [fetchConnectorRouting]);
+
+  const restartHermesGateway = useCallback(async () => {
+    setConnectorWorking('restart-hermes');
+    setConnectorResult(null);
+    try {
+      const res = await fetch("/api/hermes/gateway/restart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const d = await res.json();
+      if (!res.ok || !d.ok) throw new Error(d.error || d.detail || "Failed to restart Hermes gateway");
+      setConnectorResult({
+        ok: true,
+        status: d.status || "restarted",
+        detail: d.detail || "Hermes gateway restarted.",
+        connector: "hermes",
+      });
+      await fetchHermesSupervisor();
+      await fetchConnectorRouting();
+    } catch (err) {
+      setConnectorResult({ ok: false, status: "restart_error", detail: err instanceof Error ? err.message : String(err), connector: "hermes" });
+    }
+    setConnectorWorking(null);
+  }, [fetchConnectorRouting, fetchHermesSupervisor]);
+
+  const litellmUrl = connectorRouting?.litellmTarget || "http://127.0.0.1:4001/v1";
+  const providerLevelHelp = (
+    <span>
+      OpenClaw and Hermes custom providers route by provider endpoint, not by
+      independent per-model switches. If several models share the same provider,
+      selecting one model routes that provider&apos;s endpoint through LiteLLM, so
+      sibling models on that provider follow the same route.
+    </span>
+  );
+  const connectorActionRowStyle: React.CSSProperties = {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+    alignItems: "center",
+    marginBottom: 10,
+  };
+  const connectorRoutingLegend = [
+    {
+      label: "PROVIDER",
+      color: C.info,
+      description: "An upstream endpoint group in OpenClaw or a Hermes custom_provider. Routing is enforced at this provider endpoint.",
+    },
+    {
+      label: "MODEL",
+      color: C.purp,
+      description: <span>An advertised model under a provider. Selecting one model protects that provider&apos;s traffic because connector routing is enforced at provider endpoints.</span>,
+    },
+    {
+      label: "PROXY BRIDGE",
+      color: C.green,
+      description: "The local LiteLLM bridge that ClawNex owns. It is shown for transparency but is not a selectable upstream provider.",
+    },
+    {
+      label: "ROUTED",
+      color: C.green,
+      description: "Traffic currently flows through the ClawNex LiteLLM proxy, so real-time Prompt Shield scanning is active.",
+    },
+    {
+      label: "DIRECT",
+      color: C.warn,
+      description: "Traffic goes directly to the upstream provider. ClawNex may still see it later through the Session Watcher, but real-time shield scanning is bypassed.",
+    },
+    {
+      label: "SELECTED",
+      color: C.brand,
+      description: "The operator has marked this provider/model for routing on the next connector-specific Apply action.",
+    },
+    {
+      label: "READ-ONLY",
+      color: C.txT,
+      description: "Observed inventory only. OAuth/session-bound or watcher-only rows cannot be safely rewritten by ClawNex.",
+    },
+  ];
 
   // Wire-state classification feeds the button bank below.
   // - `managed`: sidecar present AND its provider path is currently in
@@ -2392,7 +2671,104 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
     !litellmProvider && !configMissing ? 'unwired' :
     'unknown';
 
+  const renderConnectorInventory = (summary: ConnectorRoutingSummary, connector: 'openclaw' | 'hermes') => {
+    const presentItems = summary.items.filter(item => item.present);
+    const removedItems = summary.items.filter(item => !item.present).slice(0, 6);
+    if (presentItems.length === 0 && removedItems.length === 0) {
+      return (
+        <div style={{ padding: "8px 10px", border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 4, fontSize: 11, color: C.txS, lineHeight: 1.5 }}>
+          {summary.detail}
+        </div>
+      );
+    }
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {presentItems.map(item => {
+          const isProxyBridge = (connector === 'openclaw' && item.providerId === 'litellm') || (connector === 'hermes' && item.providerId === 'clawnex-litellm');
+          const isReadOnly = item.capability === 'read-only' || item.capability === 'unsupported';
+          const canRoute = !isProxyBridge && !isReadOnly;
+          const checked = item.desiredRoute === 'routed';
+          const selectedForApply = checked && !isProxyBridge;
+          const driftLabel = item.isNew ? "NEW" : item.isChanged ? "CHANGED" : null;
+          const typeBadgeLabel = isProxyBridge ? "PROXY BRIDGE" : item.itemType.toUpperCase();
+          const typeBadgeColor = isProxyBridge ? C.green : item.itemType === 'provider' ? C.info : C.purp;
+          return (
+            <div key={item.id} style={{
+              display: "grid",
+              gridTemplateColumns: "24px minmax(160px, 1fr) minmax(180px, 1.4fr) auto",
+              gap: 8,
+              alignItems: "center",
+              padding: "8px 10px",
+              border: `1px solid ${selectedForApply ? `${C.brand}55` : C.glassBorderSubtle}`,
+              borderLeft: `3px solid ${item.currentRoute === 'routed' ? C.green : item.currentRoute === 'direct' ? C.warn : C.txT}`,
+              borderRadius: 4,
+              background: selectedForApply ? `${C.brand}08` : C.glassSurfTrans,
+            }}>
+              <input
+                type="checkbox"
+                checked={isProxyBridge ? false : checked}
+                disabled={!canRoute || connectorWorking !== null}
+                onChange={(e) => selectConnectorItem(item, e.target.checked ? 'routed' : 'direct')}
+                aria-label={isProxyBridge ? `${item.displayName} is the local proxy bridge and cannot be selected` : `${checked ? "Do not route" : "Route"} ${item.displayName}`}
+                style={{ width: 15, height: 15, accentColor: C.brand, cursor: canRoute ? "pointer" : "not-allowed" }}
+              />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: C.tx }}>
+                    {item.itemType === 'model' ? `${item.providerId}/${item.modelId}` : item.displayName}
+                  </span>
+                  <Badge label={typeBadgeLabel} color={typeBadgeColor} tip={null} />
+                  {driftLabel && <Badge label={driftLabel} color={C.warn} tip={null} />}
+                  {isReadOnly && !isProxyBridge && <Badge label="READ-ONLY" color={C.txT} tip={null} />}
+                </div>
+                {item.itemType === 'model' && item.displayName !== item.modelId && (
+                  <div style={{ fontSize: 10, color: C.txT, marginTop: 2 }}>{item.displayName}</div>
+                )}
+              </div>
+              <div style={{ minWidth: 0, fontSize: 10, fontFamily: F.mono, color: C.txT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {item.baseUrl || (connector === 'hermes' ? "observed-only / no writable endpoint" : "no endpoint")}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, flexWrap: "wrap" }}>
+                <Badge label={item.currentRoute.toUpperCase()} color={item.currentRoute === 'routed' ? C.green : item.currentRoute === 'direct' ? C.warn : C.txT} tip={null} />
+                {selectedForApply && <Badge label="SELECTED" color={C.brand} tip={null} />}
+              </div>
+            </div>
+          );
+        })}
+        {removedItems.length > 0 && (
+          <div style={{ marginTop: 4, padding: "8px 10px", border: `1px solid ${C.warn}33`, borderRadius: 4, background: `${C.warn}08`, fontSize: 11, color: C.txS }}>
+            <strong style={{ color: C.warn }}>Removed since last scan:</strong>{" "}
+            {removedItems.map(item => item.itemType === 'model' ? `${item.providerId}/${item.modelId}` : item.providerId).join(", ")}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderConnectorResult = (connector: 'openclaw' | 'hermes') => {
+    if (!connectorResult) return null;
+    if (connectorResult.connector && connectorResult.connector !== "all" && connectorResult.connector !== connector) return null;
+    return (
+      <div style={{
+        marginTop: 10, padding: "8px 10px", borderRadius: 4,
+        background: connectorResult.ok ? `${C.green}08` : `${C.danger}08`,
+        border: `1px solid ${connectorResult.ok ? C.green : C.danger}33`,
+      }}>
+        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: connectorResult.ok ? C.green : C.danger, marginBottom: 4 }}>
+          {connectorResult.status}
+        </div>
+        <div style={{ fontSize: 11, color: C.txS, lineHeight: 1.5 }}>{connectorResult.detail}</div>
+        {connectorResult.restartRequired && (
+          <div style={{ marginTop: 6, color: C.warn, fontSize: 11 }}>
+            Restart the affected {connector === "openclaw" ? "OpenClaw gateway" : "Hermes runtime"} to apply the selected routing changes.
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
+    <>
     <CollapsibleCard title="OPENCLAW ROUTING" accent={C.info} defaultOpen={false} focusKey="openclawRouting" focusedCard={focusedCard}>
       <div style={{ fontSize: 12, color: C.txS, marginBottom: 10, lineHeight: 1.5 }}>
         For ClawNex to scan LLM traffic, OpenClaw providers must route through the LiteLLM proxy (port 4001).
@@ -2453,11 +2829,15 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
                 is still visible <em>retroactively</em> through the <span style={{ fontFamily: F.mono, color: C.cyan }}>Session Watcher</span>, which tails each agent&apos;s session files on disk.
               </div>
               <div style={{ marginTop: 8, fontSize: 11, color: C.txS, lineHeight: 1.6 }}>
-                If you want <strong>real-time</strong> scanning for an API-based provider instead, update its <span style={{ fontFamily: F.mono, color: C.brand }}>baseUrl</span> in <span style={{ fontFamily: F.mono, color: C.cyan }}>~/.openclaw/openclaw.json</span> to:
+                If you want <strong>real-time</strong> scanning for an API-based provider instead, use the <strong>OpenClaw Selective Routing</strong> section below: tick the provider/model, apply routing, then restart the gateway.
               </div>
               <div style={{ marginTop: 6, padding: "6px 10px", background: C.bg, borderRadius: 4, fontFamily: F.mono, fontSize: 12, color: C.brand }}>{litellmUrl}</div>
               <div style={{ fontSize: 10, color: C.txT, marginTop: 6 }}>
-                Or re-run <span style={{ fontFamily: F.mono, color: C.cyan }}>bash ~/sentinel/setup.sh</span> and select &quot;yes&quot; at the routing step.
+                OpenClaw enforces routing at{" "}
+                <Tooltip placement="top" variant="detail" content={providerLevelHelp}>
+                  <span style={{ color: C.warn, cursor: "help", borderBottom: `1px dotted ${C.warn}` }}>provider endpoint level</span>
+                </Tooltip>
+                , so selected models route through their provider.
               </div>
             </div>
           )}
@@ -2467,6 +2847,166 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
           )}
         </div>
       ) : null}
+
+      {connectorRouting && (
+        <div style={{ marginTop: 12, padding: "10px 12px", background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 10, color: C.txT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              OpenClaw Selective Routing
+            </span>
+            {connectorRouting.openclaw.drift.total > 0 ? <Badge label={`${connectorRouting.openclaw.drift.total} CHANGE${connectorRouting.openclaw.drift.total === 1 ? "" : "S"}`} color={C.warn} /> : <Badge label="IN SYNC" color={C.green} />}
+            <span style={{ marginLeft: "auto", fontSize: 10, color: C.txT, fontFamily: F.mono }}>
+              target {connectorRouting.litellmTarget}
+            </span>
+          </div>
+
+          {connectorRouting.openclaw.drift.total > 0 && (
+            <div style={{ marginBottom: 10, padding: "8px 10px", border: `1px solid ${C.warn}44`, borderRadius: 4, background: `${C.warn}10`, fontSize: 11, color: C.txS, lineHeight: 1.5 }}>
+              OpenClaw inventory changed. Review new or removed providers/models before assuming traffic is protected.
+            </div>
+          )}
+
+          <div style={connectorActionRowStyle}>
+            <button
+              onClick={syncConnectorInventory}
+              disabled={connectorWorking !== null}
+              style={{
+                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                background: connectorWorking === 'sync' ? `${C.info}33` : `${C.info}14`,
+                border: `1px solid ${C.info}66`, color: C.info,
+                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
+              }}
+            >
+              {connectorWorking === 'sync' ? "Syncing..." : "Sync Inventory"}
+            </button>
+            <button
+              onClick={applySelectedOpenClawRouting}
+              disabled={connectorWorking !== null || connectorRouting.openclaw.selected === 0}
+              style={{
+                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                background: connectorWorking === 'apply-openclaw' ? `${C.brand}33` : `${C.brand}18`,
+                border: `1px solid ${C.brand}66`, color: C.brand,
+                cursor: connectorWorking || connectorRouting.openclaw.selected === 0 ? "not-allowed" : "pointer", fontFamily: F.sans,
+                opacity: connectorRouting.openclaw.selected === 0 ? 0.55 : 1,
+              }}
+            >
+              {connectorWorking === 'apply-openclaw' ? "Applying..." : `Apply OpenClaw Routing (${connectorRouting.openclaw.selected})`}
+            </button>
+            {wireState === 'unwired' && (
+              <button
+                onClick={() => performAction('wire')}
+                disabled={working !== null}
+                style={{
+                  padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                  background: working === 'wire' ? `${C.brand}33` : `${C.brand}22`,
+                  border: `1px solid ${C.brand}66`, color: C.brand,
+                  cursor: working ? "wait" : "pointer", fontFamily: F.sans,
+                }}
+              >
+                {working === 'wire' ? "Wiring..." : "Wire LiteLLM"}
+              </button>
+            )}
+
+              {wireState === 'conflict' && (
+                <button
+                  onClick={() => performAction('force-wire')}
+                  disabled={working !== null}
+                  style={{
+                    padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                    background: working === 'force-wire' ? `${C.warn}33` : `${C.warn}22`,
+                    border: `1px solid ${C.warn}66`, color: C.warn,
+                    cursor: working ? "wait" : "pointer", fontFamily: F.sans,
+                  }}
+                >
+                  {working === 'force-wire' ? "Force-Wiring..." : "Force Wire (overwrite)"}
+                </button>
+              )}
+
+              {wireState === 'managed' && (
+                <button
+                  onClick={() => performAction('revert')}
+                  disabled={working !== null}
+                  style={{
+                    padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                    background: working === 'revert' ? `${C.warn}33` : `${C.warn}14`,
+                    border: `1px solid ${C.warn}66`, color: C.warn,
+                    cursor: working ? "wait" : "pointer", fontFamily: F.sans,
+                  }}
+                >
+                  {working === 'revert' ? "Reverting..." : "Revert ClawNex Wire"}
+                </button>
+              )}
+
+              {supervisor && supervisor.kind !== 'unsupported' && (
+                <Tooltip placement="top" variant="detail" content={
+                  <span>
+                    Restarts the long-running <span style={{ fontFamily: F.mono, color: C.cyan }}>openclaw-gateway</span> daemon
+                    via <strong>{supervisor.label}</strong> so it picks up routing changes from <span style={{ fontFamily: F.mono, color: C.cyan }}>openclaw.json</span>.
+                    No SSH required.
+                  </span>
+                }>
+                  <button
+                    onClick={performRestart}
+                    disabled={working !== null}
+                    style={{
+                      padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                      background: working === 'restart' ? `${C.cyan}33` : `${C.cyan}14`,
+                      border: `1px solid ${C.cyan}66`, color: C.cyan,
+                      cursor: working ? "wait" : "pointer", fontFamily: F.sans,
+                    }}
+                  >
+                    {working === 'restart' ? "Restarting..." : "Restart Gateway"}
+                  </button>
+                </Tooltip>
+              )}
+
+              {supervisor && supervisor.kind === 'unsupported' && (
+                <Tooltip placement="top" variant="detail" content={
+                  <span>
+                    Auto-restart is not supported on this host. Manual fallback:
+                    <span style={{ fontFamily: F.mono, color: C.cyan }}> {supervisor.manualCommand}</span>
+                  </span>
+                }>
+                  <button
+                    disabled
+                    style={{
+                      padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                      background: `${C.txT}10`, border: `1px solid ${C.glassBorderSubtle}`,
+                      color: C.txT, cursor: "not-allowed", fontFamily: F.sans,
+                    }}
+                  >
+                    Restart Gateway
+                  </button>
+                </Tooltip>
+              )}
+
+            <button
+              onClick={() => { fetchRouting(); fetchSupervisor(); fetchConnectorRouting(); }}
+              disabled={working !== null}
+              style={{
+                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 600,
+                background: "transparent", border: `1px solid ${C.glassBorderSubtle}`, color: C.txS,
+                cursor: working ? "wait" : "pointer", fontFamily: F.sans,
+              }}
+            >
+              Refresh
+            </button>
+          </div>
+
+          <div style={{ fontSize: 11, color: C.txS, lineHeight: 1.5, marginBottom: 10 }}>
+            OpenClaw enforces routing by{" "}
+            <Tooltip placement="top" variant="detail" content={providerLevelHelp}>
+              <span style={{ color: C.warn, cursor: "help", borderBottom: `1px dotted ${C.warn}` }}>provider endpoint</span>
+            </Tooltip>
+            . Selecting an individual model marks it for protection and routes that model&apos;s provider through LiteLLM when applied.
+          </div>
+
+          <BadgeLegend items={connectorRoutingLegend} title="OpenClaw routing labels" style={{ marginBottom: 10 }} />
+
+          {renderConnectorInventory(connectorRouting.openclaw, 'openclaw')}
+          {renderConnectorResult('openclaw')}
+        </div>
+      )}
 
       {/* ClawNex-managed wire/revert. The engine at
           src/lib/services/openclaw-routing-wire.ts writes a single
@@ -2519,95 +3059,6 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
               OpenClaw has no <span style={{ fontFamily: F.mono, color: C.cyan }}>litellm</span> provider entry yet, so its agent traffic
               bypasses the LiteLLM proxy and the Prompt Shield. <strong>Wire LiteLLM</strong> adds the
               entry pointing at <span style={{ fontFamily: F.mono, color: C.brand }}>{litellmUrl}</span>.
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {wireState === 'unwired' && (
-              <button
-                onClick={() => performAction('wire')}
-                disabled={working !== null}
-                style={{
-                  padding: "6px 14px", borderRadius: 4, fontSize: 12, fontWeight: 700,
-                  background: working === 'wire' ? `${C.brand}33` : `${C.brand}22`,
-                  border: `1px solid ${C.brand}66`, color: C.brand,
-                  cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-                }}
-              >
-                {working === 'wire' ? "Wiring..." : "Wire LiteLLM"}
-              </button>
-            )}
-
-            {wireState === 'conflict' && (
-              <button
-                onClick={() => performAction('force-wire')}
-                disabled={working !== null}
-                style={{
-                  padding: "6px 14px", borderRadius: 4, fontSize: 12, fontWeight: 700,
-                  background: working === 'force-wire' ? `${C.warn}33` : `${C.warn}22`,
-                  border: `1px solid ${C.warn}66`, color: C.warn,
-                  cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-                }}
-              >
-                {working === 'force-wire' ? "Force-Wiring..." : "Force Wire (overwrite)"}
-              </button>
-            )}
-
-            {wireState === 'managed' && (
-              <button
-                onClick={() => performAction('revert')}
-                disabled={working !== null}
-                style={{
-                  padding: "6px 14px", borderRadius: 4, fontSize: 12, fontWeight: 700,
-                  background: working === 'revert' ? `${C.warn}33` : `${C.warn}14`,
-                  border: `1px solid ${C.warn}66`, color: C.warn,
-                  cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-                }}
-              >
-                {working === 'revert' ? "Reverting..." : "Revert ClawNex Wire"}
-              </button>
-            )}
-
-            {supervisor && supervisor.kind !== 'unsupported' && (
-              <Tooltip placement="top" variant="detail" content={
-                <span>
-                  Restarts the long-running <span style={{ fontFamily: F.mono, color: C.cyan }}>openclaw-gateway</span> daemon
-                  via <strong>{supervisor.label}</strong> so it picks up routing changes from <span style={{ fontFamily: F.mono, color: C.cyan }}>openclaw.json</span>.
-                  No SSH required.
-                </span>
-              }>
-                <button
-                  onClick={performRestart}
-                  disabled={working !== null}
-                  style={{
-                    padding: "6px 14px", borderRadius: 4, fontSize: 12, fontWeight: 700,
-                    background: working === 'restart' ? `${C.cyan}33` : `${C.cyan}14`,
-                    border: `1px solid ${C.cyan}66`, color: C.cyan,
-                    cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-                  }}
-                >
-                  {working === 'restart' ? "Restarting..." : "Restart Gateway"}
-                </button>
-              </Tooltip>
-            )}
-
-            <button
-              onClick={() => { fetchRouting(); fetchSupervisor(); }}
-              disabled={working !== null}
-              style={{
-                padding: "6px 14px", borderRadius: 4, fontSize: 12, fontWeight: 600,
-                background: "transparent", border: `1px solid ${C.glassBorderSubtle}`, color: C.txS,
-                cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-              }}
-            >
-              Refresh
-            </button>
-          </div>
-
-          {supervisor && supervisor.kind === 'unsupported' && (
-            <div style={{ marginTop: 8, padding: "6px 10px", background: `${C.txT}10`, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 4, fontSize: 11, color: C.txS, lineHeight: 1.5 }}>
-              Auto-restart isn&apos;t supported on this host ({supervisor.label}). After wiring, restart manually:
-              <div style={{ marginTop: 4, padding: "4px 8px", background: C.bg, borderRadius: 3, fontFamily: F.mono, fontSize: 11, color: C.brand }}>{supervisor.manualCommand}</div>
             </div>
           )}
 
@@ -2692,6 +3143,138 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
         </div>
       )}
     </CollapsibleCard>
+
+    {connectorRouting && (
+      <CollapsibleCard title="HERMES ROUTING" accent={C.purp} defaultOpen={false} focusKey="hermesRouting" focusedCard={focusedCard}>
+        <div style={{ fontSize: 12, color: C.txS, marginBottom: 10, lineHeight: 1.5 }}>
+          Hermes routing is managed separately from OpenClaw. Writable Hermes custom providers can be routed through the LiteLLM proxy for real-time Prompt Shield scanning.
+          OAuth/session-bound and watcher-only Hermes rows stay read-only because ClawNex cannot safely rewrite those client-owned paths.
+        </div>
+
+        <div style={{ padding: "10px 12px", background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 10, color: C.txT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Hermes Provider Routing
+            </span>
+            {connectorRouting.hermes.drift.total > 0 ? <Badge label={`${connectorRouting.hermes.drift.total} CHANGE${connectorRouting.hermes.drift.total === 1 ? "" : "S"}`} color={C.warn} /> : <Badge label="IN SYNC" color={C.green} />}
+            <span style={{ marginLeft: "auto", fontSize: 10, color: C.txT, fontFamily: F.mono }}>
+              target {connectorRouting.litellmTarget}
+            </span>
+          </div>
+
+          {connectorRouting.hermes.drift.total > 0 && (
+            <div style={{ marginBottom: 10, padding: "8px 10px", border: `1px solid ${C.warn}44`, borderRadius: 4, background: `${C.warn}10`, fontSize: 11, color: C.txS, lineHeight: 1.5 }}>
+              Hermes inventory changed. Review new or removed custom providers/models before assuming traffic is protected.
+            </div>
+          )}
+
+          <div style={connectorActionRowStyle}>
+            <button
+              onClick={syncConnectorInventory}
+              disabled={connectorWorking !== null}
+              style={{
+                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                background: connectorWorking === 'sync' ? `${C.info}33` : `${C.info}14`,
+                border: `1px solid ${C.info}66`, color: C.info,
+                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
+              }}
+            >
+              {connectorWorking === 'sync' ? "Syncing..." : "Sync Inventory"}
+            </button>
+            <button
+              onClick={applySelectedHermesRouting}
+              disabled={connectorWorking !== null || connectorRouting.hermes.selected === 0}
+              style={{
+                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                background: connectorWorking === 'apply-hermes' ? `${C.purp}33` : `${C.purp}18`,
+                border: `1px solid ${C.purp}66`, color: C.purp,
+                cursor: connectorWorking || connectorRouting.hermes.selected === 0 ? "not-allowed" : "pointer", fontFamily: F.sans,
+                opacity: connectorRouting.hermes.selected === 0 ? 0.55 : 1,
+              }}
+            >
+              {connectorWorking === 'apply-hermes' ? "Saving..." : `Save Hermes Wire (${connectorRouting.hermes.selected})`}
+            </button>
+            <button
+              onClick={revertHermesWire}
+              disabled={connectorWorking !== null}
+              style={{
+                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                background: connectorWorking === 'revert-hermes' ? `${C.warn}33` : `${C.warn}14`,
+                border: `1px solid ${C.warn}66`, color: C.warn,
+                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
+              }}
+            >
+              {connectorWorking === 'revert-hermes' ? "Reverting..." : "Revert Hermes Wire"}
+            </button>
+              {hermesSupervisor && hermesSupervisor.kind !== 'unsupported' && (
+                <Tooltip placement="top" variant="detail" content={
+                  <span>
+                    Restarts the detected Hermes gateway supervisor so Hermes reloads provider changes from
+                    <span style={{ fontFamily: F.mono, color: C.cyan }}> config.yaml</span>.
+                    {hermesSupervisor.targets?.length ? <> Targets: <span style={{ fontFamily: F.mono, color: C.cyan }}>{hermesSupervisor.targets.join(", ")}</span>.</> : null}
+                  </span>
+                }>
+                  <button
+                    onClick={restartHermesGateway}
+                    disabled={connectorWorking !== null}
+                    style={{
+                      padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                      background: connectorWorking === 'restart-hermes' ? `${C.cyan}33` : `${C.cyan}14`,
+                      border: `1px solid ${C.cyan}66`, color: C.cyan,
+                      cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
+                    }}
+                  >
+                    {connectorWorking === 'restart-hermes' ? "Restarting..." : "Restart Gateway"}
+                  </button>
+                </Tooltip>
+              )}
+              {hermesSupervisor && hermesSupervisor.kind === 'unsupported' && (
+                <Tooltip placement="top" variant="detail" content={
+                  <span>
+                    ClawNex did not detect a known Hermes gateway supervisor on this host. Manual fallback:
+                    <span style={{ fontFamily: F.mono, color: C.cyan }}> {hermesSupervisor.manualCommand}</span>
+                  </span>
+                }>
+                  <button
+                    disabled
+                    style={{
+                      padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                      background: `${C.txT}10`, border: `1px solid ${C.glassBorderSubtle}`,
+                      color: C.txT, cursor: "not-allowed", fontFamily: F.sans,
+                    }}
+                  >
+                    Restart Gateway
+                  </button>
+                </Tooltip>
+              )}
+            <button
+              onClick={fetchHermesSupervisor}
+              disabled={connectorWorking !== null}
+              style={{
+                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 600,
+                background: "transparent", border: `1px solid ${C.glassBorderSubtle}`, color: C.txS,
+                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
+              }}
+            >
+              Detect Gateway
+            </button>
+          </div>
+
+          <div style={{ fontSize: 11, color: C.txS, lineHeight: 1.5, marginBottom: 10 }}>
+            Hermes custom providers enforce routing by{" "}
+            <Tooltip placement="top" variant="detail" content={providerLevelHelp}>
+              <span style={{ color: C.warn, cursor: "help", borderBottom: `1px dotted ${C.warn}` }}>provider endpoint</span>
+            </Tooltip>
+            . Selecting an individual model marks it for protection and routes that model&apos;s writable custom provider through LiteLLM when applied.
+          </div>
+
+          <BadgeLegend items={connectorRoutingLegend} title="Hermes routing labels" style={{ marginBottom: 10 }} />
+          {renderConnectorInventory(connectorRouting.hermes, 'hermes')}
+          {renderConnectorResult('hermes')}
+        </div>
+      </CollapsibleCard>
+    )}
+    </>
   );
 }
 
@@ -3975,7 +4558,9 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
 
   const inputStyle = { width: "100%", padding: "8px 10px", background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6, color: C.tx, fontFamily: F.mono, fontSize: 13, outline: "none", boxSizing: "border-box" as const };
   const btnStyle = { padding: "8px 16px", borderRadius: 6, border: "none", fontWeight: 700, fontSize: 13, cursor: "pointer" };
-  const autoHermesSaved = !!hermesStatus && hermesInstances.some(inst => inst.home_path === hermesStatus.home);
+  const autoHermesSaved = !!hermesStatus && hermesInstances.some(inst => hermesInstanceMatchesDiagnostics(inst, hermesStatus));
+  const showAutoDetectedHermes = !!hermesStatus?.available && !autoHermesSaved;
+  const hermesConnectorCount = hermesInstances.length + (showAutoDetectedHermes ? 1 : 0);
   const renderHermesChecks = (diag: HermesDiagnostics | null | undefined) => {
     if (!diag) return null;
     const checks = [
@@ -4483,7 +5068,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   );
 
   const fleetConnectorsCard = (
-      <CollapsibleCard title={<span style={{ display: "flex", alignItems: "center", gap: 8 }}>FLEET CONNECTORS <span style={{ fontSize: 10, color: C.txT, fontFamily: F.mono }}>4 frameworks &middot; {(gateways.length > 0 ? 1 : 0) + (hermesStatus?.available ? 1 : 0) + hermesInstances.length} connected</span></span>} accent={C.brand} defaultOpen={false}>
+      <CollapsibleCard title={<span style={{ display: "flex", alignItems: "center", gap: 8 }}>FLEET CONNECTORS <span style={{ fontSize: 10, color: C.txT, fontFamily: F.mono }}>4 frameworks &middot; {(gateways.length > 0 ? 1 : 0) + hermesConnectorCount} connected</span></span>} accent={C.brand} defaultOpen={false}>
         <div style={{ fontSize: 13, color: C.txS, marginBottom: 16 }}>Manage connections to agent frameworks. Each connector enables ClawNex to monitor, scan, and protect traffic from that framework.</div>
 
         {/* --- OpenClaw --- */}
@@ -4546,7 +5131,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
             <Badge color={hermesStatus?.available ? C.green : C.txT} label={hermesStatus?.available ? "LIVE" : "NOT CONFIGURED"} />
           </div>
           {fcHermes && <div>
-          {hermesStatus?.available && (
+          {showAutoDetectedHermes && (
             <div style={{ padding: "12px 14px", marginBottom: 8, background: C.glassSurfTrans, borderRadius: 8, border: `1px solid ${C.glassBorderSubtle}`, borderLeft: `3px solid ${C.green}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -4954,7 +5539,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
 
       {/* ── FLEET & ROUTING ──────────────────────────────────────────── */}
       <CategorySection title="FLEET & ROUTING" accent={C.cyan} storageKey="fleetRouting" focusCard={focusCard}
-        focusKeys={["openclawRouting"]}>
+        focusKeys={["openclawRouting", "hermesRouting"]}>
         {fleetConnectorsCard}
         <OpenClawRoutingGuide focusedCard={focusCard} />
         <McpServerCard />

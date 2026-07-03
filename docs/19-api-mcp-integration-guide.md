@@ -5,7 +5,7 @@
 **Version:** 1.7
 **Classification:** For Distribution -- ClawNex maintainers
 **Last Updated:** 2026-05-14
-**Product Version:** v0.15.2-alpha
+**Product Version:** v0.15.5-alpha
 
 ---
 
@@ -375,7 +375,7 @@ curl -H "X-ClawNex-Key: cnx_YOUR_API_KEY_HERE" \
   "data": {
     "status": "ok",
     "name": "ClawNex",
-    "version": "0.15.2-alpha",
+    "version": "0.15.5-alpha",
     "uptime": 86400
   },
   "meta": {

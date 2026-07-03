@@ -4,7 +4,7 @@
 **Version:** 2.4
 **Classification:** Confidential
 **Last Updated:** 2026-05-14
-**Product Version:** v0.15.2-alpha
+**Product Version:** v0.15.5-alpha
 **Status:** Living Document
 
 ---
@@ -201,7 +201,7 @@ Open `http://127.0.0.1:5001` (or your VPS address) in a browser. On a fresh inst
 | 2 | Add an AI model provider | **Open Configuration** → Model Providers card opens and scrolls into view |
 | 3 | Enable Host Security | **Verify Now** (POSTs to `/api/system/install-clawkeeper`) or **Open Updates panel** for the manual path |
 | 4 | Sync CVE database | **Sync Now** (POSTs to `/api/cve/sync`) |
-| 5 | Configure OpenClaw routing | **Open Configuration** → OpenClaw Routing card opens and scrolls into view. A blue info box appears if `openclaw.json` has zero LLM providers registered — register one in OpenClaw first. |
+| 5 | Configure OpenClaw routing | **Open Configuration** → OpenClaw Routing card opens and scrolls into view. A blue info box appears if `openclaw.json` has zero LLM providers registered — register one in OpenClaw first. Hermes routing is managed later from the separate Hermes Routing card. |
 | 6 | Run first shield test | **Open Shield Tests** → run the 27-payload suite to confirm rules are firing |
 
 Step 6 is intentionally last. The wizard stays visible on every browser refresh until every step is complete AND the operator clicks **Get Started →** on the Setup Complete screen. The dismissal flag is written to `config_defaults.wizard_dismissed` so it persists across browsers and sessions.
@@ -240,11 +240,26 @@ echo "*/5 * * * * /Users/$(whoami)/sentinel/scripts/watchdog.sh" | crontab -
 crontab -l
 ```
 
-### Step 13: Route OpenClaw Through ClawNex
+### Step 13: Choose OpenClaw Routing Through ClawNex
 
-Point OpenClaw to use LiteLLM as the model proxy:
-- Model endpoint: `http://127.0.0.1:4001/v1`
-- This ensures all agent LLM requests flow through ClawNex
+Open Configuration → OpenClaw Routing and review **OpenClaw Selective Routing**:
+
+- Tick the OpenClaw providers/models that should route through ClawNex.
+- Click **Apply OpenClaw Routing**.
+- Restart OpenClaw Gateway from the same card if prompted.
+
+OpenClaw enforces this at provider endpoint level. Selecting a model routes that model's provider through `http://127.0.0.1:4001/v1`; if other models share the same provider, they follow that provider route as well.
+
+### Step 14: Choose Hermes Routing Through ClawNex
+
+Open Configuration → Hermes Routing and review the Hermes provider inventory:
+
+- Tick writable Hermes `custom_providers` or model rows that should route through ClawNex.
+- Click **Save Hermes Wire**.
+- Click **Restart Gateway** so the detected Hermes gateway supervisor reloads provider configuration.
+- Use **Revert Hermes Wire** to restore ClawNex-managed Hermes provider edits. Operator edits made after the wire are preserved.
+
+Hermes uses provider-level routing for writable `custom_providers` in `~/.hermes/config.yaml`. Hermes OAuth/session-bound and watcher-only rows remain read-only retrospective inventory.
 
 ---
 
@@ -304,7 +319,7 @@ Confirm that agent traffic is flowing through ClawNex for scanning:
    - **ROUTED** -- Traffic flows through the LiteLLM proxy (port 4001) and is scanned by the shield
    - **DIRECT** -- Traffic goes directly to the provider, bypassing ClawNex
 
-At least one provider must show **ROUTED** for ClawNex to provide protection. If all providers show **DIRECT**, verify that the agent fleet is configured to use `http://127.0.0.1:4001/v1` as its model endpoint (see Step 13).
+At least one provider must show **ROUTED** for ClawNex to provide real-time OpenClaw protection. If all providers show **DIRECT**, verify that the agent fleet is configured to use `http://127.0.0.1:4001/v1` as its model endpoint (see Step 13). For Hermes, use the separate **Hermes Routing** panel (see Step 14).
 
 ### 4.6 Verify Watchdog
 

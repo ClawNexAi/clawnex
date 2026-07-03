@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 
-const root = fs.mkdtempSync(path.join(os.tmpdir(), "clawnex-hermes-"));
+const root = fs.mkdtempSync(path.join(os.homedir(), ".clawnex-hermes-"));
 const hermesHome = path.join(root, ".hermes");
 const clawnexDb = path.join(root, "clawnex.db");
 
@@ -118,5 +118,9 @@ async function main() {
 
 main().catch((err) => {
   console.error(err);
-  process.exit(1);
+  process.exitCode = 1;
+}).finally(() => {
+  try {
+    fs.rmSync(root, { recursive: true, force: true });
+  } catch {}
 });

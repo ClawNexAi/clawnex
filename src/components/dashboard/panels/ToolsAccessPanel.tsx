@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { C, F } from '../constants';
-import { Badge, Card, CollapsibleCard, Stat, Table, PaginationFooter, PanelStateBar, PanelEmptyState, PanelErrorState, PanelDisconnected, useDataState } from '../shared';
+import { Badge, BadgeLegend, Card, CollapsibleCard, Stat, Table, PaginationFooter, PanelStateBar, PanelEmptyState, PanelErrorState, PanelDisconnected, useDataState } from '../shared';
 import { Tooltip } from '../tooltip';
 import { sevColor, stColor } from '../utils';
 import { TOOL_INVENTORY } from '../mock-data';
@@ -140,6 +140,14 @@ export function ToolsAccessPanel({ demoMode, filters }: { demoMode: boolean; fil
                   resultCount={filtered.length}
                   totalCount={inventory.length}
                 />
+                <BadgeLegend
+                  title="Tool labels"
+                  items={[
+                    { label: "RISK", color: C.warn, description: "Relative blast-radius risk assigned to the tool or tool group." },
+                    { label: "STATUS", color: C.green, description: "Whether the tool is enabled, disabled, or otherwise constrained by policy." },
+                  ]}
+                  style={{ marginBottom: 10 }}
+                />
                 <Table
                   headers={["Tool", "Type", "Risk", "Agents", "Used By", "Status"]}
                   rows={pagedInventory.map(t => [
@@ -171,6 +179,13 @@ export function ToolsAccessPanel({ demoMode, filters }: { demoMode: boolean; fil
             const pagedAgentTools = agentTools.slice(agentToolsPage * agentToolsPageSize, (agentToolsPage + 1) * agentToolsPageSize);
             return (
               <Card title="Per-Agent Tool Permissions" accent={C.purp}>
+                <BadgeLegend
+                  title="Permission labels"
+                  items={[
+                    { label: "TOOL", color: C.cyan, description: "An allowed tool or tool group available to the listed agent." },
+                  ]}
+                  style={{ marginBottom: 10 }}
+                />
                 <Table
                   headers={["Agent", "Role", "Model", "Allowed Tools"]}
                   rows={pagedAgentTools.map(a => [

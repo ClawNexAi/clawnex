@@ -101,3 +101,4 @@ docs/internal/
 # training-video-prototype --invert-paths` BEFORE the first public push
 # to actually shrink the repo for OSS users.
 training-video-prototype/
+.gstack/

@@ -67,6 +67,7 @@ The current SQLite schema is grouped into four functional categories. Every row 
 | 15 | hermes_instances | CFG | Hermes Agent connection configurations | id (TEXT) | Low (operator-managed) | None | Restricted |
 | 15a | hermes_ingest_cursors | OPS | Durable Hermes watcher high-water marks | source_id (TEXT) | Low (one row per Hermes source) | None | Internal |
 | 15b | hermes_events | EVT | Normalized Hermes message scan events | id (TEXT) | Medium (one row per scanned Hermes message) | Retention with operational DB | Restricted (content_hash only; no raw message text) |
+| 15c | connector_routing_items | CFG | OpenClaw/Hermes provider-model routing inventory, operator route intent, and drift markers | id (TEXT) | Low-Medium (one row per discovered provider/model) | None | Internal (no provider secrets) |
 | 16 | config_defaults | CFG | Key-value settings store | key (TEXT) | Static (bounded key set) | None | Sensitive (certain keys) |
 | 17 | cve_records | EVT | CVE data synced from jgamblin/OpenClawCVEs | id (CVE-ID) | Low (governed by upstream sync) | None | None |
 | 18 | operators | SEC | Operator accounts for RBAC | id (UUID) | Low (5-50 operators typical) | None (lifecycle-driven) | Sensitive (password_hash, email); auth_providers CSV (v0.9.0+) |
@@ -553,6 +554,39 @@ the header ribbon.
 
 ---
 
+### 3.15c connector_routing_items
+
+**Purpose:** Selective connector-routing inventory and operator intent. Rows are discovered from OpenClaw provider/model configuration, Hermes `custom_providers`, and Hermes watcher events. The database table is shared for auditability, but the dashboard presents OpenClaw Routing and Hermes Routing as separate operator panels. OpenClaw rows and config-backed Hermes custom-provider rows can be selected for provider-level routing through LiteLLM; Hermes OAuth/session-bound and watcher-only rows remain read-only retrospective inventory. No API keys, bearer tokens, or raw prompt content are stored here.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | TEXT | NO | — | Stable row ID derived from connector/source/item/provider/model |
+| connector | TEXT | NO | — | Connector namespace: `openclaw` or `hermes` |
+| source_id | TEXT | NO | `''` | Connector source/profile identifier (`default` for local OpenClaw; Hermes source ID for watcher events) |
+| item_type | TEXT | NO | — | `provider` or `model` |
+| provider_id | TEXT | NO | `''` | Provider namespace (`openrouter`, `google`, `openai`, etc.) |
+| model_id | TEXT | NO | `''` | Model identifier for model rows; blank for provider rows |
+| display_name | TEXT | NO | — | Operator-facing provider/model label |
+| base_url | TEXT | YES | NULL | Observed provider endpoint. OpenClaw and config-backed Hermes custom-provider rows may carry a writable endpoint; watcher-only Hermes rows are read-only observations and normally NULL |
+| capability | TEXT | NO | — | `provider-routing`, `model-inventory`, `read-only`, or `unsupported` |
+| current_route | TEXT | NO | — | Observed route state: `routed`, `direct`, `unknown`, or `unsupported` |
+| desired_route | TEXT | NO | `'direct'` | Operator intent: `routed` or `direct` |
+| present | INTEGER | NO | 1 | 1 if still present in the latest scan; 0 if removed since prior scan |
+| fingerprint | TEXT | NO | — | SHA-256 fingerprint of non-secret inventory fields for drift detection |
+| metadata | TEXT | NO | `'{}'` | JSON metadata (model count, source path, observed message counts, enforcement notes) |
+| first_seen_at | TEXT | NO | `datetime('now')` | First scan time |
+| last_seen_at | TEXT | NO | `datetime('now')` | Most recent scan time |
+| last_changed_at | TEXT | YES | NULL | Last time the row appeared, disappeared, or changed fingerprint |
+| updated_at | TEXT | NO | `datetime('now')` | Last persistence update |
+
+**Indexes:**
+- `idx_connector_routing_connector` ON (connector, present)
+- `idx_connector_routing_desired` ON (connector, desired_route)
+
+**Sensitivity notes:** This table deliberately stores route metadata and intent only. OpenClaw provider secrets remain in `~/.openclaw/openclaw.json`; ClawNex selective-routing sidecars store original/routed base URLs and hashes, never provider API keys.
+
+---
+
 ### 3.16 config_defaults
 
 **Purpose:** Key-value settings store for all platform configuration.
@@ -988,7 +1022,7 @@ survives clean redeploys.
 ```
 
 **Lifecycle:**
-- Created when the operator clicks **Wire LiteLLM** (Configuration → OpenClaw Routing card, or the Welcome Wizard step 5 single-click flow).
+- Created when the operator clicks the legacy **Wire LiteLLM** action in Configuration → OpenClaw Routing. In v0.15.3+, the Welcome Wizard opens the selective routing card first instead of invoking this legacy path automatically.
 - Removed when the operator clicks **Revert ClawNex Wire** AND the revert succeeds in cleaning all managed paths from `openclaw.json`.
 - Permissions: `0600` — readable only by the owning operator.
 
@@ -1399,6 +1433,7 @@ Retention enforcement:
 | config_models | Indefinite | — | — | — | Operator-managed | Configuration |
 | config_gateways | Indefinite | — | — | — | Operator-managed | Configuration |
 | hermes_instances | Indefinite | — | — | — | Operator-managed | Configuration |
+| connector_routing_items | Indefinite | — | — | — | Reconciled by connector inventory sync; removed rows are retained as drift evidence | Configuration / drift audit |
 | config_defaults | Indefinite | — | — | — | Operator-managed | Configuration |
 | cve_records | Indefinite | — | — | — | Re-synced from upstream | CVE record is itself the authoritative reference |
 | operators | Lifecycle | — | — | — | Deleted by admin action only | Identity records |
@@ -1438,6 +1473,7 @@ Foreign key and logical relationships across the current SQLite schema:
                                   metric_snapshots (N)       │  │
     config_gateways                                          │  │
     hermes_instances              correlation_events (N) ────┼──┼──▶ alerts (N) ◀── incidents (N)
+    connector_routing_items                                  │  │
     access_lists                        │                    │  │         ▲
     config_defaults                     │ alert_id (FK)      │  │         │
     custom_correlation_rules ───────────┘                    │  │  (operator-managed
@@ -1491,6 +1527,8 @@ Foreign key and logical relationships across the current SQLite schema:
 | 1.11 | 2026-05-05 | ClawNex Engineering | v0.10.0-alpha + v0.11.x-alpha. New §3.100 Policy Framework Tables — `policies` (3.100a) and `policy_rules` (3.100b) with full column specs, vendor-mutation lockdown rules, recommended indexes, and dual-key idempotent migration semantics (`policy_framework_schema_version` + `policy_framework_seed_version`). New §3.101 Token Cost FinOps Pipeline Type Surface — `NormalizedRow` (3.101a, 24 fields), `Signal` (3.101b), `AdapterResult` (3.101c) with adapter-private `signal_context` invariant, `GlossaryEntry` (3.101d). New §3.102 Alert Evidence extensions — `alerts.metadata` JSON for session-watcher source (11 fields), `audit_log.detail` JSON for `shield_review`/`shield_detected` actions (4 fields including redact()'d `payload_excerpt`). |
 | 1.12 | 2026-05-08 | ClawNex Engineering | v0.12.0 → v0.15.0-alpha: new §3.103 Mission Control + Triage Graph Type Surface — `ActionVerb` 11-value closed enum (3.103a), `SuggestedAction` shape with display formatter (3.103b), `IncidentFamily` 4-value closed enum (3.103c), Phase 5 finding shapes for the 5 newly-wired resolvers — `CorrelationFinding` / `BlastRadiusFinding` / `AuthRbacFinding` / `UpdateCveFinding` / `PolicyWarningFinding` (3.103d), full Triage Graph type set including `TriageStageId` 5-value canonical order / `TriageLinkState` 6-value taxonomy / `TriageArtifact` shape with `evidenceSnippet` + `evidenceTrail` payloads / per-family `resolverVersion` (3.103e), new theme tokens `glassPanelNested` / `glassPanelNested2` / `glassBorderCyanStrong` for the v0.14.5 Stat tile lift + opt-in `dimGlow` prop (3.103f). |
 | 1.13 | 2026-07-02 | ClawNex Engineering | v0.15.2-alpha: Added hermes_ingest_cursors and hermes_events for durable Hermes watcher state and normalized, profile/channel-scoped, content-hash-only Hermes scan events. |
+| 1.14 | 2026-07-02 | ClawNex Engineering | v0.15.3-alpha: Added connector_routing_items for OpenClaw/Hermes routing inventory, operator desired-route state, provider/model drift detection, and read-only Hermes capability reporting. |
+| 1.15 | 2026-07-02 | ClawNex Engineering | v0.15.5-alpha: Updated connector_routing_items semantics for config-backed Hermes custom-provider routing while preserving watcher-only/OAuth-session rows as read-only. |
 
 ---
 

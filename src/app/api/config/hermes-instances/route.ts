@@ -137,6 +137,23 @@ export async function POST(request: NextRequest) {
     }
     const resolved = pathResult.path;
     const check = checkHermesPath(resolved);
+
+    const existing = queryOne<HermesInstanceRow>(
+      "SELECT * FROM hermes_instances WHERE home_path = ?",
+      [resolved]
+    );
+    if (existing) {
+      return NextResponse.json({
+        error: "Hermes instance already exists for this home path",
+        instance: {
+          id: existing.id,
+          name: existing.name,
+          homePath: existing.home_path,
+          status: existing.status,
+        },
+      }, { status: 409 });
+    }
+
     const id = `hermes-${Date.now()}`;
 
     run(
