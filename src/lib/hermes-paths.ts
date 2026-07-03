@@ -82,18 +82,21 @@ export function resolveHermesProfilePath(home: string, profileId: string): Herme
 
 export function hermesPathExists(filePath: string): boolean {
   // Callers must pass paths returned by resolveHermesHomePath/resolveHermesChildPath.
+  //
   // codeql[js/path-injection]
   return fs.existsSync(filePath);
 }
 
 export function readHermesTextFile(filePath: string): string {
   // Callers must pass paths returned by resolveHermesHomePath/resolveHermesChildPath.
+  //
   // codeql[js/path-injection]
   return fs.readFileSync(filePath, "utf8");
 }
 
 export function readHermesDirectory(filePath: string): fs.Dirent[] {
   // Callers must pass paths returned by resolveHermesHomePath/resolveHermesChildPath.
+  //
   // codeql[js/path-injection]
   return fs.readdirSync(filePath, { withFileTypes: true });
 }
