@@ -244,6 +244,44 @@ export function BlastRadiusPanel({ onNavigate, demoMode }: Props) {
         />
       </div>
 
+      {data.hardeningRecommendations && data.hardeningRecommendations.length > 0 && (
+        <Card title="Draft Hardening Actions" accent={C.orange}>
+          <div style={{ display: "grid", gap: 8 }}>
+            {data.hardeningRecommendations.slice(0, 6).map((rec) => (
+              <div key={rec.id} style={{
+                display: "grid",
+                gridTemplateColumns: "1fr max-content",
+                gap: 10,
+                alignItems: "center",
+                padding: "9px 10px",
+                background: C.glassSurfTrans,
+                border: `1px solid ${C.glassSurfBorder}`,
+                borderRadius: 6,
+              }}>
+                <div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 3 }}>
+                    <Badge label={rec.severity} color={rec.severity === "critical" ? C.danger : rec.severity === "high" ? C.orange : C.warn} />
+                    <span style={{ color: C.tx, fontSize: 13, fontWeight: 800 }}>{rec.summary}</span>
+                  </div>
+                  <div style={{ color: C.txS, fontSize: 12, lineHeight: 1.45 }}>{rec.rationale}</div>
+                  <div style={{ color: C.txT, fontSize: 10, fontFamily: F.mono, marginTop: 3 }}>confidence {rec.confidence} · {rec.agentId}</div>
+                </div>
+                <button onClick={() => onNavigate?.(rec.draftAction.tabId as TabId)} style={{
+                  padding: "6px 10px",
+                  borderRadius: 6,
+                  border: `1px solid ${C.cyan}55`,
+                  background: `${C.cyan}16`,
+                  color: C.cyan,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}>{rec.draftAction.label}</button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Block E — Findings grid */}
       <div style={{ marginTop: 14 }}>
         <FindingsGrid

@@ -38,6 +38,8 @@ import { createAlert } from './alert-manager';
 import { logEvent } from './audit-logger';
 import { ingestEvent } from './correlation-engine';
 import { sanitizeLogField } from '../security/log-sanitize';
+import { createReplayCase, createReviewQueueItem } from './shield-workflow';
+import { getActiveInspectionProfile } from './shield-profiles';
 import type { ShieldScanResult } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -206,6 +208,30 @@ function processEntry(entry: SessionMessage, sessionFilename: string): void {
       error: err instanceof Error ? sanitizeLogField(err.message) : sanitizeLogField(err),
     });
     errorCount++;
+  }
+
+  try {
+    const activeProfile = getActiveInspectionProfile();
+    createReplayCase({
+      text: content,
+      sourceType: 'proxy_traffic',
+      sourceId: trafficId,
+      original: scanResult,
+      actor: 'session-watcher',
+    });
+    createReviewQueueItem({
+      sourceType: 'proxy_traffic',
+      sourceId: trafficId,
+      verdict: scanResult.verdict,
+      score: scanResult.score,
+      detections: scanResult.detections,
+      summary: `Session Shield REVIEW: ${scanResult.detections[0]?.name || 'Suspicious content'}`,
+      profileId: activeProfile.id,
+    });
+  } catch (workflowErr) {
+    console.error('[SessionWatcher] workflow write error', {
+      error: workflowErr instanceof Error ? sanitizeLogField(workflowErr.message) : sanitizeLogField(workflowErr),
+    });
   }
 
   // Broadcast via SSE (fire-and-forget)

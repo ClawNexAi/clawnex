@@ -233,6 +233,22 @@ export interface RankedSurface {
   drillLinks: { label: string; tabId: string }[];
 }
 
+export interface HardeningRecommendation {
+  id: string;
+  agentId: string;
+  agentName: string;
+  surfaceId: string;
+  severity: "low" | "medium" | "high" | "critical";
+  summary: string;
+  rationale: string;
+  draftAction: {
+    label: string;
+    tabId: string;
+    focus?: string;
+  };
+  confidence: EvidenceLevel;
+}
+
 // ---------- Report envelope ----------
 
 export interface ProfileDescriptor {
@@ -281,6 +297,7 @@ export interface PermissivenessReport {
     mostPermissiveAgents: RankedAgent[];
     mostExposedSurfaces: RankedSurface[];
   };
+  hardeningRecommendations: HardeningRecommendation[];
   meta: {
     scanDurationMs: number;
     cached: boolean;

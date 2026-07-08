@@ -12,6 +12,7 @@ import * as configService from '@/lib/services/config-service';
 import { logEvent } from '@/lib/services/audit-logger';
 import { syncProvidersToYaml } from '@/lib/litellm/sync';
 import { getDb } from '@/lib/db/index';
+import { modelRiskLabels } from '@/lib/services/provider-risk-labels';
 import * as path from 'node:path';
 
 export const runtime = 'nodejs';
@@ -62,7 +63,10 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const providerId = searchParams.get('providerId') || undefined;
-    const models = configService.listModels(providerId);
+    const models = configService.listModels(providerId).map((model) => ({
+      ...model,
+      risk_labels: modelRiskLabels(model),
+    }));
     return NextResponse.json({ models });
   } catch (err) {
     console.error('[Config API] Error listing models:', err);

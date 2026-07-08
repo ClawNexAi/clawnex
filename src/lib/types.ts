@@ -83,6 +83,12 @@ export interface ShieldDetection {
   samples: string[];
   tags: string[];
   source: 'clawnex' | 'defenseclaw' | 'access-list' | 'policy-system' | 'policy-custom';
+  standards?: Array<{
+    framework: 'mitre-atlas' | 'owasp-llm-top-10' | 'nist-ai-rmf';
+    id: string;
+    name: string;
+    url: string;
+  }>;
   // Policy Framework v1 — present when emitted from the policy evaluator
   policy_id?: string;
   policy_name?: string;

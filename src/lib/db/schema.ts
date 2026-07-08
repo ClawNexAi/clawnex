@@ -323,6 +323,56 @@ CREATE INDEX IF NOT EXISTS idx_hermes_events_observed ON hermes_events(observed_
 CREATE INDEX IF NOT EXISTS idx_connector_routing_connector ON connector_routing_items(connector, present);
 CREATE INDEX IF NOT EXISTS idx_connector_routing_desired ON connector_routing_items(connector, desired_route);
 
+-- Security operations workflow: replay lab and human review queue.
+-- Replay cases store redacted snapshots only; raw prompt/session payloads are
+-- not persisted by default. Review queue rows link back to shield_scans,
+-- proxy_traffic, or alerts without duplicating raw content.
+CREATE TABLE IF NOT EXISTS shield_replay_cases (
+  id TEXT PRIMARY KEY,
+  source_type TEXT NOT NULL CHECK(source_type IN ('shield_scan','proxy_traffic','alert','manual')),
+  source_id TEXT,
+  content_hash TEXT NOT NULL,
+  redacted_text TEXT NOT NULL,
+  original_verdict TEXT,
+  original_score INTEGER,
+  original_detections TEXT NOT NULL DEFAULT '[]',
+  original_profile TEXT,
+  replay_verdict TEXT,
+  replay_score INTEGER,
+  replay_detections TEXT NOT NULL DEFAULT '[]',
+  replay_profile TEXT,
+  comparison TEXT NOT NULL DEFAULT '{}',
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  replayed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS shield_review_queue (
+  id TEXT PRIMARY KEY,
+  source_type TEXT NOT NULL CHECK(source_type IN ('shield_scan','proxy_traffic','alert')),
+  source_id TEXT NOT NULL,
+  verdict TEXT NOT NULL DEFAULT 'REVIEW',
+  score INTEGER,
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','approved','rejected','false_positive','escalated','whitelist_draft')),
+  priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high','critical')),
+  summary TEXT NOT NULL,
+  detections TEXT NOT NULL DEFAULT '[]',
+  atlas_mappings TEXT NOT NULL DEFAULT '[]',
+  profile_id TEXT,
+  assigned_to TEXT,
+  decision_reason TEXT,
+  decision_by TEXT,
+  decision_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(source_type, source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_shield_replay_cases_source ON shield_replay_cases(source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_shield_replay_cases_created ON shield_replay_cases(created_at);
+CREATE INDEX IF NOT EXISTS idx_shield_review_queue_status ON shield_review_queue(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_shield_review_queue_source ON shield_review_queue(source_type, source_id);
+
 -- Proxy traffic log
 CREATE TABLE IF NOT EXISTS proxy_traffic (
   id TEXT PRIMARY KEY,
@@ -654,4 +704,50 @@ export const MIGRATIONS: string[] = [
   )`,
   "CREATE INDEX IF NOT EXISTS idx_connector_routing_connector ON connector_routing_items(connector, present)",
   "CREATE INDEX IF NOT EXISTS idx_connector_routing_desired ON connector_routing_items(connector, desired_route)",
+
+  // 2026-07-08 (v0.15.6-alpha): Security operations workflow.
+  // Redacted replay cases and REVIEW queue decisions for Shield operations.
+  `CREATE TABLE IF NOT EXISTS shield_replay_cases (
+    id TEXT PRIMARY KEY,
+    source_type TEXT NOT NULL CHECK(source_type IN ('shield_scan','proxy_traffic','alert','manual')),
+    source_id TEXT,
+    content_hash TEXT NOT NULL,
+    redacted_text TEXT NOT NULL,
+    original_verdict TEXT,
+    original_score INTEGER,
+    original_detections TEXT NOT NULL DEFAULT '[]',
+    original_profile TEXT,
+    replay_verdict TEXT,
+    replay_score INTEGER,
+    replay_detections TEXT NOT NULL DEFAULT '[]',
+    replay_profile TEXT,
+    comparison TEXT NOT NULL DEFAULT '{}',
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    replayed_at TEXT
+  )`,
+  `CREATE TABLE IF NOT EXISTS shield_review_queue (
+    id TEXT PRIMARY KEY,
+    source_type TEXT NOT NULL CHECK(source_type IN ('shield_scan','proxy_traffic','alert')),
+    source_id TEXT NOT NULL,
+    verdict TEXT NOT NULL DEFAULT 'REVIEW',
+    score INTEGER,
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','approved','rejected','false_positive','escalated','whitelist_draft')),
+    priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high','critical')),
+    summary TEXT NOT NULL,
+    detections TEXT NOT NULL DEFAULT '[]',
+    atlas_mappings TEXT NOT NULL DEFAULT '[]',
+    profile_id TEXT,
+    assigned_to TEXT,
+    decision_reason TEXT,
+    decision_by TEXT,
+    decision_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(source_type, source_id)
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_shield_replay_cases_source ON shield_replay_cases(source_type, source_id)",
+  "CREATE INDEX IF NOT EXISTS idx_shield_replay_cases_created ON shield_replay_cases(created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_shield_review_queue_status ON shield_review_queue(status, created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_shield_review_queue_source ON shield_review_queue(source_type, source_id)",
 ];

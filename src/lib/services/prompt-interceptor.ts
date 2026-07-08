@@ -18,6 +18,8 @@ import { logEvent } from './audit-logger';
 import { ingestEvent } from './correlation-engine';
 import type { ShieldScanResult } from '../types';
 import { ORIGIN_PRODUCTION, productionOriginSqlClause } from '../dashboard/metric-semantics';
+import { createReplayCase, createReviewQueueItem } from './shield-workflow';
+import { getActiveInspectionProfile } from './shield-profiles';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -60,6 +62,7 @@ export function interceptChatEvent(payload: Record<string, unknown>): ShieldScan
 
   try {
     const result = shieldScan(content, { includeRedacted: false });
+    const activeProfile = getActiveInspectionProfile();
 
     // Store in shield_scans table
     const scanId = randomUUID();
@@ -93,6 +96,27 @@ export function interceptChatEvent(payload: Record<string, unknown>): ShieldScan
       );
     } catch (dbErr) {
       console.error('[PromptInterceptor] DB write error:', dbErr);
+    }
+
+    try {
+      createReplayCase({
+        text: content,
+        sourceType: 'shield_scan',
+        sourceId: scanId,
+        original: result,
+        actor: 'clawnex',
+      });
+      createReviewQueueItem({
+        sourceType: 'shield_scan',
+        sourceId: scanId,
+        verdict: result.verdict,
+        score: result.score,
+        detections: result.detections,
+        summary: `OpenClaw Shield REVIEW: ${result.detections[0]?.name || 'Suspicious content'}`,
+        profileId: activeProfile.id,
+      });
+    } catch (workflowErr) {
+      console.error('[PromptInterceptor] workflow write error:', workflowErr);
     }
 
     // Generate alerts for BLOCK/REVIEW verdicts. Production origin so they

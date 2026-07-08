@@ -41,6 +41,8 @@ import {
 import type { ShieldScanResult, ShieldDetection } from "../types";
 import { evaluatePolicies } from "./policy-evaluator";
 import { applySpans } from "./redaction";
+import { getActiveScanOptions } from "../services/shield-profiles";
+import { enrichScanResult } from "../services/shield-standards-mapping";
 
 // ---------------------------------------------------------------------------
 // PII patterns — redaction source of truth.
@@ -441,17 +443,23 @@ function computeVerdict(score: number, detections: ShieldDetection[]): "BLOCK" |
  */
 export function shieldScan(text: string, options?: ScanOptions): ShieldScanResult {
   const start = performance.now();
+  const activeOptions = getActiveScanOptions("inbound");
+  const effectiveOptions: ScanOptions = {
+    ...activeOptions,
+    ...options,
+    categories: options?.categories ?? activeOptions.categories,
+  };
 
   // Select rules based on options
   let rulesToScan = ALL_RULES;
-  if (options?.categories && options.categories.length > 0) {
-    const cats = new Set(options.categories.map((c) => c.toLowerCase()));
+  if (effectiveOptions.categories && effectiveOptions.categories.length > 0) {
+    const cats = new Set(effectiveOptions.categories.map((c) => c.toLowerCase()));
     rulesToScan = rulesToScan.filter((r) => cats.has(r.category.toLowerCase()));
   }
 
   // Remove whitelisted rules (e.g. cognitive-file rules for internal agent traffic)
-  if (options?.whitelistRules && options.whitelistRules.length > 0) {
-    const skip = new Set(options.whitelistRules);
+  if (effectiveOptions.whitelistRules && effectiveOptions.whitelistRules.length > 0) {
+    const skip = new Set(effectiveOptions.whitelistRules);
     rulesToScan = rulesToScan.filter((r) => !skip.has(r.id));
   }
 
@@ -477,7 +485,7 @@ export function shieldScan(text: string, options?: ScanOptions): ShieldScanResul
   detections.push(...policyResult.detections);
 
   // Optionally limit detections
-  const maxDet = options?.maxDetections ?? 100;
+  const maxDet = effectiveOptions.maxDetections ?? 100;
   // Sort by severity weight descending, then by confidence
   const sevOrder: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
   detections.sort((a, b) => {
@@ -514,7 +522,7 @@ export function shieldScan(text: string, options?: ScanOptions): ShieldScanResul
 
   // Redacted text
   let cleaned = "";
-  if (options?.includeRedacted) {
+  if (effectiveOptions.includeRedacted) {
     // Apply policy redact spans against the original `text` where their
     // offsets are valid, THEN run PII redaction over the result. The
     // policy spans must run first because their (start, length) tuples
@@ -529,14 +537,14 @@ export function shieldScan(text: string, options?: ScanOptions): ShieldScanResul
 
   const elapsed = `${(performance.now() - start).toFixed(1)}ms`;
 
-  return {
+  return enrichScanResult({
     verdict: finalVerdict,
     score,
     elapsed,
     detections: trimmedDetections,
     cleaned,
     stats,
-  };
+  });
 }
 
 /**
@@ -605,14 +613,14 @@ export function outboundScan(text: string): ShieldScanResult {
 
   const elapsed = `${(performance.now() - start).toFixed(1)}ms`;
 
-  return {
+  return enrichScanResult({
     verdict: finalVerdict,
     score,
     elapsed,
     detections: allDetections,
     cleaned,
     stats,
-  };
+  });
 }
 
 /**

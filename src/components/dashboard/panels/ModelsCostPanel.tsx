@@ -11,6 +11,16 @@ import { Badge, BadgeLegend, Card, CollapsibleCard, EmptyState, Fresh, LoadingSp
 import type { ModelData, DashboardFilters } from '../types';
 import { MODELS } from '../mock-data';
 
+type RiskLabel = { id: string; label: string; tone: "good" | "warn" | "danger" | "info" | "neutral"; reason: string };
+
+function riskColor(tone: RiskLabel["tone"]): string {
+  if (tone === "good") return C.green;
+  if (tone === "danger") return C.danger;
+  if (tone === "warn") return C.warn;
+  if (tone === "info") return C.info;
+  return C.txT;
+}
+
 // Pagination footer — styled identically to CostBySessionCard.
 // Hidden when totalPages <= 1 so small cards (e.g. AGENT-MAIN with 1 model)
 // don't show useless pagination chrome. See operator UX directive 2026-05-04.
@@ -94,7 +104,7 @@ function ProviderModelsCard({ provider, models }: { provider: string; models: Mo
 
 export function ModelsCostPanel({ demoMode, filters }: { demoMode: boolean; filters: DashboardFilters }) {
   const [apiModels, setApiModels] = useState<ModelData[] | null>(null);
-  const [configModels, setConfigModels] = useState<Array<{ model_id: string; name: string; provider_name: string; provider_type: string; context_window: number; supports_reasoning: number }>>([]);
+  const [configModels, setConfigModels] = useState<Array<{ model_id: string; name: string; provider_name: string; provider_type: string; context_window: number; supports_reasoning: number; risk_labels?: RiskLabel[] }>>([]);
   // v0.8.4: filter state from URL hash. actor URL key carries provider name,
   // source URL key carries provider type (lmstudio/openai-compatible/etc).
   const [urlState, updateUrl] = useHashState();
@@ -239,16 +249,22 @@ export function ModelsCostPanel({ demoMode, filters }: { demoMode: boolean; filt
             items={[
               { label: "TYPE", color: C.purp, description: "Provider adapter family used by LiteLLM and ClawNex routing." },
               { label: "YES", color: C.brand, description: "Model advertises support for the capability in this column." },
+              { label: "ROUTED", color: C.green, description: "Traffic is routed through ClawNex's Shield path." },
+              { label: "UNSCANNED", color: C.danger, description: "Observed direct traffic may bypass real-time Shield inspection." },
             ]}
             style={{ marginBottom: 10 }}
           />
           <Table
-            headers={["Model ID", "Name", "Provider", "Type", "Context", "Reasoning"]}
+            headers={["Model ID", "Name", "Provider", "Type", "Risk", "Context", "Reasoning"]}
             rows={configPagedRows.map(m => [
               <span key="mid" style={{ fontSize: 10 }}>{m.model_id}</span>,
               m.name || "--",
               m.provider_name,
               <Badge key="t" label={m.provider_type} color={C.purp} />,
+              <div key="risk" style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {(m.risk_labels || []).slice(0, 3).map(label => <Badge key={label.id} label={label.label} color={riskColor(label.tone)} tip={label.reason} />)}
+                {(!m.risk_labels || m.risk_labels.length === 0) && <span style={{ color: C.txT }}>--</span>}
+              </div>,
               m.context_window ? `${(m.context_window / 1000).toFixed(0)}K` : "--",
               m.supports_reasoning ? <Badge key="r" label="Yes" color={C.brand} /> : <span key="no" style={{ color: C.txT }}>--</span>,
             ])}
