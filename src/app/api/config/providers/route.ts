@@ -20,6 +20,7 @@ import { requireLocalhost } from "@/lib/middleware/localhost-guard";
 import * as configService from '@/lib/services/config-service';
 import { syncProvidersToYaml } from '@/lib/litellm/sync';
 import { getDb } from '@/lib/db/index';
+import { providerRiskLabels } from '@/lib/services/provider-risk-labels';
 import * as path from 'node:path';
 
 export const runtime = 'nodejs';
@@ -63,7 +64,14 @@ export async function GET(request: NextRequest) {
 
   const __t0 = Date.now();
   try {
-    const providers = configService.listProviders().map(p => configService.redactProvider(p));
+    const providers = configService.listProviders().map(p => {
+      const redacted = configService.redactProvider(p);
+      return {
+        ...redacted,
+        risk_labels: providerRiskLabels(p),
+        models: redacted.models?.map((model) => ({ ...model })),
+      };
+    });
     console.log(`[api/config/providers:GET] ${Date.now() - __t0}ms count=${providers.length}`);
     return NextResponse.json({ providers });
   } catch (err) {

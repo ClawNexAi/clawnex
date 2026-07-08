@@ -56,6 +56,7 @@ import type {
   RoutingPath,
   Surface,
   SurfaceReachability,
+  HardeningRecommendation,
 } from "./types";
 
 export { clearCache };
@@ -245,6 +246,7 @@ export async function scan(opts: ScanOpts = {}): Promise<PermissivenessReport> {
     mostPermissiveAgents: buildAgentRanking(edgeBearingSurfaces),
     mostExposedSurfaces: buildSurfaceRanking(surfaces),
   };
+  const hardeningRecommendations = buildHardeningRecommendations(edgeBearingSurfaces);
 
   // Panel-wide confidence = MIN across shipped surfaces.
   const shippedConfidences = surfaces
@@ -271,6 +273,7 @@ export async function scan(opts: ScanOpts = {}): Promise<PermissivenessReport> {
     postureLints: postureLintsActive,
     postureLintsSuppressed,
     rankings,
+    hardeningRecommendations,
     meta: {
       scanDurationMs: Date.now() - t0,
       cached: false,
@@ -281,6 +284,47 @@ export async function scan(opts: ScanOpts = {}): Promise<PermissivenessReport> {
 
   setCached(report);
   return report;
+}
+
+function recommendationSeverity(edge: SurfaceReachability): HardeningRecommendation["severity"] {
+  if (edge.edgeBlastRadius.band === "critical") return "critical";
+  if (edge.edgeBlastRadius.band === "high" || edge.dangerousToolCount >= 3) return "high";
+  if (edge.edgeBlastRadius.band === "medium" || edge.path === "direct") return "medium";
+  return "low";
+}
+
+function buildHardeningRecommendations(surfaces: Surface[]): HardeningRecommendation[] {
+  const out: HardeningRecommendation[] = [];
+  for (const surface of surfaces) {
+    for (const edge of surface.reachability) {
+      const reasons: string[] = [];
+      if (edge.path === "direct") reasons.push("traffic path is direct and may bypass real-time Shield inspection");
+      if (edge.dangerousToolCount > 0) reasons.push(`${edge.dangerousToolCount} medium/high-risk tool(s) are reachable`);
+      if (edge.effectiveAllowlist === "missing" || edge.effectiveAllowlist === "enforcing_broad") reasons.push(`allowlist posture is ${edge.effectiveAllowlist}`);
+      if (edge.containmentState !== "sandboxed") reasons.push(`containment is ${edge.containmentState}`);
+      if (reasons.length === 0) continue;
+      const severity = recommendationSeverity(edge);
+      out.push({
+        id: `harden_${surface.id}_${edge.agentId}`.replace(/[^A-Za-z0-9_:-]/g, "_"),
+        agentId: edge.agentId,
+        agentName: edge.agentName,
+        surfaceId: surface.id,
+        severity,
+        summary: `Harden ${edge.agentName} on ${surface.name}`,
+        rationale: `This agent can reach ${surface.name}; ${reasons.join(", ")}.`,
+        draftAction: edge.path === "direct"
+          ? { label: "Review routing", tabId: "configuration", focus: "openclawRouting" }
+          : { label: "Review permissions", tabId: "configuration", focus: "fleetConnectors" },
+        confidence: edge.confidence,
+      });
+    }
+  }
+  return out
+    .sort((a, b) => {
+      const rank = { critical: 0, high: 1, medium: 2, low: 3 };
+      return rank[a.severity] - rank[b.severity];
+    })
+    .slice(0, 20);
 }
 
 // ---------- surface builders ----------

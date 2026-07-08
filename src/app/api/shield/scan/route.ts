@@ -15,6 +15,8 @@ import { createAlert } from "@/lib/services/alert-manager";
 import { logEvent } from "@/lib/services/audit-logger";
 import { ingestEvent } from "@/lib/services/correlation-engine";
 import { sanitizeLogField } from "@/lib/security/log-sanitize";
+import { createReplayCase, createReviewQueueItem } from "@/lib/services/shield-workflow";
+import { getActiveInspectionProfile } from "@/lib/services/shield-profiles";
 import { createHash } from "node:crypto";
 import {
   type Origin,
@@ -88,6 +90,7 @@ export async function POST(request: NextRequest) {
 
     const scanId = crypto.randomUUID();
     const contentHash = createHash("sha256").update(text).digest("hex").slice(0, 16);
+    const activeProfile = getActiveInspectionProfile();
 
     // Log to shield_scans table — origin embedded in detail JSON so stats
     // queries can filter test-generated runs out of production counters.
@@ -109,6 +112,27 @@ export async function POST(request: NextRequest) {
       );
     } catch (dbErr) {
       console.error("[Shield Scan] DB write error:", dbErr);
+    }
+
+    try {
+      createReplayCase({
+        text,
+        sourceType: "shield_scan",
+        sourceId: scanId,
+        original: result,
+        actor: "api",
+      });
+      createReviewQueueItem({
+        sourceType: "shield_scan",
+        sourceId: scanId,
+        verdict: result.verdict,
+        score: result.score,
+        detections: result.detections,
+        summary: `Manual Shield REVIEW: ${result.detections[0]?.name || "Suspicious content"}`,
+        profileId: activeProfile.id,
+      });
+    } catch (workflowErr) {
+      console.error("[Shield Scan] workflow write error:", workflowErr);
     }
 
     // Generate alert for BLOCK/REVIEW verdicts. Origin propagates so a
@@ -163,6 +187,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ...result,
       scanId,
+      profile: activeProfile,
       source: source || "api",
       direction: dir,
       timestamp: new Date().toISOString(),

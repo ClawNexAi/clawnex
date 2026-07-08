@@ -10,6 +10,29 @@ import { ShieldWhitelistSection } from './ShieldWhitelistSection';
 import { ShieldScansFiltered } from './ShieldScansFiltered';
 import { SHIELD_STATS_DEMO, SHIELD_HISTORY_DEMO } from '../mock-data';
 
+interface InspectionProfile {
+  id: string;
+  name: string;
+  description: string;
+  blockMode: string;
+  queueMode: string;
+  outboundGate: string;
+}
+
+interface ReviewQueueItem {
+  id: string;
+  summary: string;
+  score: number | null;
+  priority: string;
+  status: string;
+  profile_id: string | null;
+  source_type: string;
+  source_id: string;
+  created_at: string;
+  parsedDetections: Array<{ id?: string; name?: string; severity?: string; category?: string }>;
+  mappings: Array<{ framework: string; id: string; name: string; url: string }>;
+}
+
 // ---------------------------------------------------------------------------
 // PromptShieldPanel
 // ---------------------------------------------------------------------------
@@ -21,6 +44,14 @@ export function PromptShieldPanel({ externalPayload, onPayloadConsumed, filters,
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<ShieldStats | null>(null);
   const [history, setHistory] = useState<ShieldHistoryItem[] | null>(null);
+  const [profiles, setProfiles] = useState<InspectionProfile[]>([]);
+  const [activeProfile, setActiveProfile] = useState<InspectionProfile | null>(null);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [queue, setQueue] = useState<ReviewQueueItem[]>([]);
+  const [queueMessage, setQueueMessage] = useState<string | null>(null);
+  const [replayText, setReplayText] = useState("");
+  const [replayResult, setReplayResult] = useState<{ replay?: { replay?: ShieldResult; comparison?: Record<string, unknown>; id?: string } } | null>(null);
+  const [replaying, setReplaying] = useState(false);
 
   useEffect(() => {
     if (externalPayload) {
@@ -54,12 +85,98 @@ export function PromptShieldPanel({ externalPayload, onPayloadConsumed, filters,
     } catch {}
   }, [filters.since, filters.selectedInstance, demoMode]);
 
+  const fetchProfiles = useCallback(async () => {
+    if (demoMode) return;
+    try {
+      const res = await fetch("/api/shield/profiles");
+      if (res.ok) {
+        const data = await res.json();
+        setProfiles(data.profiles || []);
+        setActiveProfile(data.active || null);
+      }
+    } catch {}
+  }, [demoMode]);
+
+  const fetchQueue = useCallback(async () => {
+    if (demoMode) return;
+    try {
+      const res = await fetch("/api/shield/review-queue?status=open&limit=25");
+      if (res.ok) {
+        const data = await res.json();
+        setQueue(data.queue || []);
+      }
+    } catch {}
+  }, [demoMode]);
+
   useEffect(() => {
-    fetchStats(); fetchHistory();
+    fetchStats(); fetchHistory(); fetchProfiles(); fetchQueue();
     const s = setInterval(fetchStats, 30000);
     const h = setInterval(fetchHistory, 15000);
-    return () => { clearInterval(s); clearInterval(h); };
-  }, [fetchStats, fetchHistory]);
+    const q = setInterval(fetchQueue, 30000);
+    return () => { clearInterval(s); clearInterval(h); clearInterval(q); };
+  }, [fetchStats, fetchHistory, fetchProfiles, fetchQueue]);
+
+  const applyProfile = useCallback(async (id: string) => {
+    setProfileSaving(true);
+    try {
+      const res = await fetch("/api/shield/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActiveProfile(data.active);
+        fetchStats();
+      }
+    } catch {
+    } finally {
+      setProfileSaving(false);
+    }
+  }, [fetchStats]);
+
+  const runReplay = useCallback(async (text?: string, original?: ShieldResult) => {
+    const payload = (text ?? replayText).trim();
+    if (!payload) return;
+    setReplaying(true);
+    setReplayResult(null);
+    try {
+      const res = await fetch("/api/shield/replay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: payload, original }),
+      });
+      if (res.ok) setReplayResult(await res.json());
+    } catch {
+      setReplayResult({ replay: undefined });
+    } finally {
+      setReplaying(false);
+    }
+  }, [replayText]);
+
+  const decideQueue = useCallback(async (id: string, status: string) => {
+    const reason = status === "approved"
+      ? "Operator approved reviewed item."
+      : status === "false_positive"
+        ? "Operator marked reviewed item as false positive."
+        : status === "whitelist_draft"
+          ? "Operator requested whitelist exception draft."
+          : status === "escalated"
+            ? "Operator escalated reviewed item to incident."
+            : "Operator rejected reviewed item.";
+    try {
+      const res = await fetch("/api/shield/review-queue", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status, reason }),
+      });
+      if (res.ok) {
+        setQueueMessage("Queue updated");
+        setTimeout(() => setQueueMessage(null), 2500);
+        fetchQueue();
+      }
+    } catch {}
+  }, [fetchQueue]);
 
   const handleScan = useCallback(async () => {
     if (!input.trim()) return;
@@ -106,6 +223,30 @@ export function PromptShieldPanel({ externalPayload, onPayloadConsumed, filters,
           <Stat label="Verdict" value={result?.verdict || "Email"} color={result ? stColor(result.verdict) : C.txT} small />
         </Tooltip>
       </div>
+
+      <Card title="Inspection Profile" accent={C.brand}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 320px) 1fr", gap: 12, alignItems: "start" }}>
+          <div>
+            <div style={{ fontSize: 12, color: C.txT, fontWeight: 700, marginBottom: 4 }}>ACTIVE PROFILE</div>
+            <select value={activeProfile?.id || "balanced"} disabled={profileSaving || demoMode} onChange={(e) => applyProfile(e.target.value)} style={{
+              width: "100%", padding: "8px 10px", background: C.bg, border: `1px solid ${C.brd}`, borderRadius: 6,
+              color: C.tx, fontFamily: F.mono, fontSize: 12, outline: "none",
+            }}>
+              {(profiles.length ? profiles : [{ id: "balanced", name: "Balanced", description: "", blockMode: "on", queueMode: "post_facto", outboundGate: "standard" }]).map(profile => (
+                <option key={profile.id} value={profile.id}>{profile.name}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ fontSize: 12, color: C.txS, lineHeight: 1.5 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+              <Badge label={activeProfile?.blockMode === "on" ? "BLOCKING" : "OBSERVE"} color={activeProfile?.blockMode === "on" ? C.danger : C.warn} />
+              <Badge label={activeProfile?.queueMode || "post_facto"} color={C.cyan} />
+              <Badge label={activeProfile?.outboundGate || "standard"} color={C.purp} />
+            </div>
+            {activeProfile?.description || "Balanced production defaults for Shield scanning and review queue handling."}
+          </div>
+        </div>
+      </Card>
 
       <Card title="Live Input Scanner (Inbound)" accent={C.cyan}>
         <textarea value={input} onChange={e => setInput(e.target.value)} placeholder="Paste untrusted input here — scans all 163 built-in detections + custom policy rules..."
@@ -190,20 +331,91 @@ export function PromptShieldPanel({ externalPayload, onPayloadConsumed, filters,
                 {result.stats.low > 0 && <Badge label={`${result.stats.low} Low`} color={C.info} />}
               </div>
               <Table
-                headers={["ID", "Name", "Category", "Severity", "Confidence", "Matches"]}
+                headers={["ID", "Name", "Category", "Severity", "Mappings", "Matches"]}
                 rows={result.detections.map(d => [
                   <span key="id" style={{ fontSize: 13, color: C.txT }}>{d.id}</span>,
                   d.name,
                   <Badge key="cat" label={d.category} color={C.purp} />,
                   <Badge key="sev" label={d.severity} color={sevColor(d.severity)} />,
-                  <span key="conf">{(d.confidence * 100).toFixed(0)}%</span>,
+                  <div key="maps" style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {(d.standards || []).slice(0, 2).map(m => <Badge key={`${m.framework}:${m.id}`} label={m.id} color={C.info} />)}
+                    {(d.standards || []).length === 0 && <span style={{ color: C.txT }}>--</span>}
+                  </div>,
                   d.matchCount,
                 ])}
               />
+              {result.cleaned && (
+                <button onClick={() => { setReplayText(result.cleaned || ""); runReplay(result.cleaned, result); }} disabled={replaying} style={{
+                  marginTop: 10, padding: "7px 14px", background: `${C.info}18`, color: C.info, border: `1px solid ${C.info}44`, borderRadius: 6,
+                  fontSize: 12, fontWeight: 700, cursor: replaying ? "wait" : "pointer",
+                }}>
+                  Replay Redacted Snapshot
+                </button>
+              )}
             </Card>
           )}
         </>
       )}
+
+      <Card title="Attack Replay Lab" accent={C.info}>
+        <textarea value={replayText} onChange={e => setReplayText(e.target.value)} placeholder="Paste a redacted payload or use Replay Redacted Snapshot after a scan..."
+          style={{
+            width: "100%", minHeight: 70, background: C.bg, border: `1px solid ${C.brd}`, borderRadius: 6,
+            color: C.tx, fontFamily: F.mono, fontSize: 12, padding: 10, resize: "vertical", outline: "none", boxSizing: "border-box",
+          }}
+        />
+        <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button onClick={() => runReplay()} disabled={replaying || !replayText.trim()} style={{
+            padding: "7px 14px", background: replaying ? `${C.info}14` : `${C.info}22`, color: C.info, border: `1px solid ${C.info}55`, borderRadius: 6,
+            fontSize: 12, fontWeight: 800, cursor: replaying ? "wait" : "pointer",
+          }}>
+            {replaying ? "Replaying..." : "Run Replay"}
+          </button>
+          {replayResult?.replay?.id && <span style={{ fontSize: 11, color: C.txT, fontFamily: F.mono }}>case {replayResult.replay.id}</span>}
+        </div>
+        {replayResult?.replay?.replay && (
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            <Badge label={replayResult.replay.replay.verdict} color={stColor(replayResult.replay.replay.verdict)} />
+            <Badge label={`score ${replayResult.replay.replay.score}`} color={C.cyan} />
+            <span style={{ fontSize: 12, color: C.txS }}>Comparison: {JSON.stringify(replayResult.replay.comparison)}</span>
+          </div>
+        )}
+      </Card>
+
+      <Card title="Human Review Queue" accent={C.warn}>
+        {queueMessage && <div style={{ fontSize: 12, color: C.green, marginBottom: 8 }}>{queueMessage}</div>}
+        {queue.length === 0 ? (
+          <div style={{ fontSize: 12, color: C.txT }}>No open REVIEW items.</div>
+        ) : (
+          <Table
+            headers={["Finding", "Priority", "Score", "Mappings", "Actions"]}
+            rows={queue.map(item => [
+              <div key="finding" style={{ display: "grid", gap: 3 }}>
+                <span style={{ color: C.tx, fontWeight: 700 }}>{item.summary}</span>
+                <span style={{ color: C.txT, fontSize: 10, fontFamily: F.mono }}>{item.source_type}:{item.source_id.slice(0, 12)} · {item.profile_id || "profile?"}</span>
+              </div>,
+              <Badge key="pri" label={item.priority} color={item.priority === "critical" ? C.danger : item.priority === "high" ? C.orange : C.warn} />,
+              item.score ?? "--",
+              <div key="maps" style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {item.mappings.slice(0, 3).map(m => <Badge key={`${item.id}-${m.framework}-${m.id}`} label={m.id} color={C.info} />)}
+              </div>,
+              <div key="actions" style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {[
+                  ["approved", "Approve", C.green],
+                  ["false_positive", "False +", C.warn],
+                  ["whitelist_draft", "Whitelist", C.cyan],
+                  ["escalated", "Escalate", C.danger],
+                ].map(([status, label, color]) => (
+                  <button key={status} onClick={() => decideQueue(item.id, status)} style={{
+                    padding: "4px 7px", borderRadius: 4, border: `1px solid ${color}44`, background: `${color}12`, color,
+                    fontSize: 10, fontWeight: 800, cursor: "pointer",
+                  }}>{label}</button>
+                ))}
+              </div>,
+            ])}
+          />
+        )}
+      </Card>
 
       <ShieldWhitelistSection />
 

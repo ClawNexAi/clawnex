@@ -3285,6 +3285,9 @@ function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) 
 function ProxySettingsCard({ focusedCard }: { focusedCard?: string | null }) {
   const [blockMode, setBlockMode] = useState("off");
   const [providers, setProviders] = useState<Array<{ prefix: string; provider: string; url: string }>>([]);
+  const [inspectionProfiles, setInspectionProfiles] = useState<Array<{ id: string; name: string; description: string; blockMode: string; outboundGate: string }>>([]);
+  const [activeProfile, setActiveProfile] = useState<string>("balanced");
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -3301,6 +3304,19 @@ function ProxySettingsCard({ focusedCard }: { focusedCard?: string | null }) {
     const iv = setInterval(fetchStatus, 10000);
     return () => clearInterval(iv);
   }, [fetchStatus]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/shield/profiles");
+        if (res.ok) {
+          const data = await res.json();
+          setInspectionProfiles(data.profiles || []);
+          setActiveProfile(data.active?.id || "balanced");
+        }
+      } catch { /* silent */ }
+    })();
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -3331,9 +3347,56 @@ function ProxySettingsCard({ focusedCard }: { focusedCard?: string | null }) {
     } catch { /* silent */ }
   }, []);
 
+  const applyInspectionProfile = useCallback(async (id: string) => {
+    setProfileMessage("Saving...");
+    try {
+      const res = await fetch("/api/shield/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActiveProfile(data.active?.id || id);
+        setBlockMode(data.active?.blockMode || blockMode);
+        setProfileMessage("Saved");
+      } else {
+        setProfileMessage("Failed");
+      }
+    } catch {
+      setProfileMessage("Network error");
+    } finally {
+      setTimeout(() => setProfileMessage(null), 2500);
+    }
+  }, [blockMode]);
+
   return (
     <CollapsibleCard title="SHIELD SETTINGS" accent={C.cyan} defaultOpen={false} focusKey="shieldSettings" focusedCard={focusedCard}>
       <div style={{ fontSize: 13, color: C.txS, marginBottom: 12 }}>ClawNex Prompt Shield intercepts all LLM requests through 163 built-in detections (plus any custom policy rules) via LiteLLM proxy (port 4001).</div>
+
+      <div style={{ padding: "12px 14px", marginBottom: 12, background: C.glassSurfTrans, borderRadius: 8, border: `1px solid ${C.glassBorderSubtle}` }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 320px) 1fr", gap: 12, alignItems: "start" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.tx, marginBottom: 4 }}>Inspection Profile</div>
+            <select value={activeProfile} onChange={(e) => applyInspectionProfile(e.target.value)} style={{
+              width: "100%", padding: "8px 10px", background: C.bg, border: `1px solid ${C.brd}`, borderRadius: 6,
+              color: C.tx, fontFamily: F.mono, fontSize: 12, outline: "none", cursor: "pointer",
+            }}>
+              {(inspectionProfiles.length ? inspectionProfiles : [{ id: "balanced", name: "Balanced", description: "Default profile", blockMode: "on", outboundGate: "standard" }]).map(profile => (
+                <option key={profile.id} value={profile.id}>{profile.name}</option>
+              ))}
+            </select>
+            {profileMessage && <div style={{ marginTop: 4, fontSize: 11, color: profileMessage === "Saved" ? C.green : C.warn, fontFamily: F.mono }}>{profileMessage}</div>}
+          </div>
+          <div style={{ fontSize: 12, color: C.txS, lineHeight: 1.5 }}>
+            {inspectionProfiles.find(profile => profile.id === activeProfile)?.description || "Applies a bundled Shield posture: block mode, scan focus, outbound gate, alert thresholds, and review queue mode."}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+              <Badge label={inspectionProfiles.find(profile => profile.id === activeProfile)?.blockMode === "off" ? "observe" : "blocking"} color={inspectionProfiles.find(profile => profile.id === activeProfile)?.blockMode === "off" ? C.warn : C.danger} />
+              <Badge label={inspectionProfiles.find(profile => profile.id === activeProfile)?.outboundGate || "standard"} color={C.cyan} />
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Block Mode Toggle */}
       <div style={{ padding: "12px 14px", marginBottom: 12, background: C.glassSurfTrans, borderRadius: 8, border: `1px solid ${C.glassBorderSubtle}` }}>

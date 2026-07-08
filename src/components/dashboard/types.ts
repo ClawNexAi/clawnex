@@ -118,6 +118,9 @@ export interface ShieldResult {
   verdict: string;
   score: number;
   elapsed: string;
+  cleaned?: string;
+  profile?: { id: string; name: string };
+  standards?: Array<{ framework: string; id: string; name: string; url: string }>;
   detections: Array<{
     id: string;
     name: string;
@@ -125,6 +128,7 @@ export interface ShieldResult {
     severity: string;
     confidence: number;
     matchCount: number;
+    standards?: Array<{ framework: string; id: string; name: string; url: string }>;
   }>;
   stats: {
     total: number;

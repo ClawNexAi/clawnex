@@ -21,6 +21,8 @@ import { getSetting } from "@/lib/services/config-service";
 import { broadcast } from "@/lib/events";
 import { authenticateRequest } from "@/lib/middleware/api-auth";
 import { sanitizeLogField } from "@/lib/security/log-sanitize";
+import { createReplayCase, createReviewQueueItem } from "@/lib/services/shield-workflow";
+import { getActiveInspectionProfile } from "@/lib/services/shield-profiles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -637,6 +639,31 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       statusCode: 200,
       source: "api-v1",
     });
+    try {
+      const activeProfile = getActiveInspectionProfile();
+      createReplayCase({
+        text: promptText,
+        sourceType: "proxy_traffic",
+        sourceId: trafficId,
+        original: {
+          verdict: finalVerdict,
+          score: finalScore,
+          detections: inboundDetections,
+        } as ReturnType<typeof shieldScan>,
+        actor: "api-v1",
+      });
+      createReviewQueueItem({
+        sourceType: "proxy_traffic",
+        sourceId: trafficId,
+        verdict: finalVerdict,
+        score: finalScore,
+        detections: inboundDetections,
+        summary: `API Shield REVIEW: ${inboundDetections[0]?.name || "Suspicious content"}`,
+        profileId: activeProfile.id,
+      });
+    } catch (workflowErr) {
+      console.error("[Chat Completions] Workflow logging error:", workflowErr);
+    }
   } catch (err) {
     console.error("[Chat Completions] Traffic logging error:", err);
   }
