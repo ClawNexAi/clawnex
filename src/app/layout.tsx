@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "ClawNex — One nexus. Total control.",
-  description: "AI Agent Fleet Security Operations Center. A ClawNex Project.",
+  description: "AI Agent Fleet Security Operations Center. ProBizSystems.",
   icons: {
     icon: "/shield.svg",
   },

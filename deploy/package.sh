@@ -77,7 +77,7 @@ trap 'rm -rf "$STAGING_DIR"' EXIT
 
 echo ""
 echo -e "${CYAN}${BOLD}ClawNex v${VERSION} — Deployment Package Creator${NC}"
-echo -e "${CYAN}A ClawNex Project${NC}"
+echo -e "${CYAN}ProBizSystems${NC}"
 echo ""
 
 mkdir -p "$BUNDLE_DIR"

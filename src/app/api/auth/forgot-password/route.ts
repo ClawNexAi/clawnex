@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
           <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
           <p style="color: #bbb; font-size: 11px; text-align: center;">
             ClawNex &mdash; One nexus. Total control.<br/>
-            A ClawNex Project
+            ProBizSystems
           </p>
         </div>
       `,

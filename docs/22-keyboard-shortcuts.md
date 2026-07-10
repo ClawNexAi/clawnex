@@ -299,4 +299,4 @@ If you have a strong opinion on which shortcuts to prioritize, drop it in a GitH
 
 ---
 
-*A ClawNex Project — clawnexai.com*
+*ProBizSystems — clawnexai.com*

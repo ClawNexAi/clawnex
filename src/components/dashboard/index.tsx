@@ -1414,7 +1414,7 @@ function SentinelDashboardInner() {
               padding: "6px 10px", borderTop: `1px solid ${C.brd}`, display: "block",
               fontSize: 9, color: C.txG, fontFamily: F.sans, textDecoration: "none", textAlign: "center", letterSpacing: "0.04em", transition: "color 0.2s ease",
             }} onMouseEnter={e => { (e.target as HTMLElement).style.color = C.brand; }} onMouseLeave={e => { (e.target as HTMLElement).style.color = C.txG; }}>
-              A ClawNex Project
+              ProBizSystems
             </a>
           )}
         </nav>

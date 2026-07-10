@@ -1866,4 +1866,4 @@ For 429 responses on `POST /api/auth/login`, the `Retry-After` header (seconds) 
 
 ---
 
-*A ClawNex Project -- clawnexai.com*
+*ProBizSystems -- clawnexai.com*

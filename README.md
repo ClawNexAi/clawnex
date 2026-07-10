@@ -313,4 +313,4 @@ ClawNex is released under the [Apache License 2.0](LICENSE) with [DCO](DCO) sign
 
 ---
 
-A ClawNex Project — [clawnexai.com](https://clawnexai.com)
+ProBizSystems — [clawnexai.com](https://clawnexai.com)

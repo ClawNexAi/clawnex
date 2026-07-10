@@ -341,7 +341,7 @@ export function TrustAuditPanel({ incomingFromMissionControl, onMissionControlBa
   // ── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ padding: 20, maxWidth: 1200, margin: "0 auto" }}>
+    <div style={{ padding: 20 }}>
       {/* v0.12.0+: Mission Control return breadcrumb. */}
       <MissionControlBreadcrumb
         visible={!!incomingFromMissionControl}

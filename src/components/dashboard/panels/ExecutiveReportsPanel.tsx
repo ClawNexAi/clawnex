@@ -229,7 +229,7 @@ export function ExecutiveReportsPanel({ filters, demoMode }: { filters: Dashboar
                 <div class="meta">Generated: ${esc(new Date(r.generated).toLocaleString())} &bull; Period: ${esc(new Date(r.period.from).toLocaleDateString())} - ${esc(new Date(r.period.to).toLocaleDateString())}</div>
                 <div class="status-bar"><span class="status" style="background:${statusColor}">${esc(r.overall_status)}</span><span>Score: ${r.score}%</span><span>${r.sections.filter(s => s.status === "PASS").length}/${r.sections.length} controls passed</span></div>
                 ${r.sections.map(s => `<div class="section"><div class="section-header"><div><strong>${esc(s.control)}</strong> — ${esc(s.name)}</div><span class="badge ${esc(s.status.toLowerCase())}">${esc(s.status)}</span></div><div class="evidence">${s.evidence_count} evidence items</div><div class="summary">${esc(s.summary)}</div></div>`).join("")}
-                <div class="footer">ClawNex &mdash; A ClawNex Project &bull; ${new Date().toISOString()}</div>
+                <div class="footer">ClawNex &mdash; ProBizSystems &bull; ${new Date().toISOString()}</div>
                 </body></html>`;
                 const w = window.open("", "_blank");
                 if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 300); }

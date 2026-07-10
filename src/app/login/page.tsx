@@ -528,7 +528,7 @@ export default function LoginPage() {
 
         <p style={{ textAlign: "center", margin: "20px 0 0 0" }}>
           <a href="https://clawnexai.com" target="_blank" rel="noopener noreferrer" style={{ color: C.txT, fontSize: 10, letterSpacing: "0.06em", opacity: 0.5, textDecoration: "none", transition: "opacity 0.2s" }} onMouseEnter={e => { (e.target as HTMLElement).style.opacity = "0.8"; }} onMouseLeave={e => { (e.target as HTMLElement).style.opacity = "0.5"; }}>
-            A ClawNex Project
+            ProBizSystems
           </a>
         </p>
       </form>
