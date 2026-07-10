@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { TabId } from '../types';
 import { C, F } from '../constants';
-import { Badge, Stat, CollapsibleCard, PaginationFooter } from '../shared';
+import { Badge, Stat, CollapsibleCard, LoadingSpinner, PaginationFooter } from '../shared';
 import { Tooltip } from '../tooltip';
 import { timeAgo } from '../utils';
 
@@ -13,6 +13,7 @@ import { timeAgo } from '../utils';
 
 export function CveCard({ onNavigate, demoMode }: { onNavigate?: (tab: TabId, focus?: string) => void; demoMode?: boolean }) {
   const [cveData, setCveData] = useState<{ cves: Array<{ cve_id: string; severity: string; cvss: number | null; title: string; date_published: string; fixed_version: string; cwes: string; html_url: string }>; total: number; critical: number; high: number; lastSync: string | null; installedVersion: string } | null>(null);
+  const [cveState, setCveState] = useState<"loading" | "ready" | "error">("loading");
   const [syncing, setSyncing] = useState(false);
   const [expandedCves, setExpandedCves] = useState<Set<string>>(new Set());
   // v0.11.5+: rule-of-5 pagination — operator directive: CVE list defaults to 10/page.
@@ -21,6 +22,7 @@ export function CveCard({ onNavigate, demoMode }: { onNavigate?: (tab: TabId, fo
   useEffect(() => { setCvePage(0); }, [cvePageSize]);
 
   const fetchCves = useCallback(async () => {
+    setCveState("loading");
     if (demoMode) {
       // Demo mode: synthetic CVE feed with one critical entry that matches
       // the COR-001 attack chain (CVE-2024-1067 in API gateway). Cross-refs
@@ -46,9 +48,17 @@ export function CveCard({ onNavigate, demoMode }: { onNavigate?: (tab: TabId, fo
           { cve_id: "CVE-2025-00102", severity: "LOW", cvss: 3.1, title: "Race condition in session-cookie issuance", date_published: "2025-01-04T00:00:00Z", fixed_version: "express-session 1.18.1", cwes: "CWE-362", html_url: "https://nvd.nist.gov/vuln/detail/CVE-2025-00102" },
         ],
       });
+      setCveState("ready");
       return;
     }
-    try { const res = await fetch("/api/cve?limit=50"); if (res.ok) setCveData(await res.json()); } catch {}
+    try {
+      const res = await fetch("/api/cve?limit=50");
+      if (!res.ok) throw new Error(`CVE endpoint returned ${res.status}`);
+      setCveData(await res.json());
+      setCveState("ready");
+    } catch {
+      setCveState("error");
+    }
   }, [demoMode]);
 
   const syncCves = useCallback(async () => {
@@ -114,7 +124,11 @@ export function CveCard({ onNavigate, demoMode }: { onNavigate?: (tab: TabId, fo
         <span style={{ fontSize: 10, color: C.txT, alignSelf: "center" }}>Source: jgamblin/OpenClawCVEs (updated hourly)</span>
       </div>
 
-      {(!cveData || cveData.cves.length === 0) ? (
+      {cveState === "loading" ? (
+        <LoadingSpinner />
+      ) : cveState === "error" ? (
+        <span style={{ fontSize: 12, color: C.danger }}>CVE data is unavailable. Retry the panel refresh before relying on these counts.</span>
+      ) : (!cveData || cveData.cves.length === 0) ? (
         <span style={{ fontSize: 12, color: C.txT }}>No CVEs synced yet. Click &quot;Sync from GitHub&quot; to fetch the latest data.</span>
       ) : (
         cveData.cves.slice(cvePage * cvePageSize, (cvePage + 1) * cvePageSize).map(cve => {

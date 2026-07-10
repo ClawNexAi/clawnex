@@ -25,6 +25,8 @@ import {
   policyWarningScan,
   correlationDetect,
   deriveBlastVector,
+  compareCveVersions,
+  isVersionAffected,
   type Operator,
 } from "../src/components/dashboard/panels/mission-control/phase6-producers";
 import { ACTION_VERBS } from "../src/components/dashboard/panels/mission-control/types";
@@ -72,26 +74,39 @@ const VIEWER: Operator = { username: "viewer", role: "viewer" };
 
 console.log("\n[1] Family update-cve — cveToRows");
 {
-  // 12 CVEs → cap to 10. Mixed severities. Empty input → empty output.
+  // 12 applicable OpenClaw CVEs → cap to 10. Advisory records that do not
+  // match the installed version must not become action items.
+  const installed = { clawnex: "0.15.5-alpha", openclaw: "2026.4.10" };
   const cves = Array.from({ length: 12 }, (_, i) => ({
     cve_id: `CVE-2025-${String(i + 1).padStart(5, "0")}`,
     severity: ["CRITICAL", "HIGH", "MEDIUM", "LOW"][i % 4],
     cvss: 9.8 - i * 0.3,
-    title: `Test CVE ${i}`,
-    fixed_version: `pkg-${i} 1.0.${i}`,
+    title: `OpenClaw < 2026.5.${i + 1} - Test CVE ${i}`,
+    fixed_version: `2026.5.${i + 1}`,
+    affected_versions: JSON.stringify([`< 2026.5.${i + 1}`]),
+    packages: JSON.stringify(["npm/openclaw"]),
   }));
-  const rows = cveToRows(cves, null, undefined, ADMIN);
+  const rows = cveToRows(cves, installed, undefined, ADMIN);
   assert(rows.length === 10, `cveToRows caps to 10 (got ${rows.length})`);
   assert(rows[0].rawSource?.kind === "update-cve", `first row rawSource.kind === "update-cve"`);
   assert(VERB_SET.has(rows[0].suggestedAction.verb), `update-cve verb is canonical (got "${rows[0].suggestedAction.verb}")`);
   // viewer has alerts:read so update-cve is NOT restricted; auditor doesn't.
-  const viewerRows = cveToRows(cves.slice(0, 1), null, undefined, VIEWER);
+  const viewerRows = cveToRows(cves.slice(0, 1), installed, undefined, VIEWER);
   assert(viewerRows[0].restricted === false, `update-cve viewer (has alerts:read) is unrestricted`);
   const auditor: Operator = { username: "a", role: "auditor" };
-  const auditorRows = cveToRows(cves.slice(0, 1), null, undefined, auditor);
+  const auditorRows = cveToRows(cves.slice(0, 1), installed, undefined, auditor);
   assert(auditorRows[0].restricted === true, `update-cve auditor (no alerts:read) is restricted`);
   // Empty input → empty output.
   assert(cveToRows([], null, undefined, ADMIN).length === 0, `cveToRows([]) returns []`);
+  assert(
+    cveToRows(cves.slice(0, 1), { ...installed, openclaw: "2026.6.1" }, undefined, ADMIN).length === 0,
+    "fixed OpenClaw version does not emit a CVE action",
+  );
+  assert(cveToRows(cves.slice(0, 1), null, undefined, ADMIN).length === 0, "unknown installed version does not emit a CVE action");
+  assert(compareCveVersions("2026.5.10", "2026.5.2") > 0, "calendar versions compare numerically, not lexically");
+  assert(compareCveVersions("2026.5.10-beta.1", "2026.5.10") < 0, "prerelease sorts before stable release");
+  assert(isVersionAffected("2026.1.24", JSON.stringify([">= 2026.1.20, < 2026.2.1"])), "compound affected range matches");
+  assert(!isVersionAffected("2026.6.11", JSON.stringify(["<= 2026.1.24"])), "newer version is outside affected range");
   // End-to-end resolver: feeding the row's rawSource.finding into the family
   // resolver stamps the version-v1 marker (proves dispatch wiring).
   const finding = rows[0].rawSource && "finding" in rows[0].rawSource ? rows[0].rawSource.finding as UpdateCveFinding : null;
@@ -112,6 +127,7 @@ console.log("\n[1] Family update-cve — cveToRows");
 
 console.log("\n[1b] Family update-cve — three input shape coverage");
 {
+  const installed = { clawnex: "0.15.5-alpha", openclaw: "2026.1.20" };
   // Shape #1 — staging-style CVE: title carries package context with " < "
   // pattern, fixed_version is bare version.
   const stagingShape = [{
@@ -120,8 +136,10 @@ console.log("\n[1b] Family update-cve — three input shape coverage");
     cvss: 9.2,
     title: "OpenClaw < 2026.3.13 - Remote Command Injection via Unsanitized SCP Paths",
     fixed_version: "2026.3.13",
+    affected_versions: JSON.stringify(["< 2026.3.13"]),
+    packages: JSON.stringify(["npm/openclaw"]),
   }];
-  const cRows = cveToRows(stagingShape, null, undefined, ADMIN);
+  const cRows = cveToRows(stagingShape, installed, undefined, ADMIN);
   assert(
     cRows[0].suggestedAction.target === "OpenClaw → 2026.3.13",
     `shape #1 (title has package < version): target = "OpenClaw → 2026.3.13" (got "${cRows[0].suggestedAction.target}")`,
@@ -135,10 +153,10 @@ console.log("\n[1b] Family update-cve — three input shape coverage");
     title: "API Gateway authentication bypass",
     fixed_version: "api-gateway 4.2.1",
   }];
-  const lRows = cveToRows(legacyShape, null, undefined, ADMIN);
+  const lRows = cveToRows(legacyShape, installed, undefined, ADMIN);
   assert(
-    lRows[0].suggestedAction.target === "api-gateway → 4.2.1",
-    `shape #2 (fixed_version embeds package): target = "api-gateway → 4.2.1" (got "${lRows[0].suggestedAction.target}")`,
+    lRows.length === 0,
+    "shape #2 unknown package remains catalogue-only without installed-version evidence",
   );
 
   // Shape #3 — the internal reviewer blocker: bare version, no `<` in title, no embedded
@@ -151,16 +169,10 @@ console.log("\n[1b] Family update-cve — three input shape coverage");
     title: "Random vulnerability description",
     fixed_version: "2026.4.10",
   }];
-  const bRows = cveToRows(bareShape, null, undefined, ADMIN);
+  const bRows = cveToRows(bareShape, installed, undefined, ADMIN);
   assert(
-    bRows[0].suggestedAction.target === "Random → 2026.4.10",
-    `shape #3 (bare version, no <): falls back to title first word (got "${bRows[0].suggestedAction.target}")`,
-  );
-  // internal reviewer regression guard — explicitly assert the target does NOT start with
-  // the raw version, which was the original bug's signature.
-  assert(
-    !/^[\d.]+/.test(bRows[0].suggestedAction.target),
-    `shape #3 regression guard: target does not start with a raw version (got "${bRows[0].suggestedAction.target}")`,
+    bRows.length === 0,
+    "shape #3 unbound advisory remains catalogue-only",
   );
 
   // Polish #4 — internal reviewer 2026-05-08 non-blocking note: when the title is
@@ -175,8 +187,10 @@ console.log("\n[1b] Family update-cve — three input shape coverage");
     cvss: 8.0,
     title: "OpenClaw: subsystem < 2026.4.14 - description",
     fixed_version: "2026.4.14",
+    affected_versions: JSON.stringify(["< 2026.4.14"]),
+    packages: JSON.stringify(["npm/openclaw"]),
   }];
-  const colonRows = cveToRows(colonShape, null, undefined, ADMIN);
+  const colonRows = cveToRows(colonShape, installed, undefined, ADMIN);
   assert(
     colonRows[0].suggestedAction.target === "OpenClaw → 2026.4.14",
     `polish #4 (trailing colon stripped): target = "OpenClaw → 2026.4.14" (got "${colonRows[0].suggestedAction.target}")`,
@@ -189,8 +203,10 @@ console.log("\n[1b] Family update-cve — three input shape coverage");
     cvss: 7.8,
     title: "OpenClaw/Clawdbot < 2026.1.29 - shared vuln",
     fixed_version: "2026.1.29",
+    affected_versions: JSON.stringify(["<= 2026.1.24"]),
+    packages: JSON.stringify(["npm/clawdbot"]),
   }];
-  const slashRows = cveToRows(slashShape, null, undefined, ADMIN);
+  const slashRows = cveToRows(slashShape, installed, undefined, ADMIN);
   assert(
     slashRows[0].suggestedAction.target === "OpenClaw/Clawdbot → 2026.1.29",
     `polish #4 (embedded slash preserved): target = "OpenClaw/Clawdbot → 2026.1.29" (got "${slashRows[0].suggestedAction.target}")`,
@@ -358,6 +374,8 @@ console.log("\n[6] v1.1 polish — Item 1: currentVersion population");
     cvss: 8.0,
     title: "OpenClaw < 2026.5.0 - test",
     fixed_version: "2026.5.0",
+    affected_versions: JSON.stringify(["< 2026.5.0"]),
+    packages: JSON.stringify(["npm/openclaw"]),
   }];
   const ocRows = cveToRows(openclawCve, installed, undefined, ADMIN);
   const ocFinding = ocRows[0].rawSource && "finding" in ocRows[0].rawSource
@@ -377,13 +395,7 @@ console.log("\n[6] v1.1 polish — Item 1: currentVersion population");
     fixed_version: "4.17.21",
   }];
   const unkRows = cveToRows(unknownCve, installed, undefined, ADMIN);
-  const unkFinding = unkRows[0].rawSource && "finding" in unkRows[0].rawSource
-    ? unkRows[0].rawSource.finding as UpdateCveFinding
-    : null;
-  assert(
-    unkFinding?.currentVersion === undefined,
-    `Item 1: unknown package currentVersion is undefined (got "${unkFinding?.currentVersion}")`,
-  );
+  assert(unkRows.length === 0, "Item 1: unknown package is not emitted without installed-version evidence");
 
   // 6.3 — Case-insensitive match: lowercase "openclaw" packageName resolves.
   const lowerCve = [{
@@ -392,6 +404,8 @@ console.log("\n[6] v1.1 polish — Item 1: currentVersion population");
     cvss: 5.0,
     title: "openclaw < 2026.5.1 - lowercase",
     fixed_version: "2026.5.1",
+    affected_versions: JSON.stringify(["< 2026.5.1"]),
+    packages: JSON.stringify(["npm/openclaw"]),
   }];
   const lowerRows = cveToRows(lowerCve, installed, undefined, ADMIN);
   const lowerFinding = lowerRows[0].rawSource && "finding" in lowerRows[0].rawSource
@@ -502,10 +516,12 @@ console.log("\n[8] v1.1 polish — Item 3: degraded-source banners");
     cve_id: "CVE-2025-00001",
     severity: "HIGH",
     cvss: 7.5,
-    title: "Some CVE",
-    fixed_version: "1.0.0",
+    title: "OpenClaw < 2026.5.0 - Some CVE",
+    fixed_version: "2026.5.0",
+    affected_versions: JSON.stringify(["< 2026.5.0"]),
+    packages: JSON.stringify(["npm/openclaw"]),
   }];
-  const normal = cveToRows(normalCves, null, undefined, ADMIN);
+  const normal = cveToRows(normalCves, { clawnex: "0.15.5-alpha", openclaw: "2026.4.10" }, undefined, ADMIN);
   assert(
     normal.length === 1 && normal[0].rawSource?.kind === "update-cve",
     `Item 3: undefined degraded → normal CVE emit (got length=${normal.length}, kind=${normal[0]?.rawSource?.kind})`,

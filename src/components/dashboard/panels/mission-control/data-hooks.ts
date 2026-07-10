@@ -112,6 +112,11 @@ function usePolledFetch<T>({ fetcher, strategy, deps = [] }: UsePolledFetchOpts<
 
   useEffect(() => {
     isMountedRef.current = true;
+    // A dependency change means the scope or time window changed. Do not keep
+    // showing the previous scope's values under the new label while the next
+    // request is in flight; that creates a short but materially false view.
+    setData(null);
+    setState("loading");
     refresh();
     if (strategy === "poll_30s") {
       intervalRef.current = setInterval(refresh, 30_000);
@@ -642,6 +647,8 @@ export interface CveRecord {
   cvss: number | null;
   title: string;
   fixed_version: string;     // e.g. "api-gateway 4.2.1"
+  affected_versions?: string; // JSON array of GHSA comparator expressions
+  packages?: string;          // JSON array, e.g. ["npm/openclaw"]
 }
 
 export interface CveData {

@@ -221,6 +221,91 @@ function getInstalledVersion(
   return undefined;
 }
 
+function parseJsonStringArray(value: string | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Compare calendar/semver-like versions without coercing 2026.5.10 into a
+ * decimal number. Numeric identifiers sort numerically; prereleases sort
+ * before the corresponding stable release. */
+export function compareCveVersions(left: string, right: string): number {
+  const tokenize = (value: string): Array<number | string> => value
+    .trim()
+    .replace(/^v/i, "")
+    .split(/[.+-]/)
+    .filter(Boolean)
+    .map((part) => /^\d+$/.test(part) ? Number(part) : part.toLowerCase());
+  const a = tokenize(left);
+  const b = tokenize(right);
+  const stableLength = Math.max(3, Math.min(a.length, b.length));
+  const max = Math.max(a.length, b.length, stableLength);
+  for (let i = 0; i < max; i++) {
+    const av = a[i];
+    const bv = b[i];
+    if (av === bv) continue;
+    // Missing numeric core identifiers behave as zero. Missing prerelease
+    // identifiers mean the version is stable, which sorts after prerelease.
+    if (av === undefined) {
+      if (typeof bv === "number" && bv === 0) continue;
+      return typeof bv === "number" ? -1 : 1;
+    }
+    if (bv === undefined) {
+      if (typeof av === "number" && av === 0) continue;
+      return typeof av === "number" ? 1 : -1;
+    }
+    if (typeof av === "number" && typeof bv === "number") return av < bv ? -1 : 1;
+    if (typeof av === "number") return -1;
+    if (typeof bv === "number") return 1;
+    return av < bv ? -1 : 1;
+  }
+  return 0;
+}
+
+function comparatorMatches(version: string, comparator: string): boolean {
+  const match = comparator.trim().match(/^(<=|>=|<|>|=)?\s*v?([0-9][0-9A-Za-z.+-]*)$/);
+  if (!match) return false;
+  const relation = compareCveVersions(version, match[2]);
+  switch (match[1] || "=") {
+    case "<": return relation < 0;
+    case "<=": return relation <= 0;
+    case ">": return relation > 0;
+    case ">=": return relation >= 0;
+    default: return relation === 0;
+  }
+}
+
+/** GHSA ranges are stored as JSON strings such as
+ * ["< 2026.5.26"] or [">= 2026.1.20, < 2026.2.1"]. Entries are ORed;
+ * comma-separated comparators inside one entry are ANDed. */
+export function isVersionAffected(version: string, encodedRanges: string | undefined): boolean {
+  return parseJsonStringArray(encodedRanges).some((range) => {
+    const comparators = range.split(",").map((part) => part.trim()).filter(Boolean);
+    return comparators.length > 0 && comparators.every((part) => comparatorMatches(version, part));
+  });
+}
+
+function cveAppliesToInstalledComponent(cve: CveRecord, installedVersions: InstalledVersionsData | null): boolean {
+  const { packageName } = extractCveCopy(cve);
+  const currentVersion = getInstalledVersion(packageName, installedVersions);
+  if (!currentVersion) return false;
+
+  const packages = parseJsonStringArray(cve.packages).map((name) => name.toLowerCase());
+  const lowerPackage = packageName.toLowerCase();
+  const targetsOpenClaw = lowerPackage.startsWith("openclaw")
+    || packages.some((name) => name.endsWith("/openclaw") || name.endsWith("/clawdbot"));
+  const targetsClawNex = lowerPackage === "clawnex"
+    || packages.some((name) => name.endsWith("/clawnex"));
+  if (!targetsOpenClaw && !targetsClawNex) return false;
+
+  return isVersionAffected(currentVersion, cve.affected_versions);
+}
+
 // ---------------------------------------------------------------------------
 // Family 1 — update-cve
 // ---------------------------------------------------------------------------
@@ -326,7 +411,12 @@ export function cveToRows(
   if (degraded) return [degradedBannerRow("update-cve", degraded)];
 
   if (!Array.isArray(cves) || cves.length === 0) return [];
-  const top = [...cves]
+  // The CVE feed is an advisory catalogue, not a finding list. Only emit an
+  // action when the installed component is known and its version satisfies a
+  // published affected range. Unknown/unparseable records stay visible in the
+  // Security Posture catalogue but must never become upgrade instructions.
+  const top = cves
+    .filter((cve) => cveAppliesToInstalledComponent(cve, installedVersions))
     .sort((a, b) => {
       const av = a.cvss ?? 0;
       const bv = b.cvss ?? 0;
