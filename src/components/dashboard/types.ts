@@ -207,6 +207,12 @@ export interface EvidenceShieldDetection {
   tags: string[];
   source: string;
   rule_key?: string;
+  risk_context?: {
+    why_risky: string;
+    severity_basis: string;
+    escalation_guidance: string;
+    verification_step: string;
+  };
 }
 
 export interface EvidencePayload {
@@ -214,6 +220,7 @@ export interface EvidencePayload {
   audit_action: string;
   audit_created_at: string;
   session_id: string | null;
+  agent_id?: string | null;
   direction: string | null;
   model: string | null;
   provider: string | null;
@@ -226,6 +233,8 @@ export interface EvidencePayload {
   payload_total_length: number | null;
   prompt_hash: string | null;
   proxy_traffic_id: string | null;
+  shield_scan_id?: string | null;
+  source_event_type?: "proxy_traffic" | "shield_scan" | null;
   correlation_method: "forward" | "fallback_nearest";
   alert: {
     id: string;

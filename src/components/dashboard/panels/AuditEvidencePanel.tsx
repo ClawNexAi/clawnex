@@ -514,8 +514,8 @@ export function AuditEvidencePanel({
   const thStyle = { textAlign: "left" as const, padding: "8px 10px", borderBottom: `1px solid ${C.brd}`, color: C.txT, fontWeight: 600, fontSize: 11, textTransform: "uppercase" as const, letterSpacing: "0.08em", fontFamily: F.sans };
   const tdStyle = { padding: "8px 10px", borderBottom: `1px solid ${C.brd}22` };
 
-  // Shape persisted by session-watcher into audit_log.detail for shield_review
-  // / shield_detected events. We render this enriched view (rule_key, severity,
+  // Shape persisted by the shared Shield evidence writer into audit_log.detail.
+  // We render this enriched view (rule_key, severity,
   // matched samples, ±200-char context) when present; fall back to the raw
   // pre-formatted detail string for legacy rows.
   interface ShieldAuditDetectionRow {
@@ -525,6 +525,12 @@ export function AuditEvidencePanel({
     samples?: string[];
     rule_key?: string;
     matchCount?: number;
+    risk_context?: {
+      why_risky: string;
+      severity_basis: string;
+      escalation_guidance: string;
+      verification_step: string;
+    };
   }
   interface ShieldAuditDetail {
     summary?: string;
@@ -533,6 +539,7 @@ export function AuditEvidencePanel({
     payload_excerpt_truncated?: boolean;
     payload_total_length?: number;
     proxy_traffic_id?: string;
+    shield_scan_id?: string;
     session_id?: string;
     direction?: string;
     model?: string | null;
@@ -583,6 +590,9 @@ export function AuditEvidencePanel({
           {detail.proxy_traffic_id && (
             <span style={{ fontSize: 10, fontFamily: F.mono, color: C.txT }}>traffic {detail.proxy_traffic_id.slice(0, 8)}…</span>
           )}
+          {!detail.proxy_traffic_id && detail.shield_scan_id && (
+            <span style={{ fontSize: 10, fontFamily: F.mono, color: C.txT }}>scan {detail.shield_scan_id.slice(0, 8)}…</span>
+          )}
         </div>
         {det.length === 0 && (
           <div style={{ fontSize: 11, color: C.txT, fontStyle: "italic", fontFamily: F.mono }}>No detections recorded.</div>
@@ -620,6 +630,21 @@ export function AuditEvidencePanel({
                   <span>{ctx.before}</span>
                   <span style={{ background: `${sc}30`, color: C.tx, padding: "1px 2px", borderRadius: 2, fontWeight: 700 }}>{ctx.match}</span>
                   <span>{ctx.after}</span>
+                </div>
+              )}
+              {d.risk_context && (
+                <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                  {[
+                    ["Why this matters", d.risk_context.why_risky],
+                    ["Severity basis", d.risk_context.severity_basis],
+                    ["Escalate when", d.risk_context.escalation_guidance],
+                    ["Verify next", d.risk_context.verification_step],
+                  ].map(([label, value]) => (
+                    <div key={label} style={{ display: "grid", gridTemplateColumns: "110px 1fr", gap: 10, fontSize: 12, lineHeight: 1.5 }}>
+                      <span style={{ color: C.txT, fontFamily: F.mono, fontWeight: 700 }}>{label}</span>
+                      <span style={{ color: C.txS }}>{value}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -774,15 +799,15 @@ export function AuditEvidencePanel({
           </div>
           {e.detail && (() => {
             // Shield review/detected rows now persist a structured JSON detail
-            // (session-watcher) so we can render rule_key + match-centered
+            // so we can render rule_key + match-centered
             // snippet alongside the raw payload. Legacy plain-string detail
             // (anything that isn't valid JSON) falls back to the existing
             // pre-formatted view for backward compatibility.
             let parsed: ShieldAuditDetail | null = null;
             try { parsed = JSON.parse(e.detail) as ShieldAuditDetail; } catch { /* legacy string */ }
-            const isShield =
-              parsed && Array.isArray(parsed.shield_detections) &&
-              (e.action === "shield_detected" || e.action === "shield_review");
+            const isShield = parsed
+              && Array.isArray(parsed.shield_detections)
+              && e.action.startsWith("shield_");
             if (isShield && parsed) {
               return renderShieldEvidenceDetail(parsed);
             }

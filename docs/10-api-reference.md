@@ -555,14 +555,15 @@ Resolve a single alert to its triggering audit event for cross-panel deep-linkin
 - `id` — alert UUID
 
 **Correlation methods (in order):**
-1. **Forward link** — uses `alert.metadata.audit_event_id` if present (new alerts post-v0.11.1).
+1. **Forward link** — uses `alert.metadata.audit_event_id` when present. Current OpenClaw, Hermes, session-watcher, manual-scan, and Shield-Test alerts use this path.
 2. **Fallback `nearest`** — for legacy alerts: parse `Session: <uuid>` from `description`; find audit_log row matching `(source='session-watcher', action IN ('shield_review', 'shield_detected'), resource_id=<session_id>)` taking the nearest timestamp within ±60s of `alert.created_at`.
 
 **Response (200):**
 ```json
 {
-  "alert_id": "uuid",
-  "audit_event_id": "uuid | null",
+  "audit_event_id": "uuid",
+  "audit_action": "shield_scan_block",
+  "audit_created_at": "2026-07-10T13:48:46.535Z",
   "correlation_method": "forward | fallback_nearest",
   "detections": [
     {
@@ -570,27 +571,44 @@ Resolve a single alert to its triggering audit event for cross-panel deep-linkin
       "rule_name": "Email PII",
       "severity": "MEDIUM",
       "category": "outbound-leak",
-      "sample": "user@example.com (or scanner-redacted form)",
-      "confidence": 1.0
+      "samples": ["user@example.com (or scanner-redacted form)"],
+      "confidence": 1.0,
+      "risk_context": {
+        "why_risky": "...",
+        "severity_basis": "...",
+        "escalation_guidance": "...",
+        "verification_step": "..."
+      }
     }
   ],
   "matched_snippets": [
     {
       "rule_key": "OUT-PII-EMAIL",
-      "before": "...payload context before the match...",
-      "match": "user@example.com",
-      "after": "...payload context after the match...",
+      "snippet_before": "...payload context before the match...",
+      "snippet_match": "user@example.com",
+      "snippet_after": "...payload context after the match...",
       "match_found_in_excerpt": true
     }
   ],
   "payload_excerpt": "[redact()'d copy of the original payload]",
-  "prompt_hash": "sha256:...",
-  "proxy_traffic_id": "uuid | null"
+  "prompt_hash": "truncated-sha256-hex",
+  "proxy_traffic_id": "uuid | null",
+  "shield_scan_id": "uuid | null",
+  "source_event_type": "proxy_traffic | shield_scan | null",
+  "alert": {
+    "id": "uuid",
+    "title": "Shield BLOCK: ...",
+    "severity": "CRITICAL",
+    "source": "shield",
+    "status": "open",
+    "created_at": "2026-07-10T13:48:46.535Z"
+  }
 }
 ```
 
 **Notes:**
 - `payload_excerpt` is always passed through `redact()` before being returned — it MUST NOT carry raw PII.
+- `proxy_traffic_id` and `shield_scan_id` are distinct. The API never presents a scan id as a traffic row or session id.
 - `match_found_in_excerpt` is `false` when the scanner produced a partially-redacted sample (e.g. `+1-555-XXX-XXXX`) and `redact()` has rewritten the same span in the persisted excerpt → `payload.indexOf(sample)` returns -1. In that case the snippet still surfaces but `before`/`after` are empty and the UI shows the sample alone.
 - `correlation_method: 'fallback_nearest'` is a heuristic match; the ±60s window is tight enough to avoid mis-correlating distinct sessions but loose enough to cover scan-time vs alert-creation-time clock skew.
 

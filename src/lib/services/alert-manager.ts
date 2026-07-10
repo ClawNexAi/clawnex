@@ -106,13 +106,17 @@ export function createAlert(
     );
 
     if (existing) {
+      const sourceEventId = typeof metadata?.source_event_id === 'string'
+        ? metadata.source_event_id
+        : existing.source_event_id;
+      const metadataJson = metadata ? JSON.stringify({ ...metadata, origin }) : existing.metadata;
       // Update existing alert
       run(
-        `UPDATE alerts SET description = ?, severity = ?, metadata = ?, updated_at = ? WHERE id = ?`,
-        [description, severity, metadata ? JSON.stringify(metadata) : existing.metadata, now, existing.id],
+        `UPDATE alerts SET description = ?, severity = ?, source_event_id = ?, metadata = ?, updated_at = ? WHERE id = ?`,
+        [description, severity, sourceEventId, metadataJson, now, existing.id],
       );
 
-      const updated = { ...existing, description, severity, updated_at: now };
+      const updated = { ...existing, description, severity, source_event_id: sourceEventId, metadata: metadataJson, updated_at: now };
       return { type: 'updated' as const, alert: updated };
     }
 
@@ -147,10 +151,13 @@ export function createAlert(
     const finalMetadata = suppressionAcceptanceId
       ? { ...baseMetadata, suppressed_by_acceptance_id: suppressionAcceptanceId }
       : baseMetadata;
+    const sourceEventId = typeof metadata?.source_event_id === 'string'
+      ? metadata.source_event_id
+      : null;
     run(
-      `INSERT INTO alerts (id, title, description, severity, source, status, metadata, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, title, description, severity, source, initialStatus, JSON.stringify(finalMetadata), now, now],
+      `INSERT INTO alerts (id, title, description, severity, source, source_event_id, status, metadata, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, title, description, severity, source, sourceEventId, initialStatus, JSON.stringify(finalMetadata), now, now],
     );
 
     const alert: AlertRecord = {
@@ -159,7 +166,7 @@ export function createAlert(
       description,
       severity,
       source,
-      source_event_id: null,
+      source_event_id: sourceEventId,
       status: initialStatus,
       acknowledged_by: null,
       resolved_at: null,

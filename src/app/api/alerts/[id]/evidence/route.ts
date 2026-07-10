@@ -10,8 +10,8 @@
  *
  *   1. Forward link (preferred):
  *      alert.metadata.audit_event_id → direct row lookup. This path is hit by
- *      every alert created on or after this feature shipped — session-watcher
- *      now persists audit_event_id in alert metadata at creation time.
+ *      current Shield producers persist audit_event_id in alert metadata before
+ *      alert creation through the shared shield-evidence writer.
  *
  *   2. Fallback correlation (legacy alerts only):
  *      Parse session_id from the alert description (regex `Session: <uuid>`)
@@ -45,7 +45,7 @@
  *
  * Privacy:
  *   - The audit detail's payload_excerpt was passed through redact() at write
- *     time (session-watcher.ts), stripping non-matched PII before persistence.
+ *     time (shield-evidence.ts), stripping non-matched PII before persistence.
  *   - Detection samples come from the scanner with rule-specific partial
  *     redaction already applied (e.g. CC = first6+last4, phone = last 4).
  *   - This route does not redact further — the data was already cleaned.
@@ -77,7 +77,10 @@ interface AuditDetailJson {
   payload_excerpt?: string;
   payload_excerpt_truncated?: boolean;
   payload_total_length?: number;
-  proxy_traffic_id?: string;
+  proxy_traffic_id?: string | null;
+  shield_scan_id?: string | null;
+  source_event_type?: string | null;
+  agent_id?: string | null;
   session_id?: string;
   model?: string | null;
   provider?: string | null;
@@ -89,10 +92,14 @@ interface AuditDetailJson {
 interface AlertMetadataJson {
   audit_event_id?: string | null;
   source_event_id?: string | null;
+  source_event_type?: string | null;
+  shield_scan_id?: string | null;
+  proxy_traffic_id?: string | null;
   session_id?: string | null;
   direction?: string | null;
   model?: string | null;
   provider?: string | null;
+  agent_id?: string | null;
   verdict?: string | null;
   score?: number | null;
   detection_count?: number | null;
@@ -338,11 +345,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // That is exactly `correlation_method !== 'fallback_nearest'`.
     const outsideWindowFetchable: boolean = correlationMethod !== 'fallback_nearest';
 
+    const proxyTrafficId = detailJson.proxy_traffic_id
+      ?? meta?.proxy_traffic_id
+      ?? (meta?.source_event_type === 'proxy_traffic' ? meta.source_event_id : null);
+    const shieldScanId = detailJson.shield_scan_id
+      ?? meta?.shield_scan_id
+      ?? (meta?.source_event_type === 'shield_scan' ? meta.source_event_id : null);
+
     return NextResponse.json({
       audit_event_id: auditRow.id,
       audit_action: auditRow.action,
       audit_created_at: auditRow.created_at,
-      session_id: detailJson.session_id ?? auditRow.resource_id ?? null,
+      session_id: detailJson.session_id
+        ?? meta?.session_id
+        ?? (auditRow.resource_type === 'session' ? auditRow.resource_id : null),
+      agent_id: detailJson.agent_id ?? meta?.agent_id ?? null,
       direction: detailJson.direction ?? meta?.direction ?? null,
       model: detailJson.model ?? meta?.model ?? null,
       provider: detailJson.provider ?? meta?.provider ?? null,
@@ -354,7 +371,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       payload_excerpt_truncated: detailJson.payload_excerpt_truncated ?? false,
       payload_total_length: detailJson.payload_total_length ?? null,
       prompt_hash: detailJson.prompt_hash ?? null,
-      proxy_traffic_id: detailJson.proxy_traffic_id ?? meta?.source_event_id ?? null,
+      proxy_traffic_id: proxyTrafficId,
+      shield_scan_id: shieldScanId,
+      source_event_type: proxyTrafficId ? 'proxy_traffic' : shieldScanId ? 'shield_scan' : null,
       correlation_method: correlationMethod,
       outside_window_fetchable: outsideWindowFetchable,
       alert: {

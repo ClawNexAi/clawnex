@@ -14,7 +14,7 @@ import { shieldScan } from '../shield/scanner';
 import { broadcast } from '../events';
 import { run, queryAll, queryOne } from '../db/index';
 import { createAlert } from './alert-manager';
-import { logEvent } from './audit-logger';
+import { recordShieldEvidence } from './shield-evidence';
 import { ingestEvent } from './correlation-engine';
 import type { ShieldScanResult } from '../types';
 import { ORIGIN_PRODUCTION, productionOriginSqlClause } from '../dashboard/metric-semantics';
@@ -119,6 +119,23 @@ export function interceptChatEvent(payload: Record<string, unknown>): ShieldScan
       console.error('[PromptInterceptor] workflow write error:', workflowErr);
     }
 
+    const alertEvidence = result.verdict !== 'ALLOW'
+      ? recordShieldEvidence({
+          actor: 'clawnex',
+          action: `shield_${result.verdict.toLowerCase()}`,
+          auditSource: 'shield',
+          resourceType: 'chat',
+          resourceId: sessionId || scanId,
+          content,
+          scanResult: result,
+          direction: 'inbound',
+          promptHash: contentHash,
+          shieldScanId: scanId,
+          sessionId,
+          agentId,
+        }).alertMetadata
+      : undefined;
+
     // Generate alerts for BLOCK/REVIEW verdicts. Production origin so they
     // count toward Fleet/sidebar/header active-alert badges.
     if (result.verdict === 'BLOCK') {
@@ -127,7 +144,7 @@ export function interceptChatEvent(payload: Record<string, unknown>): ShieldScan
         `Chat content blocked by Prompt Shield. Score: ${result.score}, Detections: ${result.detections.length}. Session: ${sessionId || 'unknown'}`,
         'CRITICAL',
         'shield',
-        undefined,
+        alertEvidence,
         ORIGIN_PRODUCTION,
       );
     } else if (result.verdict === 'REVIEW') {
@@ -136,7 +153,7 @@ export function interceptChatEvent(payload: Record<string, unknown>): ShieldScan
         `Chat content flagged for review by Prompt Shield. Score: ${result.score}, Detections: ${result.detections.length}. Session: ${sessionId || 'unknown'}`,
         'HIGH',
         'shield',
-        undefined,
+        alertEvidence,
         ORIGIN_PRODUCTION,
       );
     }
@@ -165,18 +182,6 @@ export function interceptChatEvent(payload: Record<string, unknown>): ShieldScan
         detail: `Score: ${result.score}, Detections: ${result.detections.length}`,
         metadata: { score: result.score, detections: result.detections.length, categories: result.stats.categories },
       });
-    }
-
-    // Audit log
-    if (result.verdict !== 'ALLOW') {
-      logEvent(
-        'clawnex',
-        `shield_${result.verdict.toLowerCase()}`,
-        'chat',
-        sessionId || undefined,
-        `Score: ${result.score}, Detections: ${result.detections.length}`,
-        'shield',
-      );
     }
 
     return result;

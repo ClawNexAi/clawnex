@@ -12,9 +12,8 @@ import { requireLocalhost } from '@/lib/middleware/localhost-guard';
 import { shieldScan, outboundScan, getPersistedWhitelist } from "@/lib/shield/scanner";
 import { run } from "@/lib/db/index";
 import { createAlert } from "@/lib/services/alert-manager";
-import { logEvent } from "@/lib/services/audit-logger";
+import { recordShieldEvidence } from "@/lib/services/shield-evidence";
 import { ingestEvent } from "@/lib/services/correlation-engine";
-import { sanitizeLogField } from "@/lib/security/log-sanitize";
 import { createReplayCase, createReviewQueueItem } from "@/lib/services/shield-workflow";
 import { getActiveInspectionProfile } from "@/lib/services/shield-profiles";
 import { createHash } from "node:crypto";
@@ -135,6 +134,33 @@ export async function POST(request: NextRequest) {
       console.error("[Shield Scan] workflow write error:", workflowErr);
     }
 
+    // Distinguish actual blocks from observed threats before persisting the
+    // evidence record. The evidence is written first so every alert can carry
+    // a deterministic audit_event_id backlink.
+    let auditVerdict = result.verdict.toLowerCase();
+    if (result.verdict === "BLOCK" && isInternalSource) {
+      try {
+        const { getSetting } = await import("@/lib/services/config-service");
+        const blockMode = getSetting("proxy_block_mode");
+        if (blockMode !== "on") auditVerdict = "observed";
+      } catch { /* default to scanner verdict */ }
+    }
+    const alertEvidence = result.verdict !== "ALLOW"
+      ? recordShieldEvidence({
+          actor: "api",
+          action: `shield_scan_${auditVerdict}`,
+          auditSource: "api",
+          resourceType: "shield",
+          resourceId: scanId,
+          content: text,
+          scanResult: result,
+          direction: dir,
+          promptHash: contentHash,
+          shieldScanId: scanId,
+          summaryContext: { Source: source || "api" },
+        }).alertMetadata
+      : undefined;
+
     // Generate alert for BLOCK/REVIEW verdicts. Origin propagates so a
     // shield-test BLOCK doesn't surface as a production critical alert.
     if (result.verdict === "BLOCK") {
@@ -143,7 +169,7 @@ export async function POST(request: NextRequest) {
         `API scan blocked. Score: ${result.score}, Detections: ${result.detections.length}. Source: ${source || "api"}`,
         "CRITICAL",
         "shield",
-        undefined,
+        alertEvidence,
         origin,
       );
     } else if (result.verdict === "REVIEW") {
@@ -152,7 +178,7 @@ export async function POST(request: NextRequest) {
         `API scan flagged for review. Score: ${result.score}, Detections: ${result.detections.length}. Source: ${source || "api"}`,
         "HIGH",
         "shield",
-        undefined,
+        alertEvidence,
         origin,
       );
     }
@@ -167,22 +193,6 @@ export async function POST(request: NextRequest) {
         metadata: { score: result.score, detections: result.detections.length, categories: result.stats.categories, scanId },
       });
     }
-
-    // Audit log — distinguish between actual blocks and observed threats
-    let auditVerdict = result.verdict.toLowerCase();
-    if (result.verdict === "BLOCK" && isInternalSource) {
-      // Check if block mode is on — if not, this was observed, not blocked
-      try {
-        const { getSetting } = await import("@/lib/services/config-service");
-        const blockMode = getSetting("proxy_block_mode");
-        if (blockMode !== "on") auditVerdict = "observed";
-      } catch { /* default to verdict */ }
-    }
-    const detectionSummary = result.detections
-      .slice(0, 3)
-      .map((d: { name: string }) => sanitizeLogField(d.name, 80))
-      .join(', ');
-    logEvent("api", `shield_scan_${auditVerdict}`, "shield", scanId, `Score: ${result.score}, Detections: ${detectionSummary}`, "api");
 
     return NextResponse.json({
       ...result,

@@ -1199,14 +1199,17 @@ The `GLOSSARY` constant is `GlossaryEntry[]`. v0.11.0-alpha shipped with 62 entr
 
 ## 3.102 Alert Evidence — `alert.metadata` and `audit_log.detail` extensions (v0.11.1+)
 
-### 3.102a `alerts.metadata` JSON for `session-watcher` source
+### 3.102a `alerts.metadata` JSON for Shield evidence sources
 
-When `session-watcher` calls `createAlert`, the alert's `metadata` JSON now includes 11 fields used by the View Evidence backlink:
+OpenClaw, Hermes, session-watcher, manual-scan, and Shield-Test alert paths use the canonical Shield evidence writer before calling `createAlert`:
 
 | Field | Type | Notes |
 |---|---|---|
 | `audit_event_id` | UUID | id of the triggering audit_log row (forward link) |
-| `source_event_id` | UUID | id of the `proxy_traffic` row, when applicable |
+| `source_event_id` | UUID | id of the source `proxy_traffic` or `shield_scan` row |
+| `source_event_type` | enum | `proxy_traffic` or `shield_scan`; prevents cross-table ID confusion |
+| `shield_scan_id` | UUID \| null | id of the `shield_scans` row for direct/manual/test scans |
+| `proxy_traffic_id` | UUID \| null | id of the `proxy_traffic` row for watcher-backed traffic |
 | `session_id` | UUID | OpenClaw session id |
 | `direction` | enum | `inbound` / `outbound` |
 | `model` | string | Model id |
@@ -1219,18 +1222,20 @@ When `session-watcher` calls `createAlert`, the alert's `metadata` JSON now incl
 
 Legacy alerts predating v0.11.1-alpha lack these fields; the `/api/alerts/[id]/evidence` endpoint falls back to parsing `Session: <uuid>` from `description` and using `correlation_method: 'fallback_nearest'`.
 
-### 3.102b `audit_log.detail` JSON for `shield_review`/`shield_detected` actions
+### 3.102b `audit_log.detail` JSON for structured Shield actions
 
-When `session-watcher` writes a `shield_review` or `shield_detected` audit row (`source='session-watcher'`), the `detail` JSON now structures shield evidence for the View Evidence consumer:
+All current Shield alert producers write the same structured detail before creating the alert. This includes `shield_review`, `shield_detected`, and `shield_scan_*` actions:
 
 | Field | Type | Notes |
 |---|---|---|
-| `shield_detections` | array | Each entry: `{ rule_key, rule_name, severity, category, sample, confidence }` |
+| `shield_detections` | array | Detection envelope plus `risk_context` (`why_risky`, `severity_basis`, `escalation_guidance`, `verification_step`) |
 | `payload_excerpt` | string | The original payload, **passed through `redact()` at insert time** so the audit row never carries raw PII |
-| `prompt_hash` | string | SHA-256 of the prompt for cross-event correlation |
+| `prompt_hash` | string | First 16 hexadecimal characters of the prompt SHA-256 for cross-event correlation |
 | `proxy_traffic_id` | UUID \| null | id of the `proxy_traffic` row when the event came from the LiteLLM hot path |
+| `shield_scan_id` | UUID \| null | id of the `shield_scans` row for direct/manual/test scans |
+| `source_event_type` | enum \| null | Discriminator for the source-event table |
 
-**Privacy invariant:** `payload_excerpt` MUST be redacted before insert. Code review enforces this on `src/lib/services/session-watcher.ts` and `src/app/api/alerts/[id]/evidence/route.ts`.
+**Privacy invariant:** `payload_excerpt` MUST be redacted and capped before insert. The shared `src/lib/services/shield-evidence.ts` writer is the only current producer contract; alert metadata never contains payload text.
 
 ---
 

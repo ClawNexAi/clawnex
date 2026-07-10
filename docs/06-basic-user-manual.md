@@ -315,9 +315,9 @@ Every action on the platform is recorded here — shield scans, blocks, configur
 
 **This log is append-only.** Entries cannot be modified or deleted through the application.
 
-**View Evidence backlink (v0.11.1+, deep-link refined v0.11.2).** Every Session Shield alert in **Alerts & Incidents** now exposes a `View Evidence →` button. Clicking it deep-links to this Audit & Evidence tab with the exact triggering audit row pre-selected and scrolled into view. Filters that would have hidden the row are cleared, the page is reset to 0, and a smooth scroll lands the operator on the detail card. If the focused row falls outside your current time window, the panel surfaces a "NOT IN WINDOW" notice with widen-the-filter guidance — widen the context-bar time range and the row appears.
+**View Evidence backlink.** Shield alerts produced by OpenClaw, Hermes, the session watcher, manual scans, and Shield Tests expose `View Evidence →` when the alert carries an audit backlink. Clicking it opens the exact audit row, even when that row is outside the current time window. Legacy alerts without a deterministic backlink use the documented nearest-session fallback when possible.
 
-The structured detail surfaces the rule_key + matched sample (scanner-redacted, e.g. `+1-555-XXX-XXXX`) + a match-centered ±200-character window of the redacted payload. Use this to confirm the alert fired on a real event without cross-referencing JSONL files by hand.
+The structured detail surfaces the rule key, scanner-redacted matched sample, a match-centered window of the redacted payload, why the category is risky, why the severity was assigned, when to escalate, and what to verify next. Use this to confirm the alert fired on a real event without cross-referencing raw session files by hand.
 
 ### 4.4a Token & Cost Intel (ACTIVITY group, expanded in v0.11.0+)
 

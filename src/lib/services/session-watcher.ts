@@ -31,11 +31,11 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { v4 as uuid } from 'uuid';
 import { config } from '../config';
-import { shieldScan, outboundScan, getPersistedWhitelist, redact } from '../shield/scanner';
+import { shieldScan, outboundScan, getPersistedWhitelist } from '../shield/scanner';
 import { run, queryAll } from '../db/index';
 import { broadcast } from '../events';
 import { createAlert } from './alert-manager';
-import { logEvent } from './audit-logger';
+import { recordShieldEvidence } from './shield-evidence';
 import { ingestEvent } from './correlation-engine';
 import { sanitizeLogField } from '../security/log-sanitize';
 import { createReplayCase, createReviewQueueItem } from './shield-workflow';
@@ -276,46 +276,24 @@ function processEntry(entry: SessionMessage, sessionFilename: string): void {
   // able to confirm what triggered the alert. The detection.samples are
   // already partially redacted at scan time; the surrounding excerpt is
   // run through redact() so we never store raw secondary PII alongside.
-  let auditEventId: string | null = null;
+  let alertEvidence: Record<string, unknown> | null = null;
   if (scanResult.verdict !== 'ALLOW') {
     const auditAction = scanResult.verdict === 'BLOCK' ? 'shield_detected' : 'shield_review';
-
-    const redactedPayload = redact(content);
-    const MAX_EXCERPT = 4096;
-    const payloadExcerpt = redactedPayload.length <= MAX_EXCERPT
-      ? redactedPayload
-      : redactedPayload.slice(0, MAX_EXCERPT / 2) + '\n…[truncated]…\n' + redactedPayload.slice(-MAX_EXCERPT / 2);
-
-    // Structured JSON detail so the /api/alerts/:id/evidence endpoint can
-    // parse it cleanly. Also keep the original human-readable summary at
-    // the top via `summary` for the existing AuditEvidence list rendering
-    // (which shows `detail` directly when no JSON-aware viewer is wired up).
-    const detectionNames = scanResult.detections.slice(0, 5).map(d => d.name).join(', ');
-    const detailObj = {
-      summary: `Direction: ${direction} | Score: ${scanResult.score} | Verdict: ${scanResult.verdict} | Model: ${model || 'unknown'} | Detections: ${detectionNames}`,
-      shield_detections: scanResult.detections,
-      prompt_hash: promptHash,
-      payload_excerpt: payloadExcerpt,
-      payload_excerpt_truncated: redactedPayload.length > MAX_EXCERPT,
-      payload_total_length: content.length,
-      proxy_traffic_id: trafficId,
-      session_id: sessionId,
+    alertEvidence = recordShieldEvidence({
+      actor: 'session-watcher',
+      action: auditAction,
+      auditSource: 'session-watcher',
+      resourceType: 'session',
+      resourceId: sessionId,
+      content,
+      scanResult,
+      direction,
+      promptHash,
+      proxyTrafficId: trafficId,
+      sessionId,
       model,
       provider,
-      direction,
-      verdict: scanResult.verdict,
-      score: scanResult.score,
-    };
-
-    const auditRec = logEvent(
-      'session-watcher',
-      auditAction,
-      'session',
-      sessionId,
-      JSON.stringify(detailObj),
-      'session-watcher',
-    );
-    auditEventId = auditRec.id;
+    }).alertMetadata;
   }
 
   // Generate alerts for BLOCK/REVIEW verdicts — severity mapped from shield score.
@@ -323,19 +301,7 @@ function processEntry(entry: SessionMessage, sessionFilename: string): void {
   // shield context so the EvidencePanel / API endpoint can render without re-querying
   // the audit row when the operator only needs the headline fields.
   if (scanResult.verdict === 'BLOCK' || scanResult.verdict === 'REVIEW') {
-    const alertMetadata: Record<string, unknown> = {
-      audit_event_id: auditEventId,
-      source_event_id: trafficId,
-      session_id: sessionId,
-      direction,
-      model,
-      provider,
-      verdict: scanResult.verdict,
-      score: scanResult.score,
-      detection_count: scanResult.detections.length,
-      primary_rule_key: scanResult.detections[0]?.rule_key ?? scanResult.detections[0]?.id ?? null,
-      primary_rule_name: scanResult.detections[0]?.name ?? null,
-    };
+    const alertMetadata = alertEvidence ?? {};
 
     if (scanResult.verdict === 'BLOCK') {
       const alertSeverity = scanResult.score >= 80 ? 'CRITICAL' : scanResult.score >= 60 ? 'HIGH' : 'MEDIUM';

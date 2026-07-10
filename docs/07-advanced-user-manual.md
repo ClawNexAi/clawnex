@@ -1485,13 +1485,13 @@ If you're modifying any FinOps adapter or the orchestrator, do not add a field, 
 
 ### 23.1 Why this exists
 
-the operator's question during the v0.11.0 visual smoke: "where can I find the evidence to confirm that the incident was triggered by a real event, how can I see the payload snippet so I can confirm." The answer should be one click from any session-watcher alert.
+The operator must be able to confirm that an incident was triggered by a real event and inspect the matched payload context. The answer is one click from any Shield alert that carries the canonical evidence backlink.
 
 ### 23.2 Two correlation methods
 
 The endpoint `GET /api/alerts/[id]/evidence` resolves an alert to its triggering audit event two ways, in order:
 
-1. **Forward link** — `alert.metadata.audit_event_id` was captured at `createAlert` time by session-watcher, so the alert points directly to its source. Returned with `correlation_method: 'forward'`. New alerts (post-v0.11.1) will all have this.
+1. **Forward link** — `alert.metadata.audit_event_id` is captured before `createAlert`, so the alert points directly to its source audit record. OpenClaw, Hermes, session-watcher, manual-scan, and Shield-Test paths use the same writer. Returned with `correlation_method: 'forward'`.
 
 2. **Fallback for legacy alerts** — parse `Session: <uuid>` from the alert's description text. Find the audit_log row matching `(source='session-watcher', action IN shield_review|shield_detected, resource_id=<session_id>)` taking the **nearest match within ±60s** of `alert.created_at`. Returned with `correlation_method: 'fallback_nearest'`. The 60-second window is a heuristic — tight enough to avoid mis-correlating distinct sessions that happened to share an id, loose enough to cover scan-time vs alert-creation-time clock skew.
 
@@ -1499,11 +1499,12 @@ The endpoint `GET /api/alerts/[id]/evidence` resolves an alert to its triggering
 
 ```
 {
-  detections: [{ rule_key, sample, severity, ... }],
-  matched_snippets: [{ rule_key, before, match, after, match_found_in_excerpt }],
+  detections: [{ rule_key, samples, severity, risk_context, ... }],
+  matched_snippets: [{ rule_key, snippet_before, snippet_match, snippet_after, match_found_in_excerpt }],
   payload_excerpt: string,        // already redact()'d for privacy
   prompt_hash: string,
   proxy_traffic_id: string,
+  shield_scan_id: string,
   correlation_method: 'forward' | 'fallback_nearest',
 }
 ```
@@ -1521,16 +1522,16 @@ When this happens:
 
 True match-centering requires per-detection ±200-char windowing **at scan time, before `redact()` runs**. Deferred to v1.1.
 
-### 23.5 NOT IN WINDOW edge case
+### 23.5 Evidence outside the current window
 
 The deep-link from AlertsIncidentsPanel calls `onNavigate("auditEvidence", { id, focus: "evidence" })`. The receiving AuditEvidencePanel:
 1. Clears filters (so the row isn't excluded by stale actor/source/q selections)
 2. Resets pagination to page 0
 3. Tries to find the row in the currently fetched window
-4. If found → opens detail card, scrolls smooth, calls `onConsumed()` to clear focus state
-5. If NOT found → surfaces a "NOT IN WINDOW" notice with widen-the-filter guidance + Dismiss button
+4. If found, opens the detail card and scrolls it into view
+5. If not found, fetches `/api/audit/<id>` directly and renders the exact record with an outside-window notice
 
-The notice is not an error — it's expected when the alert is from a time outside your current context-bar selection. Widen the time range to 24h or 7d and the row will appear. Direct fetch-by-id (`/api/audit/<id>`) would solve this without widening; deferred to v1.1.
+The operator does not need to widen the global time range to inspect a deterministic evidence backlink.
 
 ### 23.6 Inline-expand fallback
 

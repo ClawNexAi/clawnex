@@ -22,7 +22,7 @@ import { shieldScan, outboundScan, getPersistedWhitelist } from '../shield/scann
 import { queryOne, run } from '../db/index';
 import { broadcast } from '../events';
 import { createAlert } from './alert-manager';
-import { logEvent } from './audit-logger';
+import { recordShieldEvidence } from './shield-evidence';
 import { ingestEvent } from './correlation-engine';
 import type { ShieldScanResult } from '../types';
 
@@ -292,6 +292,25 @@ function processMessage(row: HermesMessageRow): void {
     trafficId,
   });
 
+  const alertEvidence = scanResult.verdict !== 'ALLOW'
+    ? recordShieldEvidence({
+        actor: 'hermes-watcher',
+        action: scanResult.verdict === 'BLOCK' ? 'shield_detected' : 'shield_review',
+        auditSource: 'hermes-watcher',
+        resourceType: 'session',
+        resourceId: sessionId,
+        content,
+        scanResult,
+        direction,
+        promptHash,
+        proxyTrafficId: trafficId,
+        sessionId,
+        model: row.model,
+        provider,
+        summaryContext: { Platform: platform },
+      }).alertMetadata
+    : undefined;
+
   // Generate alerts for BLOCK/REVIEW verdicts
   if (scanResult.verdict === 'BLOCK') {
     const alertSeverity = scanResult.score >= 80 ? 'CRITICAL' : scanResult.score >= 60 ? 'HIGH' : 'MEDIUM';
@@ -300,6 +319,7 @@ function processMessage(row: HermesMessageRow): void {
       `Hermes message blocked by Shield. Score: ${scanResult.score}, Detections: ${scanResult.detections.length}. Session: ${sessionId}, Direction: ${direction}, Model: ${row.model || 'unknown'}, Platform: ${platform}`,
       alertSeverity,
       'hermes-watcher',
+      alertEvidence,
     );
   } else if (scanResult.verdict === 'REVIEW') {
     const alertSeverity = scanResult.score >= 50 ? 'HIGH' : scanResult.score >= 25 ? 'MEDIUM' : 'LOW';
@@ -308,6 +328,7 @@ function processMessage(row: HermesMessageRow): void {
       `Hermes message flagged for review. Score: ${scanResult.score}, Detections: ${scanResult.detections.length}. Session: ${sessionId}, Direction: ${direction}, Model: ${row.model || 'unknown'}, Platform: ${platform}`,
       alertSeverity,
       'hermes-watcher',
+      alertEvidence,
     );
   }
 
@@ -330,21 +351,6 @@ function processMessage(row: HermesMessageRow): void {
     });
   }
 
-  // Audit log for non-ALLOW verdicts
-  if (scanResult.verdict !== 'ALLOW') {
-    const auditAction = scanResult.verdict === 'BLOCK' ? 'shield_detected' : 'shield_review';
-    const detectionNames = scanResult.detections.slice(0, 5).map(d => d.name).join(', ');
-    const contentSnippet = content.slice(0, 200).replace(/\n/g, ' ');
-
-    logEvent(
-      'hermes-watcher',
-      auditAction,
-      'session',
-      sessionId,
-      `Direction: ${direction} | Score: ${scanResult.score} | Verdict: ${scanResult.verdict} | Model: ${row.model || 'unknown'} | Platform: ${platform} | Detections: ${detectionNames} | Payload: ${contentSnippet}`,
-      'hermes-watcher',
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------

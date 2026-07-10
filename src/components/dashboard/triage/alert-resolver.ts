@@ -299,6 +299,7 @@ function buildEvidenceArtifact(
 ): TriageArtifact {
   const auditEventId = evidence?.audit_event_id ?? null;
   const correlationMethod = evidence?.correlation_method ?? null;
+  const riskContext = evidence?.detections?.[0]?.risk_context;
 
   // Determine state — "forward" is exact; "fallback_nearest" is heuristic
   const state = !auditEventId
@@ -362,7 +363,9 @@ function buildEvidenceArtifact(
     previewTitle: shortLabel,
     previewSummary:
       auditEventId
-        ? "Correlated audit event. Raw sample and token data are available in Audit & Evidence under RBAC redaction."
+        ? riskContext
+          ? `${riskContext.why_risky} ${riskContext.escalation_guidance}`
+          : "Correlated audit event. Redacted match and payload context are available in Audit & Evidence."
         : missingEvidenceReason(alert),
     previewFields,
     primaryAction,
@@ -419,18 +422,24 @@ function buildSourceEventArtifact(
   evidence: EvidencePayload | null | undefined,
 ): TriageArtifact {
   const proxyTrafficId = evidence?.proxy_traffic_id ?? null;
+  const shieldScanId = evidence?.shield_scan_id ?? null;
   const promptHash = evidence?.prompt_hash ?? null;
 
-  const state: TriageArtifact["state"] = proxyTrafficId ? "resolved" : "missing";
+  const sourceEventId = proxyTrafficId ?? shieldScanId;
+  const state: TriageArtifact["state"] = sourceEventId ? "resolved" : "missing";
 
   const shortLabel = proxyTrafficId
     ? `Source · ${proxyTrafficId}`
+    : shieldScanId
+      ? `Scan · ${shieldScanId}`
     : `Source · ${alert.source}`;
 
   // Safe preview fields — IDs and metadata only, never request/response content
   const previewFields: TriageArtifact["previewFields"] = [];
   if (proxyTrafficId) {
     previewFields.push({ label: "proxy_traffic_id", value: proxyTrafficId, tone: "default" });
+  } else if (shieldScanId) {
+    previewFields.push({ label: "shield_scan_id", value: shieldScanId, tone: "default" });
   }
   if (evidence?.model) {
     previewFields.push({ label: "model", value: evidence.model, tone: "default" });
@@ -464,7 +473,13 @@ function buildSourceEventArtifact(
         opts: trafficOpts,
         label: "Open in Traffic ▸",
       }
-    : undefined;
+    : shieldScanId
+      ? {
+          tab: "promptShield" as TabId,
+          opts: { highlight: shieldScanId, id: shieldScanId },
+          label: "Open Shield scan ▸",
+        }
+      : undefined;
 
   return {
     id: `${alert.id}-source-event`,
@@ -476,9 +491,13 @@ function buildSourceEventArtifact(
     confidence: state === "resolved" ? "exact" : undefined,
     previewTitle: proxyTrafficId
       ? `Traffic Monitor · ${proxyTrafficId}`
+      : shieldScanId
+        ? `Prompt Shield · ${shieldScanId}`
       : `Source · ${alert.source}`,
     previewSummary: proxyTrafficId
       ? "Proxy-traffic row that generated the alert. Raw request/response content is available in Traffic Monitor under RBAC."
+      : shieldScanId
+        ? "Shield scan that generated the alert. Detection details and redacted evidence are available from the correlated audit record."
       : missingSourceEventReason(alert),
     previewFields,
     primaryAction,
