@@ -83,6 +83,17 @@ export function seedConfigTables(): void {
     console.log('[ClawNex Seed] Configuration seeded. Add model providers in Configuration tab.');
   }
 
+  // Investigation evidence defaults must also land on upgrades, not only on
+  // fresh installs. INSERT OR IGNORE preserves every operator choice.
+  for (const [key, value] of [
+    ['investigation_capture_mode', 'redacted'],
+    ['investigation_redacted_limit', '16384'],
+    ['investigation_forensic_retention_hours', '24'],
+    ['investigation_related_window_minutes', '15'],
+  ] as const) {
+    run('INSERT OR IGNORE INTO config_defaults (key, value) VALUES (?, ?)', [key, value]);
+  }
+
   // Policy framework seed runs on EVERY call — has its own idempotency
   // gate via policy_framework_seed_version, so re-runs are no-ops.
   // Critical: this MUST be outside the fresh-install branch so existing

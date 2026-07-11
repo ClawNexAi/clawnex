@@ -15,7 +15,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { execSync } from "node:child_process";
 import { getDbPath } from "@/lib/db/index";
-import { resolveVacuumBackupPath, vacuumIntoResolved } from "@/lib/db/vacuum-into";
+import { resolveVacuumBackupPath, sanitizeForensicEvidenceFromBackup, vacuumIntoResolved } from "@/lib/db/vacuum-into";
 import { requireLocalhost } from "@/lib/middleware/localhost-guard";
 
 export const runtime = "nodejs";
@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
         // so a bad basename can't smuggle past via fs.copyFileSync.
         const safeBackupPath = resolveVacuumBackupPath(backupDir, backupFile);
         try { vacuumIntoResolved(safeBackupPath); } catch { fs.copyFileSync(dbPath, safeBackupPath); }
+        sanitizeForensicEvidenceFromBackup(safeBackupPath);
       }
 
       return NextResponse.json({ ok: true, step: 1, message: "Database archived. Proceed to step 2.", backup: backupFile });

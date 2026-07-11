@@ -1205,10 +1205,12 @@ echo ""
 EXISTING_SETUP_SECRET=""
 EXISTING_INGEST_SECRET=""
 EXISTING_SESSION_SECRET=""
+EXISTING_EVIDENCE_ENCRYPTION_KEY=""
 if [ -f "$ENV_LOCAL_PATH" ]; then
     EXISTING_SETUP_SECRET=$(grep -E "^SETUP_SECRET=" "$ENV_LOCAL_PATH" | head -1 | cut -d= -f2-)
     EXISTING_INGEST_SECRET=$(grep -E "^CLAWNEX_INGEST_SECRET=" "$ENV_LOCAL_PATH" | head -1 | cut -d= -f2-)
     EXISTING_SESSION_SECRET=$(grep -E "^SESSION_SECRET=" "$ENV_LOCAL_PATH" | head -1 | cut -d= -f2-)
+    EXISTING_EVIDENCE_ENCRYPTION_KEY=$(grep -E "^EVIDENCE_ENCRYPTION_KEY=" "$ENV_LOCAL_PATH" | head -1 | cut -d= -f2-)
 fi
 
 SETUP_SECRET="${EXISTING_SETUP_SECRET:-$(openssl rand -hex 32)}"
@@ -1220,6 +1222,7 @@ INGEST_SECRET="${EXISTING_INGEST_SECRET:-$(openssl rand -hex 32)}"
 # from /api/auth/csrf. Preserve across re-runs so a benign setup re-
 # invocation doesn't disrupt an active operator.
 SESSION_SECRET="${EXISTING_SESSION_SECRET:-$(openssl rand -hex 32)}"
+EVIDENCE_ENCRYPTION_KEY="${EXISTING_EVIDENCE_ENCRYPTION_KEY:-$(openssl rand -hex 32)}"
 
 if [ -n "$EXISTING_SETUP_SECRET" ]; then
     if [ "$RBAC_ENABLED_VAL" = "true" ]; then
@@ -1307,6 +1310,10 @@ SETUP_SECRET=${SETUP_SECRET}
 # capability — operators stay logged in but mutations 403 until the
 # dashboard remounts. Required for RBAC-on mode.
 SESSION_SECRET=${SESSION_SECRET}
+
+# AES-256-GCM key for opt-in forensic evidence capture. Preserve this key
+# across upgrades or previously captured forensic evidence cannot be opened.
+EVIDENCE_ENCRYPTION_KEY=${EVIDENCE_ENCRYPTION_KEY}
 
 # Internal ingest endpoint auth (LiteLLM → ClawNex shield-scan callbacks)
 CLAWNEX_INGEST_SECRET=${INGEST_SECRET}

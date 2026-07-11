@@ -37,6 +37,7 @@ interface PrunableTable {
   table: string;
   timeColumn: string;
   settingKey: string;
+  extraPredicate?: string;
 }
 
 const PRUNABLE_TABLES: PrunableTable[] = [
@@ -48,8 +49,27 @@ const PRUNABLE_TABLES: PrunableTable[] = [
   // Correlations
   { table: 'correlation_events', timeColumn: 'created_at', settingKey: 'retention_correlations_days' },
   // Alerts & Incidents
-  { table: 'alerts', timeColumn: 'created_at', settingKey: 'retention_alerts_days' },
+  {
+    table: 'alerts',
+    timeColumn: 'created_at',
+    settingKey: 'retention_alerts_days',
+    extraPredicate: "id NOT IN (SELECT alert_id FROM investigation_exception_drafts WHERE status = 'activated')",
+  },
   { table: 'incidents', timeColumn: 'created_at', settingKey: 'retention_alerts_days' },
+  {
+    table: 'investigation_cases',
+    timeColumn: 'created_at',
+    settingKey: 'retention_alerts_days',
+    extraPredicate: "id NOT IN (SELECT case_id FROM investigation_exception_drafts WHERE status = 'activated')",
+  },
+  {
+    table: 'investigation_exception_drafts',
+    timeColumn: 'created_at',
+    settingKey: 'retention_alerts_days',
+    extraPredicate: "status != 'activated'",
+  },
+  { table: 'shield_review_queue', timeColumn: 'created_at', settingKey: 'retention_alerts_days' },
+  { table: 'shield_replay_cases', timeColumn: 'created_at', settingKey: 'retention_traffic_days' },
   // Audit
   { table: 'audit_log', timeColumn: 'created_at', settingKey: 'retention_audit_days' },
 ];
@@ -88,7 +108,7 @@ export function enforceRetention(): number {
 
   const db = getDb();
   const txn = db.transaction(() => {
-    for (const { table, timeColumn, settingKey } of PRUNABLE_TABLES) {
+    for (const { table, timeColumn, settingKey, extraPredicate } of PRUNABLE_TABLES) {
       const days = getRetentionDays(settingKey);
 
       // 0 = unlimited — skip this table
@@ -102,12 +122,20 @@ export function enforceRetention(): number {
         continue;
       }
       const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-      const result = run(`DELETE FROM ${table} WHERE ${timeColumn} < ?`, [cutoff]);
+      const result = run(
+        `DELETE FROM ${table} WHERE ${timeColumn} < ?${extraPredicate ? ` AND ${extraPredicate}` : ''}`,
+        [cutoff],
+      );
       if (result.changes > 0) {
         console.log(`[Retention] Pruned ${result.changes} rows from ${table} (older than ${days}d)`);
         totalDeleted += result.changes;
       }
     }
+    const forensic = run(
+      'DELETE FROM investigation_forensic_payloads WHERE expires_at < ?',
+      [new Date().toISOString()],
+    );
+    totalDeleted += forensic.changes;
   });
 
   txn();

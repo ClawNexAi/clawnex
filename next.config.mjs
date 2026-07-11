@@ -1,6 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  // The development indicator is rendered outside the dashboard shell and can
+  // create a second, document-level scrollbar. ClawNex owns scrolling inside
+  // its navigation and content panes, so keep the dev overlay disabled.
+  devIndicators: false,
   // DAST 2026-05-15 #N2: drop the `X-Powered-By: Next.js` header from
   // HTML responses. API responses already strip it via headers() above,
   // but the SSR HTML route adds it back by default. Fingerprinting

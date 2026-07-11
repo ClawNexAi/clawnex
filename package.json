@@ -34,6 +34,7 @@
     "start": "next start -H 127.0.0.1",
     "start:prod": "node .next/standalone/server.js",
     "lint": "tsc --noEmit --pretty false --incremental false",
+    "verify:investigation-workbench": "tsx scripts/verify-investigation-workbench.ts",
     "verify:security-remediation": "tsx scripts/verify-github-security-remediation.ts",
     "sbom": "npm sbom --sbom-format=cyclonedx --omit=dev > sbom.json"
   },

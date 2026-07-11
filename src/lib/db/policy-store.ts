@@ -148,22 +148,38 @@ export function listRulesForPolicy(policyId: string): PolicyRule[] {
 }
 
 export type EnabledRuleWithPolicy = PolicyRule & {
-  policy: Pick<Policy, 'id' | 'name' | 'source' | 'enabled' | 'lifecycle'>;
+  policy: Pick<Policy, 'id' | 'name' | 'source' | 'enabled' | 'lifecycle' | 'version' | 'updated_at'>;
 };
 
 export function listEnabledRulesForActivePolicies(direction: 'inbound' | 'outbound'): EnabledRuleWithPolicy[] {
   const rows = db().prepare(`
-    SELECT pr.*, p.name AS p_name, p.source AS p_source, p.enabled AS p_enabled, p.lifecycle AS p_lifecycle
+    SELECT pr.*, p.name AS p_name, p.source AS p_source, p.enabled AS p_enabled,
+           p.lifecycle AS p_lifecycle, p.version AS p_version, p.updated_at AS p_updated_at
     FROM policy_rules pr
     JOIN policies p ON pr.policy_id = p.id
     WHERE p.enabled = 1
       AND p.source IN ('system', 'custom')
       AND pr.enabled = 1
       AND (pr.direction = ? OR pr.direction = 'both')
-  `).all(direction) as Array<PolicyRuleRow & { p_name: string; p_source: PolicySource; p_enabled: number; p_lifecycle: PolicyLifecycle }>;
+  `).all(direction) as Array<PolicyRuleRow & {
+    p_name: string;
+    p_source: PolicySource;
+    p_enabled: number;
+    p_lifecycle: PolicyLifecycle;
+    p_version: string | null;
+    p_updated_at: string;
+  }>;
   return rows.map(r => ({
     ...rowToRule(r),
-    policy: { id: r.policy_id, name: r.p_name, source: r.p_source, enabled: r.p_enabled === 1, lifecycle: r.p_lifecycle },
+    policy: {
+      id: r.policy_id,
+      name: r.p_name,
+      source: r.p_source,
+      enabled: r.p_enabled === 1,
+      lifecycle: r.p_lifecycle,
+      version: r.p_version,
+      updated_at: r.p_updated_at,
+    },
   }));
 }
 

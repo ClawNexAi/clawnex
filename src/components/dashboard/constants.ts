@@ -15,7 +15,7 @@ import type { TabId, NavItem } from "./types";
 export const PANEL_HELP: Record<TabId, { title: string; desc: string; metrics: string[]; actions: string[]; related: TabId[] }> = {
   missionControl: {
     title: "Mission Control",
-    desc: "Cockpit overview — fleet safety posture, evidence quality, action queue, and cost-risk signals at a glance. Drills into deep-work tabs for investigation.",
+    desc: "Cockpit overview — fleet safety posture, evidence quality, action queue, and cost-risk signals at a glance. Alert investigations open a five-view workbench for retained payload context, rule-by-rule scoring, related traffic, operator decisions, and replay-gated exception drafts.",
     metrics: [
       "Active incidents (open / acknowledged / investigating)",
       "Evidence confidence (forward correlation %)",
@@ -26,7 +26,7 @@ export const PANEL_HELP: Record<TabId, { title: string; desc: string; metrics: s
     ],
     actions: [
       "Acknowledge or contain a high-severity incident",
-      "Drill into evidence for any flagged action",
+      "Open an alert investigation to review Overview, Payload, Detection Analysis, Related Activity, and Decision",
       "Investigate cost-drain signals on a per-agent basis",
       "Review policy coverage gaps before changes",
     ],
@@ -146,14 +146,14 @@ export const PANEL_HELP: Record<TabId, { title: string; desc: string; metrics: s
   },
   alertsIncidents: {
     title: "Alerts & Incidents",
-    desc: "Card-based incident board. Each alert is a collapsible card with severity border, title, age timer, and status. Expand to see description, source, ACK/Resolve actions, and backlinks to the originating panel (Correlations, Shield, Traffic, or Audit). **View Evidence backlink:** Shield alerts from OpenClaw, Hermes, session watching, manual scans, and Shield Tests carry an `audit_event_id` when evidence was captured. `View Evidence →` opens the exact audit row; legacy alerts and API failures fall back to the inline view.",
+    desc: "Card-based incident board. Each alert is a collapsible card with severity border, title, age timer, status, actions, and source backlinks. For Shield alerts, Investigate opens a five-view evidence workbench with retained request/response context, every triggered rule, score reconstruction, nearby activity, append-only dispositions, management export, and draft exceptions that must pass replay before activation. Older alerts can only show evidence that was captured at the time.",
     metrics: ["Severity — CRITICAL/HIGH/MEDIUM/LOW (left border color)", "Age — time since alert was created", "Status — OPEN/ACKNOWLEDGED/INVESTIGATING/RESOLVED", "Source — correlation-engine, session-watcher, shield, etc."],
-    actions: ["Click any card to expand details and actions", "ACK to acknowledge, Resolve to close", "Click `Investigate ▸` for the evidence graph or `View Evidence →` for the exact audit record", "Click the source backlink to inspect the originating panel", "Filter by severity, source, or status at the top"],
+    actions: ["Click any card to expand details and actions", "ACK to acknowledge, Resolve to close", "Click `Investigate ▸` for the evidence workbench or `View Evidence →` for the exact audit record", "Record a disposition with rationale; exception drafts stay inert until replay passes and an authorized operator activates them", "Click the source backlink to inspect the originating panel", "Filter by severity, source, or status at the top"],
     related: ["correlations", "auditEvidence", "shield"],
   },
   auditEvidence: {
     title: "Audit & Evidence",
-    desc: "Immutable compliance audit trail. Every platform action is recorded — shield blocks, configuration changes, break-glass activations, alert acknowledgments. Data is filtered by the global context bar time range. Structured Shield rows surface the rule key, scanner-redacted match, match-centered payload context, risk explanation, severity basis, escalation threshold, and verification step. Legacy plain-string details remain readable. A View Evidence deep-link loads the exact audit row by ID even when it sits outside the current time window.",
+    desc: "Immutable compliance audit trail. Every platform action is recorded — shield blocks, configuration changes, break-glass activations, alert acknowledgments, investigation decisions, forensic reveals, and exception lifecycle changes. Structured Shield rows surface retained redacted context, rule snapshots, scoring basis, risk explanation, and source identifiers. A View Evidence deep-link loads the exact audit row by ID even when it sits outside the current time window; raw content exists only when encrypted forensic capture was explicitly enabled for that event.",
     metrics: ["Action — what happened (shield_block, config_change, etc.)", "Actor — who/what performed the action", "Result — BLOCKED/OBSERVED/DETECTED/FLAGGED", "Detail — detections, redacted payload excerpt, prompt hash, source scan/traffic ID, and risk context"],
     actions: ["Filter by Result, Actor, or Action dropdowns", "Use the search box to find specific events", "Expand a Shield row to inspect the matched span and escalation guidance", "Export data via Executive Reports for compliance audits"],
     related: ["alertsIncidents", "executiveReports"],

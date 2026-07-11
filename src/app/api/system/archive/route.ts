@@ -10,7 +10,7 @@ import { requireLocalhost } from "@/lib/middleware/localhost-guard";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { run, getDbPath } from "@/lib/db/index";
-import { resolveVacuumBackupPath, vacuumIntoResolved } from "@/lib/db/vacuum-into";
+import { resolveVacuumBackupPath, sanitizeForensicEvidenceFromBackup, vacuumIntoResolved } from "@/lib/db/vacuum-into";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,6 +58,9 @@ export async function POST(request: NextRequest) {
     } catch {
       fs.copyFileSync(dbPath, backupPath);
     }
+    // Forensic payloads have independent short retention and must not become
+    // immortal through ordinary database backups.
+    sanitizeForensicEvidenceFromBackup(backupPath);
 
     // Restrict backup file to owner-only read/write
     fs.chmodSync(backupPath, 0o600);

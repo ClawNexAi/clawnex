@@ -61,6 +61,12 @@ export async function POST(request: NextRequest) {
     // shield_scans / etc. Wrap each DELETE individually so one missing
     // table doesn't stop others.
     try { run(`DELETE FROM proxy_traffic`); } catch { /* table may not exist yet */ }
+    try { run(`DELETE FROM investigation_forensic_payloads`); } catch { /* table may not exist yet */ }
+    try { run(`DELETE FROM investigation_case_events`); } catch { /* table may not exist yet */ }
+    try { run(`DELETE FROM investigation_exception_drafts`); } catch { /* table may not exist yet */ }
+    try { run(`DELETE FROM investigation_cases`); } catch { /* table may not exist yet */ }
+    try { run(`DELETE FROM shield_review_queue`); } catch { /* table may not exist yet */ }
+    try { run(`DELETE FROM shield_replay_cases`); } catch { /* table may not exist yet */ }
     try { run(`DELETE FROM alerts`); } catch { /* table may not exist yet */ }
     try { run(`DELETE FROM audit_log WHERE id != ?`, [prePurgeAuditId]); } catch { /* table may not exist yet */ }
     try { run(`DELETE FROM shield_scans`); } catch { /* table may not exist yet */ }

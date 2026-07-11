@@ -1,10 +1,23 @@
-import { buildShieldEvidence } from '../src/lib/services/shield-evidence';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { ShieldScanResult } from '../src/lib/types';
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`ASSERTION FAILED: ${message}`);
   console.log(`PASS: ${message}`);
 }
+
+async function main(): Promise<void> {
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawnex-shield-evidence-'));
+process.env.DATABASE_PATH = path.join(tempDir, 'evidence.db');
+process.env.CLAWNEX_TEST_SKIP_DB_SEED = '1';
+process.env.CLAWNEX_AUDIT_STDOUT = 'false';
+const { getDb } = await import('../src/lib/db/index');
+const { updateInvestigationCapturePolicy } = await import('../src/lib/services/investigation-capture');
+const { buildShieldEvidence } = await import('../src/lib/services/shield-evidence');
+getDb();
+updateInvestigationCapturePolicy({ mode: 'redacted', redactedLimit: 16_384, forensicRetentionHours: 24, relatedWindowMinutes: 15 });
 
 const scanResult: ShieldScanResult = {
   verdict: 'BLOCK',
@@ -56,13 +69,19 @@ const longBuilt = buildShieldEvidence({
   auditSource: 'test',
   resourceType: 'shield',
   resourceId: 'scan-2',
-  content: `GODMODE ${'x'.repeat(5000)}`,
+  content: `GODMODE ${'x'.repeat(20_000)}`,
   scanResult,
   direction: 'inbound',
   promptHash: 'hash-2',
   shieldScanId: 'scan-2',
 });
 assert(longBuilt.detail.payload_excerpt_truncated === true, 'long payloads are marked truncated');
-assert(String(longBuilt.detail.payload_excerpt).length < 4200, 'persisted evidence excerpt is bounded');
+assert(String(longBuilt.detail.payload_excerpt).length < 16_500, 'persisted evidence excerpt is bounded by capture policy');
 
 console.log('\nShield evidence contract verified.');
+}
+
+void main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

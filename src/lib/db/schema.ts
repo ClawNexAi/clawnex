@@ -373,6 +373,81 @@ CREATE INDEX IF NOT EXISTS idx_shield_replay_cases_created ON shield_replay_case
 CREATE INDEX IF NOT EXISTS idx_shield_review_queue_status ON shield_review_queue(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_shield_review_queue_source ON shield_review_queue(source_type, source_id);
 
+-- Investigation workbench: one current case record per alert plus an
+-- append-only event history. Decisions never overwrite their audit history.
+CREATE TABLE IF NOT EXISTS investigation_cases (
+  id TEXT PRIMARY KEY,
+  alert_id TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','decided','escalated')),
+  disposition TEXT CHECK(disposition IS NULL OR disposition IN ('true_positive','false_positive','expected_activity','needs_more_evidence','escalated')),
+  rationale TEXT,
+  notes TEXT,
+  assigned_to TEXT,
+  evidence_hash TEXT,
+  created_by TEXT,
+  decided_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  decided_at TEXT,
+  FOREIGN KEY(alert_id) REFERENCES alerts(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS investigation_case_events (
+  id TEXT PRIMARY KEY,
+  case_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE
+);
+
+-- Draft exceptions are inert until replayed and explicitly activated.
+CREATE TABLE IF NOT EXISTS investigation_exception_drafts (
+  id TEXT PRIMARY KEY,
+  case_id TEXT NOT NULL,
+  alert_id TEXT NOT NULL,
+  target_rule_key TEXT NOT NULL,
+  target_rule_name TEXT,
+  exception_text TEXT NOT NULL,
+  direction TEXT NOT NULL CHECK(direction IN ('inbound','outbound','both')),
+  rationale TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','replayed','ready','activated','deactivated','discarded')),
+  replay_case_id TEXT,
+  replay_result TEXT,
+  created_by TEXT NOT NULL,
+  activated_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  replayed_at TEXT,
+  activated_at TEXT,
+  FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+  FOREIGN KEY(alert_id) REFERENCES alerts(id) ON DELETE CASCADE
+);
+
+-- Raw forensic payloads are opt-in, encrypted with AES-256-GCM, and expire
+-- independently of the longer-lived redacted audit evidence.
+CREATE TABLE IF NOT EXISTS investigation_forensic_payloads (
+  id TEXT PRIMARY KEY,
+  audit_event_id TEXT NOT NULL UNIQUE REFERENCES audit_log(id) ON DELETE CASCADE,
+  direction TEXT NOT NULL CHECK(direction IN ('inbound','outbound')),
+  algorithm TEXT NOT NULL CHECK(algorithm = 'aes-256-gcm'),
+  key_id TEXT NOT NULL,
+  aad_version INTEGER NOT NULL DEFAULT 1 CHECK(aad_version = 1),
+  nonce BLOB NOT NULL,
+  ciphertext BLOB NOT NULL,
+  auth_tag BLOB NOT NULL,
+  content_sha256 TEXT NOT NULL CHECK(length(content_sha256) = 64),
+  original_bytes INTEGER NOT NULL CHECK(original_bytes >= 0),
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_investigation_cases_alert ON investigation_cases(alert_id);
+CREATE INDEX IF NOT EXISTS idx_investigation_case_events_case ON investigation_case_events(case_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_investigation_drafts_alert ON investigation_exception_drafts(alert_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_investigation_drafts_status ON investigation_exception_drafts(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_investigation_forensic_expiry ON investigation_forensic_payloads(expires_at);
+
 -- Proxy traffic log
 CREATE TABLE IF NOT EXISTS proxy_traffic (
   id TEXT PRIMARY KEY,
@@ -453,6 +528,71 @@ CREATE INDEX IF NOT EXISTS idx_policies_source ON policies(source);
  */
 export const MIGRATIONS: string[] = [
   "ALTER TABLE proxy_traffic ADD COLUMN source TEXT DEFAULT 'proxy'",
+  `CREATE TABLE IF NOT EXISTS investigation_cases (
+    id TEXT PRIMARY KEY,
+    alert_id TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','decided','escalated')),
+    disposition TEXT CHECK(disposition IS NULL OR disposition IN ('true_positive','false_positive','expected_activity','needs_more_evidence','escalated')),
+    rationale TEXT,
+    notes TEXT,
+    assigned_to TEXT,
+    evidence_hash TEXT,
+    created_by TEXT,
+    decided_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    decided_at TEXT,
+    FOREIGN KEY(alert_id) REFERENCES alerts(id) ON DELETE CASCADE
+  )`,
+  `CREATE TABLE IF NOT EXISTS investigation_case_events (
+    id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE
+  )`,
+  `CREATE TABLE IF NOT EXISTS investigation_exception_drafts (
+    id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    alert_id TEXT NOT NULL,
+    target_rule_key TEXT NOT NULL,
+    target_rule_name TEXT,
+    exception_text TEXT NOT NULL,
+    direction TEXT NOT NULL CHECK(direction IN ('inbound','outbound','both')),
+    rationale TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','replayed','ready','activated','deactivated','discarded')),
+    replay_case_id TEXT,
+    replay_result TEXT,
+    created_by TEXT NOT NULL,
+    activated_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    replayed_at TEXT,
+    activated_at TEXT,
+    FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+    FOREIGN KEY(alert_id) REFERENCES alerts(id) ON DELETE CASCADE
+  )`,
+  `CREATE TABLE IF NOT EXISTS investigation_forensic_payloads (
+    id TEXT PRIMARY KEY,
+    audit_event_id TEXT NOT NULL UNIQUE REFERENCES audit_log(id) ON DELETE CASCADE,
+    direction TEXT NOT NULL CHECK(direction IN ('inbound','outbound')),
+    algorithm TEXT NOT NULL CHECK(algorithm = 'aes-256-gcm'),
+    key_id TEXT NOT NULL,
+    aad_version INTEGER NOT NULL DEFAULT 1 CHECK(aad_version = 1),
+    nonce BLOB NOT NULL,
+    ciphertext BLOB NOT NULL,
+    auth_tag BLOB NOT NULL,
+    content_sha256 TEXT NOT NULL CHECK(length(content_sha256) = 64),
+    original_bytes INTEGER NOT NULL CHECK(original_bytes >= 0),
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_investigation_cases_alert ON investigation_cases(alert_id)",
+  "CREATE INDEX IF NOT EXISTS idx_investigation_case_events_case ON investigation_case_events(case_id, created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_investigation_drafts_alert ON investigation_exception_drafts(alert_id, created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_investigation_drafts_status ON investigation_exception_drafts(status, created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_investigation_forensic_expiry ON investigation_forensic_payloads(expires_at)",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_config_models_unique ON config_models(provider_id, model_id)",
   `CREATE TABLE IF NOT EXISTS api_keys (
     id TEXT PRIMARY KEY,

@@ -1611,7 +1611,7 @@ For alert-derived artifacts, the Evidence stage may surface a default-collapsed 
 …before  <mark>match</mark>  after…
 ```
 
-Plus a rule key chip and a footer note: *"Server-side redacted match-span. Full payload remains in Audit & Evidence under RBAC."*
+Plus a rule key chip and a footer note directing the operator to the Investigation Workbench. The legacy claim that a full payload always remained available was incorrect: only evidence captured under the policy active at event time can be shown.
 
 For trust-audit artifacts, the same UX shape but the toggle reads `▶ Show evidence trail` and renders `Finding.evidence: string[]` as a bulleted list (rule-emitted facts like "agent has tool 'exec'"). Cost-signal and collector-health resolvers do NOT emit a toggle — those stages are statistical or probe metadata, fully shown.
 
@@ -1658,6 +1658,28 @@ Total assertions across the test stack as of v0.14.5: **343**.
 ### 24.8 Glossary cross-link
 
 Operator-readable definitions for `IncidentFamily`, `ActionVerb`, `EvidenceConfidence`, `triage stage`, `match span`, `evidence trail` are in the in-app **Help → Glossary** card under the "Correlations" / "Auth & access" / "Shield & detection" categories.
+
+### 24.9 Investigation Workbench and evidence controls
+
+Alert-backed Triage Graphs include a five-view Investigation Workbench:
+
+- **Overview** binds the alert to its audit event, Shield scan, proxy traffic row, session, agent, model/provider, prompt hash, and evidence hash.
+- **Payload** separates inbound request and outbound response evidence. The viewer exposes only the stored redacted excerpt by default and marks truncation or missing context. Search, line numbers, wrapping, and redacted copy operate locally in the browser.
+- **Detection Analysis** renders every persisted detection, the decision-time rule/policy snapshot, the `shield-score-v1` contribution ledger, thresholds, and the exact verdict basis.
+- **Related Activity** queries same-session proxy traffic in the configured time window using normalized SQLite timestamps.
+- **Decision** writes an append-only case event for each disposition change. `escalated` creates one linked incident. The Markdown export contains hashes, basis, triggered rules, and disposition but no raw payload.
+
+Capture modes are configured under **Configuration → Shield Settings → Investigation Evidence**:
+
+| Mode | Persisted evidence |
+|---|---|
+| `metadata` | Hashes, identifiers, verdict, score, rule metadata; no payload excerpt or detection samples |
+| `redacted` | Extended server-redacted context and redacted match samples; default |
+| `forensic` | Redacted evidence plus AES-256-GCM encrypted raw content for non-ALLOW events, with 1–72 hour retention |
+
+Forensic capture requires a stable 32-byte `EVIDENCE_ENCRYPTION_KEY` encoded as 64 hexadecimal characters. Reveal requires the `evidence:raw` permission (Admin and Security Manager), a typed reason, and a durable authorization audit written **before** decryption. The ciphertext binds its audit ID, direction, key ID, hash, byte length, and timestamps as authenticated metadata; tampering causes decryption to fail. Database archive, migration, and uninstall-preservation flows remove forensic ciphertext from the exported copy.
+
+Exception drafts are scoped to a rule that actually fired on the selected alert. Replay first confirms the retained specimen still reproduces that target, then applies only the candidate exception. Activation requires a successful replay and `policies:write`; active exceptions can be deactivated, which invalidates the in-process exception cache immediately. If redaction or truncation prevents replay from reproducing the target, activation remains unavailable and the operator must collect more evidence.
 
 ---
 

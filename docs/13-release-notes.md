@@ -10,6 +10,18 @@
 
 ---
 
+## Unreleased — Investigation Workbench
+
+- Mission Control alert investigations now include Overview, Payload, Detection Analysis, Related Activity, and Decision views.
+- Shield evidence records carry complete persisted detection sets, immutable rule/policy snapshots, and a versioned score-contribution ledger.
+- Evidence capture is configurable as metadata-only, extended redacted (default), or short-lived AES-256-GCM forensic capture. Raw reveal is restricted by `evidence:raw`, requires a reason, audits authorization before decrypting, and fails closed on tampering.
+- Operator dispositions are append-only. Escalation creates a linked incident; management export produces a payload-free Markdown evidence summary.
+- Exception changes use an inert draft → replay → explicit activation workflow. The selected rule must have fired, replay must reproduce it, and active exceptions can be deactivated immediately.
+- Archive, migration, uninstall-preservation, purge, and retention paths explicitly sanitize or expire forensic evidence.
+- Dashboard text now defaults one pixel larger. Persistent **A− / A+** controls beside the theme toggle let each operator choose a bounded `−1px` through `+3px` adjustment without changing panel placement or workflow structure.
+
+---
+
 ## Release Metadata Conventions
 
 Each release entry below is structured against a fixed metadata contract so that release managers, change advisory boards, and procurement can consume the document without reading narrative prose:

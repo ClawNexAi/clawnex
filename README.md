@@ -81,7 +81,7 @@ ClawNex gives operators a single place to see, scan, control, and audit those fl
 
 | Capability | Operator outcome |
 |---|---|
-| **Mission Control** | Fleet posture, critical alerts, policy coverage, evidence confidence, cost risk, and top actions in one cockpit. |
+| **Mission Control** | Fleet posture, critical alerts, policy coverage, evidence confidence, cost risk, top actions, and evidence-backed investigations in one cockpit. |
 | **Prompt Shield** | 163 built-in detections for jailbreaks, prompt injection, exfiltration, credential exposure, steganography, unsafe commands, and sensitive paths. |
 | **Fleet Command** | Live instance health, active agents, sessions, service status, gateway state, and threat trends. |
 | **Connector Routing** | Selective OpenClaw and Hermes custom-provider routing through LiteLLM for real-time Prompt Shield scanning, with read-only handling for OAuth/session-bound traffic. |
@@ -98,7 +98,7 @@ ClawNex gives operators a single place to see, scan, control, and audit those fl
 
 ### Command And Triage
 
-- **Mission Control + Triage Graph** is the operator cockpit. It combines KPIs, operational posture, alert aging, policy coverage, source freshness, and a top action queue. Queue rows can expand into a staged triage graph: Evidence -> Source Event -> Affected Object -> Related Activity -> Fix / Control.
+- **Mission Control + Investigation Workbench** is the operator cockpit. It combines KPIs, operational posture, alert aging, policy coverage, source freshness, and a top action queue. Alert rows expand into the staged Triage Graph and a five-view workbench: Overview, Payload, Detection Analysis, Related Activity, and Decision. Investigators can reconstruct the score, record an append-only disposition, export a management summary, and replay a draft exception before activation.
 - **Alerts & Incidents** provides severity triage, ack/take/resolve workflows, suppression controls, and investigation links.
 - **Correlation Engine** detects multi-event patterns across shield scans, traffic, audit events, alerts, cost signals, collector health, trust audit, blast radius, auth/RBAC, CVE/update, and policy-warning sources.
 
@@ -122,7 +122,7 @@ ClawNex gives operators a single place to see, scan, control, and audit those fl
 - **RBAC** ships with Admin, Security Manager, Operator, Viewer, and Auditor roles.
 - **Authentication options** include local credentials, WebAuthn passkeys, GitHub OAuth, and email-delivered Magic Link when a mail provider is configured.
 - **Break-glass** is available for emergencies with reason capture, lifecycle tracking, and audit evidence.
-- **Audit & Evidence** records security-sensitive configuration changes, auth events, policy actions, shield events, break-glass actions, and investigation context.
+- **Audit & Evidence** records security-sensitive configuration changes, auth events, policy actions, shield events, break-glass actions, investigation decisions, forensic reveals, and exception lifecycle events. Future evidence capture is configurable as metadata-only, extended redacted (default), or short-lived encrypted forensic capture.
 
 ### Cost, Reports, And Operations
 

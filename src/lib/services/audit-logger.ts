@@ -258,6 +258,45 @@ export function logEvent(
 }
 
 /**
+ * Audit write for actions that must fail closed when durable accountability
+ * cannot be established (for example, revealing raw forensic evidence).
+ * Unlike logEvent(), database errors propagate to the caller.
+ */
+export function logEventStrict(
+  actor: string,
+  action: string,
+  resourceType?: string,
+  resourceId?: string,
+  detail?: string,
+  source: string = 'clawnex',
+): AuditRecord {
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  run(
+    `INSERT INTO audit_log (id, actor, action, resource_type, resource_id, detail, source, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, actor, action, resourceType || null, resourceId || null, detail || null, source, now],
+  );
+  if (process.env.CLAWNEX_AUDIT_STDOUT !== 'false') {
+    console.log('[CLAWNEX_AUDIT]', JSON.stringify({
+      ts: now, id, actor, action,
+      resource_type: resourceType ?? null,
+      resource_id: resourceId ?? null,
+      detail: detail ?? null,
+      source,
+    }));
+  }
+  return {
+    id, actor, action,
+    resource_type: resourceType || null,
+    resource_id: resourceId || null,
+    detail: detail || null,
+    source,
+    created_at: now,
+  };
+}
+
+/**
  * List audit events with optional filters.
  */
 export function listEvents(filters?: AuditFilters): AuditRecord[] {

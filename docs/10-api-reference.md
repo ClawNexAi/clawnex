@@ -3019,6 +3019,58 @@ Enable, disable, or reconfigure HTTPS via Caddy auto-TLS.
 
 ---
 
+## 20A. Investigation Workbench Endpoints
+
+These dashboard endpoints expose retained evidence and decision workflows for an alert. They never reconstruct content that was not captured at event time.
+
+### GET /api/alerts/:id/investigation
+
+Returns the five-view workbench model: alert overview, retained request/response evidence, all detections, versioned scoring ledger, related same-session activity, current case, append-only case events, exception drafts, capture policy, and evidence hash.
+
+**Permission:** `audit:read` (or localhost when RBAC is disabled).
+
+### PATCH /api/alerts/:id/investigation
+
+Records a disposition. Body:
+
+```json
+{
+  "disposition": "true_positive | false_positive | expected_activity | needs_more_evidence | escalated",
+  "rationale": "Required operator justification",
+  "notes": "Optional follow-up notes"
+}
+```
+
+Each change appends a case event. `escalated` creates one linked incident. **Permission:** `alerts:manage`.
+
+### POST /api/alerts/:id/investigation/drafts
+
+Runs one exception lifecycle action:
+
+| `action` | Additional body | Permission | Effect |
+|---|---|---|---|
+| `create` | `targetRuleKey`, `exceptionText`, `direction`, `rationale` | `alerts:manage` | Creates an inert draft for a rule that fired on this alert |
+| `replay` | `draftId` | `shield:scan` | Reproduces the target on retained evidence and tests the candidate exception |
+| `activate` | `draftId` | `policies:write` | Activates only a replay-ready draft |
+| `deactivate` | `draftId` | `policies:write` | Immediately removes an active exception from enforcement |
+| `discard` | `draftId` | `alerts:manage` | Discards a non-active draft |
+
+### POST /api/alerts/:id/investigation/forensic
+
+Body: `{ "auditEventId": "...", "reason": "..." }`. The audit event must be linked to the alert identified by `:id`. Reveals available encrypted forensic content for the current browser session only. The server writes an authorization audit before decryption and returns `409` when integrity/authentication fails. **Permission:** `evidence:raw` (Admin and Security Manager).
+
+### GET /api/alerts/:id/investigation/export
+
+Downloads a management-readable Markdown summary containing evidence identifiers, hashes, score basis, triggered rules, and operator disposition. Raw payload content is excluded. **Permission:** `reports:export`.
+
+### GET /api/config/investigation-capture
+
+Returns `metadata`, `redacted`, or `forensic` mode plus redacted character limit, forensic retention hours, related-activity window, and encryption-key availability. **Permission:** `config:read`.
+
+### PUT /api/config/investigation-capture
+
+Updates the future-event capture policy. Bounds: redacted limit 1,024–131,072 characters; forensic retention 1–72 hours; related activity 1–1,440 minutes. `forensic` requires a valid `EVIDENCE_ENCRYPTION_KEY`. **Permission:** `config:write`.
+
 ## 21. MCP Tools Reference
 
 ClawNex exposes **10 tools** via the Model Context Protocol (MCP) at `http://127.0.0.1:5001/mcp`.

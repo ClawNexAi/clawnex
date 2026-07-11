@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { queryAll, queryOne, run } from "@/lib/db/index";
-import { shieldScan, redact } from "@/lib/shield/scanner";
+import { shieldScan, outboundScan } from "@/lib/shield/scanner";
 import type { ShieldDetection, ShieldScanResult } from "@/lib/types";
 import { logEvent } from "@/lib/services/audit-logger";
 import { createAlert } from "@/lib/services/alert-manager";
 import { getActiveInspectionProfile } from "@/lib/services/shield-profiles";
 import { enrichDetections, enrichScanResult, type StandardMapping } from "@/lib/services/shield-standards-mapping";
+import { getInvestigationCapturePolicy, redactInvestigationEvidence, sanitizeDetectionsForCapture } from '@/lib/services/investigation-capture';
 
 export type ReviewQueueStatus = "open" | "approved" | "rejected" | "false_positive" | "escalated" | "whitelist_draft";
 export type EvidenceSourceType = "shield_scan" | "proxy_traffic" | "alert";
@@ -152,16 +153,30 @@ export function createReplayCase(input: {
   sourceId?: string | null;
   original?: Pick<ShieldScanResult, "verdict" | "score" | "detections">;
   actor?: string;
+  direction?: "inbound" | "outbound";
+  exceptionOverlays?: Record<string, string[]>;
+  originalProfile?: string | null;
 }): Record<string, unknown> {
   const profile = getActiveInspectionProfile();
-  const redactedText = redact(input.text);
-  const replay = enrichScanResult(shieldScan(redactedText, { includeRedacted: true }));
+  const capturePolicy = getInvestigationCapturePolicy();
+  // Scan the original in-memory specimen so redaction cannot erase the signal
+  // being validated. Only the persisted replay snapshot is redacted.
+  const replay = enrichScanResult(input.direction === 'outbound'
+    ? outboundScan(input.text, { exceptionOverlays: input.exceptionOverlays })
+    : shieldScan(input.text, { includeRedacted: true, exceptionOverlays: input.exceptionOverlays }));
   const originalDetections = input.original?.detections ? enrichDetections(input.original.detections) : [];
+  const redactedText = capturePolicy.mode === 'metadata'
+    ? ''
+    : redactInvestigationEvidence(input.text, replay.detections);
+  const persistedOriginalDetections = sanitizeDetectionsForCapture(originalDetections, capturePolicy.mode);
+  const persistedReplayDetections = sanitizeDetectionsForCapture(replay.detections, capturePolicy.mode);
   const comparison = {
     verdictChanged: Boolean(input.original?.verdict && input.original.verdict !== replay.verdict),
     scoreDelta: typeof input.original?.score === "number" ? replay.score - input.original.score : null,
     originalDetectionCount: originalDetections.length,
     replayDetectionCount: replay.detections.length,
+    direction: input.direction || 'inbound',
+    candidateExceptionApplied: Boolean(input.exceptionOverlays && Object.keys(input.exceptionOverlays).length > 0),
   };
   const id = `replay_${randomUUID()}`;
   run(
@@ -178,18 +193,22 @@ export function createReplayCase(input: {
       redactedText,
       input.original?.verdict || null,
       input.original?.score ?? null,
-      JSON.stringify(originalDetections),
-      profile.id,
+      JSON.stringify(persistedOriginalDetections),
+      input.originalProfile || null,
       replay.verdict,
       replay.score,
-      JSON.stringify(replay.detections),
+      JSON.stringify(persistedReplayDetections),
       profile.id,
       JSON.stringify(comparison),
       input.actor || "operator",
     ],
   );
   logEvent(input.actor || "operator", "shield_replay_case_created", "shield_replay_case", id, `Replay ${replay.verdict} score ${replay.score}`, "dashboard");
-  return { id, replay, comparison };
+  return {
+    id,
+    replay: { ...replay, detections: persistedReplayDetections },
+    comparison,
+  };
 }
 
 export function getReplayCase(id: string): Record<string, unknown> | null {
@@ -202,4 +221,3 @@ export function getReplayCase(id: string): Record<string, unknown> | null {
     comparison: JSON.parse(String(row.comparison || "{}")),
   };
 }
-

@@ -1229,13 +1229,18 @@ All current Shield alert producers write the same structured detail before creat
 | Field | Type | Notes |
 |---|---|---|
 | `shield_detections` | array | Detection envelope plus `risk_context` (`why_risky`, `severity_basis`, `escalation_guidance`, `verification_step`) |
-| `payload_excerpt` | string | The original payload, **passed through `redact()` at insert time** so the audit row never carries raw PII |
-| `prompt_hash` | string | First 16 hexadecimal characters of the prompt SHA-256 for cross-event correlation |
+| `payload_excerpt` | string | Bounded server-redacted payload context; empty in metadata-only mode |
+| `payload_excerpt_truncated` | boolean | True when the redacted context exceeded the configured evidence limit |
+| `payload_total_length` | integer | Original content character length used to make capture gaps visible |
+| `capture_mode` | enum | `metadata`, `redacted`, or `forensic` policy active at event time |
+| `capture_complete` | boolean | Whether the retained redacted context covers the complete input |
+| `scoring_ledger` | object | Versioned formula, thresholds, per-rule contributions, and verdict basis |
+| `prompt_hash` | string | First 16 hexadecimal characters of the prompt SHA-256 for cross-event correlation without plaintext |
 | `proxy_traffic_id` | UUID \| null | id of the `proxy_traffic` row when the event came from the LiteLLM hot path |
 | `shield_scan_id` | UUID \| null | id of the `shield_scans` row for direct/manual/test scans |
 | `source_event_type` | enum \| null | Discriminator for the source-event table |
 
-**Privacy invariant:** `payload_excerpt` MUST be redacted and capped before insert. The shared `src/lib/services/shield-evidence.ts` writer is the only current producer contract; alert metadata never contains payload text.
+**Privacy invariant:** `payload_excerpt` MUST be redacted and capped before insert. Metadata mode stores no excerpt or match samples. Forensic raw content, when explicitly enabled, is never placed in `audit_log`; it is encrypted in `investigation_forensic_payloads`. The shared `src/lib/services/shield-evidence.ts` writer is the producer contract, and alert metadata never contains payload text.
 
 ---
 
@@ -1322,6 +1327,35 @@ At `src/components/dashboard/constants.ts`:
 | `glassBorderCyanStrong` | Nested-tile border (stronger than `glassBorderCyan`) | `rgba(85, 188, 255, 0.42)` | `rgba(8, 145, 178, 0.45)` |
 
 Used by the lifted `Stat` component in `shared.tsx` (every numbered stat tile across the dashboard reads as an elevated panel as of v0.14.5). Card / CollapsibleCard accept an optional `dimGlow?: boolean` prop to dampen the cyan radial halo + accent border-glow on full-width cards that read brighter than peers.
+
+## 3.104 Investigation Workbench tables
+
+### 3.104a `investigation_cases`
+
+One current case per alert. Stores status, latest disposition/rationale/notes, evidence hash, ownership, and decision timestamps. It is the current-state index; history is not overwritten because every change is also appended to `investigation_case_events`.
+
+### 3.104b `investigation_case_events`
+
+Append-only case history keyed to `investigation_cases.id`. Event types include case open, disposition record, incident escalation, exception draft creation/replay/activation/deactivation/discard, and their actor/time/detail envelope. Rows cascade only when the parent case ages out under alert retention.
+
+### 3.104c `investigation_exception_drafts`
+
+Stores inert rule-scoped exception candidates and their lifecycle: `draft`, `replayed`, `ready`, `activated`, `deactivated`, or `discarded`. The row records target stable rule key, direction, exact exception text, rationale, replay case/result, creator, and activation metadata. Only `activated` rows participate in Shield evaluation.
+
+### 3.104d `investigation_forensic_payloads`
+
+Short-lived encrypted raw evidence. Each row is uniquely bound to an `audit_log` event and stores AES-256-GCM nonce, ciphertext, authentication tag, key identifier, authenticated-data version, content SHA-256, original byte count, direction, and creation/expiry times. It never appears in archive, migration, or uninstall-preservation output. Expired rows are deleted independently of audit retention.
+
+### 3.104e Investigation evidence settings
+
+| Config key | Default | Bounds | Purpose |
+|---|---:|---:|---|
+| `investigation_capture_mode` | `redacted` | metadata/redacted/forensic | Future Shield evidence capture policy |
+| `investigation_redacted_limit` | `16384` | 1024–131072 | Maximum stored redacted context characters |
+| `investigation_forensic_retention_hours` | `24` | 1–72 | Encrypted raw-evidence lifetime |
+| `investigation_related_window_minutes` | `15` | 1–1440 | Same-session activity window around an alert |
+
+The installation-level `EVIDENCE_ENCRYPTION_KEY` is not stored in SQLite. It must be exactly 64 hexadecimal characters and remain stable across data-preserving upgrades.
 
 ---
 
@@ -1427,6 +1461,10 @@ Retention enforcement:
 | correlation_events | 3 days | `retention_correlations_days` | 1 | 90 | Hourly DELETE WHERE created_at < cutoff | Telemetry — bounded |
 | alerts | 90 days | `retention_alerts_days` | 30 | 365 | Hourly DELETE WHERE created_at < cutoff | Incident tracking, quarterly-window retention |
 | incidents | 90 days | `retention_alerts_days` | 30 | 365 | Same as alerts | Linked to alerts via alert_ids |
+| investigation_cases | 90 days | `retention_alerts_days` | 30 | 365 | Deleted by case creation time unless it owns an activated exception; event/draft children cascade | Investigation decision state |
+| investigation_case_events | Cascade | — | — | — | Deleted with parent case | Append-only investigation history |
+| investigation_exception_drafts | 90 days after non-active state | `retention_alerts_days` | 30 | 365 | Activated rows and their parent alert/case are retained until explicit deactivation | Inert/replayed exception evidence and active local exceptions |
+| investigation_forensic_payloads | 24 hours | `investigation_forensic_retention_hours` | 1 hour | 72 hours | Hourly expiry delete; purge/archive/migrate also sanitize | Restricted encrypted raw evidence |
 | audit_log | 365 days | `retention_audit_days` | 90 | 0 (unlimited) | Hourly DELETE WHERE created_at < cutoff; 0 disables pruning | SOC 2 Common Criteria CC6–CC7; ISO 27001 A.12.4 |
 | trust_audit_results | 90 days | `retention_alerts_days` (shared) | 30 | 365 | Hourly DELETE WHERE audited_at < cutoff | Evidence retention |
 | scheduled_report_runs | 90 days | `retention_alerts_days` (shared) | 30 | 365 | Hourly DELETE WHERE run_at < cutoff | Delivery evidence |
@@ -1534,6 +1572,7 @@ Foreign key and logical relationships across the current SQLite schema:
 | 1.13 | 2026-07-02 | ClawNex Engineering | v0.15.2-alpha: Added hermes_ingest_cursors and hermes_events for durable Hermes watcher state and normalized, profile/channel-scoped, content-hash-only Hermes scan events. |
 | 1.14 | 2026-07-02 | ClawNex Engineering | v0.15.3-alpha: Added connector_routing_items for OpenClaw/Hermes routing inventory, operator desired-route state, provider/model drift detection, and read-only Hermes capability reporting. |
 | 1.15 | 2026-07-02 | ClawNex Engineering | v0.15.5-alpha: Updated connector_routing_items semantics for config-backed Hermes custom-provider routing while preserving watcher-only/OAuth-session rows as read-only. |
+| 1.16 | 2026-07-10 | ClawNex Engineering | Added §3.104 Investigation Workbench tables, evidence-capture settings, append-only decisions, replay-gated exception lifecycle, and short-lived AES-256-GCM forensic evidence retention. |
 
 ---
 

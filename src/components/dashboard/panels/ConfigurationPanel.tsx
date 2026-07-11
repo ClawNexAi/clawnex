@@ -3288,6 +3288,15 @@ function ProxySettingsCard({ focusedCard }: { focusedCard?: string | null }) {
   const [inspectionProfiles, setInspectionProfiles] = useState<Array<{ id: string; name: string; description: string; blockMode: string; outboundGate: string }>>([]);
   const [activeProfile, setActiveProfile] = useState<string>("balanced");
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [capturePolicy, setCapturePolicy] = useState({
+    mode: "redacted" as "metadata" | "redacted" | "forensic",
+    redactedLimit: 16384,
+    forensicRetentionHours: 24,
+    relatedWindowMinutes: 15,
+    forensicAvailable: false,
+  });
+  const [captureMessage, setCaptureMessage] = useState<string | null>(null);
+  const [captureSaving, setCaptureSaving] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -3315,6 +3324,17 @@ function ProxySettingsCard({ focusedCard }: { focusedCard?: string | null }) {
           setActiveProfile(data.active?.id || "balanced");
         }
       } catch { /* silent */ }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/config/investigation-capture", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.policy) setCapturePolicy(data.policy);
+      } catch { /* settings remain at privacy-preserving defaults */ }
     })();
   }, []);
 
@@ -3370,6 +3390,26 @@ function ProxySettingsCard({ focusedCard }: { focusedCard?: string | null }) {
     }
   }, [blockMode]);
 
+  const saveCapturePolicy = useCallback(async () => {
+    setCaptureSaving(true);
+    setCaptureMessage(null);
+    try {
+      const res = await fetch("/api/config/investigation-capture", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(capturePolicy),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Unable to save investigation evidence settings");
+      setCapturePolicy(data.policy);
+      setCaptureMessage("Saved");
+    } catch (error) {
+      setCaptureMessage(error instanceof Error ? error.message : "Save failed");
+    } finally {
+      setCaptureSaving(false);
+    }
+  }, [capturePolicy]);
+
   return (
     <CollapsibleCard title="SHIELD SETTINGS" accent={C.cyan} defaultOpen={false} focusKey="shieldSettings" focusedCard={focusedCard}>
       <div style={{ fontSize: 13, color: C.txS, marginBottom: 12 }}>ClawNex Prompt Shield intercepts all LLM requests through 163 built-in detections (plus any custom policy rules) via LiteLLM proxy (port 4001).</div>
@@ -3395,6 +3435,100 @@ function ProxySettingsCard({ focusedCard }: { focusedCard?: string | null }) {
               <Badge label={inspectionProfiles.find(profile => profile.id === activeProfile)?.outboundGate || "standard"} color={C.cyan} />
             </div>
           </div>
+        </div>
+      </div>
+
+      <div style={{ padding: "12px 14px", marginBottom: 12, background: C.glassSurfTrans, borderRadius: 8, border: `1px solid ${C.glassBorderSubtle}` }}>
+        <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.tx }}>Investigation Evidence</div>
+            <div style={{ fontSize: 12, color: C.txS, lineHeight: 1.5, marginTop: 3, maxWidth: 760 }}>
+              Choose what future Shield events retain for Mission Control investigations. Extended redacted evidence is the default; raw content is never retained unless encrypted forensic capture is explicitly selected.
+            </div>
+          </div>
+          <Badge label={capturePolicy.mode} color={capturePolicy.mode === "forensic" ? C.warn : capturePolicy.mode === "metadata" ? C.txT : C.cyan} />
+        </div>
+
+        <div role="group" aria-label="Investigation evidence capture mode" style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+          {([
+            ["metadata", "Metadata only"],
+            ["redacted", "Extended redacted"],
+            ["forensic", "Encrypted forensic"],
+          ] as const).map(([mode, label]) => {
+            const selected = capturePolicy.mode === mode;
+            const disabled = mode === "forensic" && !capturePolicy.forensicAvailable;
+            return (
+              <button
+                key={mode}
+                type="button"
+                disabled={disabled}
+                onClick={() => setCapturePolicy((current) => ({ ...current, mode }))}
+                title={disabled ? "Forensic capture requires the installation evidence-encryption key" : undefined}
+                style={{
+                  padding: "7px 11px",
+                  borderRadius: 6,
+                  border: `1px solid ${selected ? C.cyan : C.brd}`,
+                  background: selected ? `${C.cyan}18` : C.bg,
+                  color: disabled ? C.txT : selected ? C.cyan : C.txS,
+                  fontFamily: F.mono,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: disabled ? "not-allowed" : "pointer",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+          <label style={{ display: "grid", gap: 5 }}>
+            <span style={{ fontSize: 11, color: C.txT, fontFamily: F.mono }}>Redacted evidence limit</span>
+            <input
+              type="number"
+              min={1024}
+              max={131072}
+              step={1024}
+              value={capturePolicy.redactedLimit}
+              onChange={(event) => setCapturePolicy((current) => ({ ...current, redactedLimit: Number(event.target.value) }))}
+              style={{ padding: "8px 10px", background: C.bg, border: `1px solid ${C.brd}`, borderRadius: 6, color: C.tx, fontFamily: F.mono, fontSize: 12 }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 5 }}>
+            <span style={{ fontSize: 11, color: C.txT, fontFamily: F.mono }}>Related activity window (minutes)</span>
+            <input
+              type="number"
+              min={1}
+              max={1440}
+              value={capturePolicy.relatedWindowMinutes}
+              onChange={(event) => setCapturePolicy((current) => ({ ...current, relatedWindowMinutes: Number(event.target.value) }))}
+              style={{ padding: "8px 10px", background: C.bg, border: `1px solid ${C.brd}`, borderRadius: 6, color: C.tx, fontFamily: F.mono, fontSize: 12 }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 5 }}>
+            <span style={{ fontSize: 11, color: C.txT, fontFamily: F.mono }}>Forensic retention (hours)</span>
+            <input
+              type="number"
+              min={1}
+              max={72}
+              value={capturePolicy.forensicRetentionHours}
+              onChange={(event) => setCapturePolicy((current) => ({ ...current, forensicRetentionHours: Number(event.target.value) }))}
+              style={{ padding: "8px 10px", background: C.bg, border: `1px solid ${C.brd}`, borderRadius: 6, color: C.tx, fontFamily: F.mono, fontSize: 12 }}
+            />
+          </label>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+          <button
+            type="button"
+            onClick={() => void saveCapturePolicy()}
+            disabled={captureSaving}
+            style={{ padding: "8px 14px", borderRadius: 6, border: 0, background: captureSaving ? C.glassSurfBorder : C.cyan, color: captureSaving ? C.txT : C.bg, fontFamily: F.mono, fontSize: 11, fontWeight: 800, cursor: captureSaving ? "not-allowed" : "pointer" }}
+          >
+            {captureSaving ? "SAVING..." : "SAVE EVIDENCE SETTINGS"}
+          </button>
+          {captureMessage && <span role="status" style={{ fontSize: 11, color: captureMessage === "Saved" ? C.green : C.warn, fontFamily: F.mono }}>{captureMessage}</span>}
         </div>
       </div>
 

@@ -18,11 +18,56 @@
   --clawnex-warn: #d97706;
 }
 
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Next's development overlay is appended after the 100vh dashboard shell.
+   Keep it available for runtime errors without letting its host participate in
+   document geometry and create a second page-level scrollbar. */
+body > script[data-nextjs-dev-overlay="true"] {
+  position: fixed !important;
+  inset: 0 auto auto 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Dashboard text-size accessibility preference.
+   Most dashboard surfaces use explicit pixel sizes in inline styles, while
+   newer shared components use rem-based utility classes. The root step scales
+   rem text and the exact-size rules below add the same bounded offset to legacy
+   inline text without changing panel placement or control dimensions. */
+html.clawnex-font-size-minus-1 { --clawnex-font-offset: -1px; font-size: 15px; }
+html.clawnex-font-size-0 { --clawnex-font-offset: 0px; font-size: 16px; }
+html.clawnex-font-size-1 { --clawnex-font-offset: 1px; font-size: 17px; }
+html.clawnex-font-size-2 { --clawnex-font-offset: 2px; font-size: 18px; }
+html.clawnex-font-size-3 { --clawnex-font-offset: 3px; font-size: 19px; }
+
+html[class*="clawnex-font-size-"] [style*="font-size: 8px"] { font-size: calc(8px + var(--clawnex-font-offset)) !important; }
+html[class*="clawnex-font-size-"] [style*="font-size: 9px"] { font-size: calc(9px + var(--clawnex-font-offset)) !important; }
+html[class*="clawnex-font-size-"] [style*="font-size: 10px"] { font-size: calc(10px + var(--clawnex-font-offset)) !important; }
+html[class*="clawnex-font-size-"] [style*="font-size: 11px"] { font-size: calc(11px + var(--clawnex-font-offset)) !important; }
+html[class*="clawnex-font-size-"] [style*="font-size: 12px"] { font-size: calc(12px + var(--clawnex-font-offset)) !important; }
+html[class*="clawnex-font-size-"] [style*="font-size: 13px"] { font-size: calc(13px + var(--clawnex-font-offset)) !important; }
+html[class*="clawnex-font-size-"] [style*="font-size: 14px"] { font-size: calc(14px + var(--clawnex-font-offset)) !important; }
+html[class*="clawnex-font-size-"] [style*="font-size: 15px"] { font-size: calc(15px + var(--clawnex-font-offset)) !important; }
+html[class*="clawnex-font-size-"] [style*="font-size: 16px"] { font-size: calc(16px + var(--clawnex-font-offset)) !important; }
+html[class*="clawnex-font-size-"] [style*="font-size: 18px"] { font-size: calc(18px + var(--clawnex-font-offset)) !important; }
+html[class*="clawnex-font-size-"] [style*="font-size: 20px"] { font-size: calc(20px + var(--clawnex-font-offset)) !important; }
+html[class*="clawnex-font-size-"] [style*="font-size: 22px"] { font-size: calc(22px + var(--clawnex-font-offset)) !important; }
+html[class*="clawnex-font-size-"] [style*="font-size: 24px"] { font-size: calc(24px + var(--clawnex-font-offset)) !important; }
+html[class*="clawnex-font-size-"] [style*="font-size: 28px"] { font-size: calc(28px + var(--clawnex-font-offset)) !important; }
+html[class*="clawnex-font-size-"] [style*="font-size: 32px"] { font-size: calc(32px + var(--clawnex-font-offset)) !important; }
+html[class*="clawnex-font-size-"] [style*="font-size: 56px"] { font-size: calc(56px + var(--clawnex-font-offset)) !important; }
 
 /* Minimal scrollbar — blends with dark SOC theme */
 * {

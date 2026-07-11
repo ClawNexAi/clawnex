@@ -30,7 +30,7 @@ const SECRET_PATTERNS = [
 //
 // PROTECTED_PREFIXES catches every key starting with that string.
 // PROTECTED_EXACT matches the full key.
-const PROTECTED_PREFIXES = ["retention_"];
+const PROTECTED_PREFIXES = ["retention_", "investigation_"];
 const PROTECTED_EXACT = new Set(["break_glass", "proxy_block_mode"]);
 
 function isProtectedKey(key: string): { protected: boolean; canonical?: string } {
@@ -39,7 +39,12 @@ function isProtectedKey(key: string): { protected: boolean; canonical?: string }
     if (key === "proxy_block_mode") return { protected: true, canonical: "/api/proxy/block-mode" };
   }
   for (const prefix of PROTECTED_PREFIXES) {
-    if (key.startsWith(prefix)) return { protected: true, canonical: "/api/config/retention" };
+    if (key.startsWith(prefix)) {
+      return {
+        protected: true,
+        canonical: prefix === 'investigation_' ? '/api/config/investigation-capture' : '/api/config/retention',
+      };
+    }
   }
   return { protected: false };
 }

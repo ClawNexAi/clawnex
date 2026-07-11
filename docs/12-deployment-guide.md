@@ -113,6 +113,10 @@ OPENCLAW_SESSIONS_PATH=/path/to/openclaw/agents/main/sessions
 SESSION_WATCHER_ENABLED=true
 SESSION_WATCHER_INTERVAL_MS=2000
 
+# Stable AES-256-GCM key for optional forensic evidence capture
+# Generate once: openssl rand -hex 32
+EVIDENCE_ENCRYPTION_KEY=<64-hex-characters>
+
 # Recommended
 OPENCLAW_GATEWAY_URL=ws://127.0.0.1:18789
 OPENCLAW_GATEWAY_TOKEN=<your-token>
@@ -294,6 +298,16 @@ Set retention periods based on your compliance requirements:
 3. Save
 
 **SOC 2 recommendation:** Audit Trail = 365 days or Unlimited. Alerts = 365 days.
+
+### 4.3a Investigation Evidence Capture
+
+Under **Configuration → Shield Settings → Investigation Evidence**, choose what future Shield events retain:
+
+- **Metadata only** — no payload text or detection samples.
+- **Extended redacted** — default; stores bounded, server-redacted request/response context.
+- **Encrypted forensic** — opt-in; stores raw content for non-ALLOW events using AES-256-GCM for 1–72 hours.
+
+Forensic mode requires `EVIDENCE_ENCRYPTION_KEY` to be exactly 64 hexadecimal characters. Generate it once with `openssl rand -hex 32`, protect it with the same controls as `SESSION_SECRET`, and preserve it during data-preserving upgrades. Changing or losing the key makes existing forensic ciphertext unreadable. ClawNex archives, migrations, and uninstall-preservation copies intentionally exclude forensic ciphertext.
 
 ### 4.4 Gateway Token Configuration
 

@@ -29,6 +29,7 @@ import { TriageStageCard } from "./TriageStageCard";
 import { TriageArtifactStrip } from "./TriageArtifactStrip";
 import { TriageArtifactPreview } from "./TriageArtifactPreview";
 import { TriageEmptyState } from "./TriageEmptyState";
+import { InvestigationWorkbench } from "./InvestigationWorkbench";
 import type { TriageGraph } from "./types";
 import { TRIAGE_STAGE_ORDER } from "./types";
 
@@ -432,6 +433,13 @@ export function TriageGraphCard({
             fallbackAction={
               selectedArtifact?.primaryAction ?? undefined
             }
+            onNavigate={onNavigate}
+          />
+        )}
+
+        {graph.issue.kind === "alert" && (
+          <InvestigationWorkbench
+            alertId={graph.issue.id}
             onNavigate={onNavigate}
           />
         )}

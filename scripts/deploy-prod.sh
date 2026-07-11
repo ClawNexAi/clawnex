@@ -291,6 +291,10 @@ set -uo pipefail
 INSTALL_DIR="$HOME/clawnex"
 TARBALL="/tmp/cnx-bundle.tar.gz"
 DATA_PRESERVE_TAR="/tmp/clawnex-data-preserve.tar.gz"
+PRESERVED_EVIDENCE_ENCRYPTION_KEY=""
+if [ "${PRESERVE_DATA:-0}" = "1" ] && [ -f "$INSTALL_DIR/.env.local" ]; then
+  PRESERVED_EVIDENCE_ENCRYPTION_KEY=$(grep -E '^EVIDENCE_ENCRYPTION_KEY=' "$INSTALL_DIR/.env.local" | head -1 | cut -d= -f2-)
+fi
 
 # Decode the password back from the base64 envelope. Failure here means an
 # upstream copy/paste of SUDO_PASS_B64 went wrong; we'd rather fail loudly
@@ -478,12 +482,14 @@ INGEST_SECRET=$(openssl rand -hex 32)
 # fallback path. LITELLM_MASTER_KEY was also never written here
 # (setup.sh:889 writes it). Both now generated fresh on every deploy.
 SESSION_SECRET=$(openssl rand -hex 32)
+EVIDENCE_ENCRYPTION_KEY="${PRESERVED_EVIDENCE_ENCRYPTION_KEY:-$(openssl rand -hex 32)}"
 LITELLM_MASTER_KEY="sk-$(openssl rand -hex 24)"
 cat > .env.local <<EOF
 RBAC_ENABLED=true
 NEXT_PUBLIC_RBAC_ENABLED=true
 SETUP_SECRET=${SETUP_SECRET}
 SESSION_SECRET=${SESSION_SECRET}
+EVIDENCE_ENCRYPTION_KEY=${EVIDENCE_ENCRYPTION_KEY}
 CLAWNEX_INGEST_SECRET=${INGEST_SECRET}
 LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
 AUTH_RP_ID=${DOMAIN}

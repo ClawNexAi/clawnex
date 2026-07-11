@@ -482,7 +482,7 @@ export function TriageArtifactPreview({ artifact, onNavigate }: TriageArtifactPr
                 color: C.txT,
                 fontStyle: "italic",
               }}>
-                Server-side redacted match-span. Full payload remains in Audit &amp; Evidence under RBAC.
+                Server-side redacted match-span. Open the Investigation Workbench to review all retained context, capture limits, and any authorized forensic evidence.
               </div>
             </div>
           )}

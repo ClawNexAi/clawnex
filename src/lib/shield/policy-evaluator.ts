@@ -197,7 +197,11 @@ function exceptionsHit(text: string, exceptionsField: string): boolean {
  *     'REVIEW' if any review-action rule fired, else 'ALLOW'. The
  *     scanner uses this to ratchet up (never down) the final verdict.
  */
-export function evaluatePolicies(text: string, direction: 'inbound' | 'outbound'): PolicyEvaluationResult {
+export function evaluatePolicies(
+  text: string,
+  direction: 'inbound' | 'outbound',
+  exceptionOverlays: Record<string, string[]> = {},
+): PolicyEvaluationResult {
   const detections: ShieldDetection[] = [];
   const redactSpans: RedactSpan[] = [];
   let verdictFloor: 'BLOCK' | 'REVIEW' | 'ALLOW' = 'ALLOW';
@@ -268,7 +272,8 @@ export function evaluatePolicies(text: string, direction: 'inbound' | 'outbound'
 
     if (hits.length === 0) continue;
 
-    if (exceptionsHit(text, rule.exceptions)) {
+    const overlayExceptions = exceptionOverlays[rule.rule_key] || [];
+    if (exceptionsHit(text, [rule.exceptions, ...overlayExceptions].filter(Boolean).join('\n'))) {
       logEvent(
         'shield-policy-evaluator',
         'rule_match_suppressed',
@@ -334,6 +339,31 @@ export function evaluatePolicies(text: string, direction: 'inbound' | 'outbound'
       policy_rule_id: rule.id,
       rule_key: rule.rule_key,
       action: rule.action as RuleAction,
+      rule_snapshot: {
+        stable_id: rule.rule_key,
+        name: rule.name,
+        source: policy.source === 'system' ? 'policy-system' : 'policy-custom',
+        category: 'policy',
+        severity: rule.severity,
+        confidence: POLICY_RULE_DEFAULT_CONFIDENCE,
+        pattern: rule.pattern,
+        flags: rule.flags,
+        is_regex: rule.is_regex,
+        direction: rule.direction,
+        action: rule.action,
+        exceptions: rule.exceptions,
+        tags: ['policy-framework', `policy:${policy.source}`],
+        updated_at: rule.updated_at,
+        policy: {
+          id: policy.id,
+          name: policy.name,
+          source: policy.source,
+          lifecycle: policy.lifecycle,
+          version: policy.version,
+          enabled: policy.enabled,
+          updated_at: policy.updated_at,
+        },
+      },
     } as ShieldDetection);
   }
 

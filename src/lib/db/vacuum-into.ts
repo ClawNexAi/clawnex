@@ -33,6 +33,7 @@
  */
 
 import path from 'node:path';
+import Database from 'better-sqlite3';
 import { run } from './index';
 
 /**
@@ -89,4 +90,18 @@ export function vacuumIntoResolved(absoluteBackupPath: string): void {
  */
 export function vacuumInto(backupDir: string, backupFile: string): void {
   vacuumIntoResolved(resolveVacuumBackupPath(backupDir, backupFile));
+}
+
+/** Remove short-lived forensic plaintext ciphertext from an archival copy. */
+export function sanitizeForensicEvidenceFromBackup(absoluteBackupPath: string): void {
+  const backup = new Database(absoluteBackupPath);
+  try {
+    const exists = backup.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='investigation_forensic_payloads'").get();
+    if (exists) {
+      backup.prepare('DELETE FROM investigation_forensic_payloads').run();
+      backup.exec('VACUUM');
+    }
+  } finally {
+    backup.close();
+  }
 }

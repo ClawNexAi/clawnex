@@ -19,6 +19,7 @@ export type Permission =
   | 'api_keys:read' | 'api_keys:manage'
   | 'operators:read' | 'operators:manage'
   | 'audit:read' | 'audit:clear'
+  | 'evidence:raw'
   | 'reports:read' | 'reports:generate' | 'reports:export'
   | 'workspace:read' | 'chat:use' | 'voice:use'
   | 'risk:accept'

@@ -38,11 +38,12 @@ import {
   sensitivePathRules,
   type PatternRule,
 } from "./rules";
-import type { ShieldScanResult, ShieldDetection } from "../types";
+import type { ShieldScanResult, ShieldDetection, ShieldScoringLedger } from "../types";
 import { evaluatePolicies } from "./policy-evaluator";
 import { applySpans } from "./redaction";
 import { getActiveScanOptions } from "../services/shield-profiles";
 import { enrichScanResult } from "../services/shield-standards-mapping";
+import { getActiveInvestigationExceptions, mergeExceptionOverlays } from '../services/investigation-exceptions';
 
 // ---------------------------------------------------------------------------
 // PII patterns — redaction source of truth.
@@ -131,6 +132,8 @@ export interface ScanOptions {
   maxDetections?: number;
   /** Include cleaned (redacted) text in result */
   includeRedacted?: boolean;
+  /** Inert candidate exceptions used only by investigation replay. */
+  exceptionOverlays?: Record<string, string[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -313,7 +316,11 @@ function normalizeForScan(text: string): string {
   }
 }
 
-function scanRules(text: string, rules: PatternRule[], opts?: { useRawText?: boolean }): ShieldDetection[] {
+function scanRules(
+  text: string,
+  rules: PatternRule[],
+  opts?: { useRawText?: boolean; exceptionOverlays?: Record<string, string[]> },
+): ShieldDetection[] {
   const detections: ShieldDetection[] = [];
   // Steganography rules target the exact characters that normalizeForScan
   // strips (zero-widths, bidi overrides, BOMs). Scanning them against the
@@ -325,6 +332,10 @@ function scanRules(text: string, rules: PatternRule[], opts?: { useRawText?: boo
   const scanText = opts?.useRawText ? text : normalizeForScan(text);
 
   for (const rule of rules) {
+    const exceptions = opts?.exceptionOverlays?.[rule.id] || [];
+    if (exceptions.some((value) => value.trim() && scanText.toLowerCase().includes(value.trim().toLowerCase()))) {
+      continue;
+    }
     // Create a fresh regex to reset lastIndex for global matching
     const regex = new RegExp(rule.pattern.source, rule.pattern.flags.includes("g") ? rule.pattern.flags : rule.pattern.flags + "g");
     const matches: string[] = [];
@@ -354,6 +365,18 @@ function scanRules(text: string, rules: PatternRule[], opts?: { useRawText?: boo
         samples: matches.slice(0, 5), // Limit to 5 samples
         tags: rule.tags,
         source: rule.source,
+        rule_snapshot: {
+          stable_id: rule.id,
+          name: rule.title,
+          source: rule.source,
+          category: rule.category,
+          severity: rule.severity,
+          confidence: rule.confidence,
+          pattern: rule.pattern.source,
+          flags: rule.pattern.flags,
+          is_regex: true,
+          tags: rule.tags,
+        },
       });
     }
   }
@@ -364,22 +387,73 @@ function scanRules(text: string, rules: PatternRule[], opts?: { useRawText?: boo
 /**
  * Score detections 0–100 based on severity and confidence.
  */
+const SEVERITY_WEIGHTS = {
+  CRITICAL: 30,
+  HIGH: 20,
+  MEDIUM: 10,
+  LOW: 5,
+} as const;
+
+function scoreContribution(detection: ShieldDetection): number {
+  return (SEVERITY_WEIGHTS[detection.severity] || 5)
+    * detection.confidence
+    * Math.min(detection.matchCount, 5);
+}
+
 function computeScore(detections: ShieldDetection[]): number {
   if (detections.length === 0) return 0;
 
-  const severityWeight: Record<string, number> = {
-    CRITICAL: 30,
-    HIGH: 20,
-    MEDIUM: 10,
-    LOW: 5,
-  };
-
   let total = 0;
   for (const d of detections) {
-    total += (severityWeight[d.severity] || 5) * d.confidence * Math.min(d.matchCount, 5);
+    d.score_contribution = scoreContribution(d);
+    total += d.score_contribution;
   }
 
   return Math.min(100, Math.round(total));
+}
+
+function verdictBasis(score: number, detections: ShieldDetection[], policyFloor: 'BLOCK' | 'REVIEW' | 'ALLOW'): string {
+  if (policyFloor === 'BLOCK') return 'An operator policy rule explicitly requires BLOCK.';
+  if (detections.some((d) => d.severity === 'CRITICAL')) return 'At least one CRITICAL detection requires BLOCK.';
+  if (detections.some((d) => d.severity === 'HIGH' && d.category === 'outbound-leak')) return 'A HIGH outbound data-leak detection requires BLOCK.';
+  if (detections.some((d) => d.severity === 'MEDIUM' && d.category === 'outbound-leak')) return 'A MEDIUM outbound data-leak detection requires REVIEW.';
+  if (score >= 60) return `The aggregate score ${score} reached the BLOCK threshold of 60.`;
+  if (policyFloor === 'REVIEW') return 'An operator policy rule explicitly requires REVIEW.';
+  if (detections.some((d) => d.severity === 'HIGH')) return 'At least one HIGH detection requires human REVIEW.';
+  if (score >= 25) return `The aggregate score ${score} reached the REVIEW threshold of 25.`;
+  return `The aggregate score ${score} remained below the REVIEW threshold of 25.`;
+}
+
+function buildScoringLedger(
+  detections: ShieldDetection[],
+  returnedCount: number,
+  score: number,
+  policyFloor: 'BLOCK' | 'REVIEW' | 'ALLOW',
+): ShieldScoringLedger {
+  const rawTotal = detections.reduce((sum, detection) => sum + (detection.score_contribution ?? scoreContribution(detection)), 0);
+  return {
+    version: 'shield-score-v1',
+    formula: 'severity_weight * confidence * min(match_count, 5)',
+    severity_weights: { ...SEVERITY_WEIGHTS },
+    raw_total: rawTotal,
+    rounded_total: Math.round(rawTotal),
+    capped_score: score,
+    review_threshold: 25,
+    block_threshold: 60,
+    evaluated_detection_count: detections.length,
+    returned_detection_count: returnedCount,
+    verdict_basis: verdictBasis(score, detections, policyFloor),
+    entries: detections.map((detection) => ({
+      stable_rule_id: detection.rule_key || detection.rule_snapshot?.stable_id || detection.id,
+      rule_name: detection.name,
+      severity: detection.severity,
+      confidence: detection.confidence,
+      match_count: detection.matchCount,
+      score_contribution: detection.score_contribution ?? scoreContribution(detection),
+      action: detection.action,
+      category: detection.category,
+    })),
+  };
 }
 
 // Outbound leaks short-circuit the aggregate-score path because aggregate
@@ -473,15 +547,19 @@ export function shieldScan(text: string, options?: ScanOptions): ShieldScanResul
   // (T06 'Zero-Width Injection' was the regression-grade signal).
   const stegRules = allRulesToScan.filter((r) => r.category === 'steganography');
   const nonStegRules = allRulesToScan.filter((r) => r.category !== 'steganography');
+  const exceptionOverlays = mergeExceptionOverlays(
+    getActiveInvestigationExceptions('inbound'),
+    effectiveOptions.exceptionOverlays,
+  );
   const detections = [
-    ...scanRules(text, nonStegRules),
-    ...scanRules(text, stegRules, { useRawText: true }),
+    ...scanRules(text, nonStegRules, { exceptionOverlays }),
+    ...scanRules(text, stegRules, { useRawText: true, exceptionOverlays }),
   ];
 
   // Layer in policy-framework detections (system + custom; curated is mirror).
   // This runs alongside the hardcoded ALL_RULES detection set; both feed
   // into the same computeScore + computeVerdict pipeline below.
-  const policyResult = evaluatePolicies(text, 'inbound');
+  const policyResult = evaluatePolicies(text, 'inbound', exceptionOverlays);
   detections.push(...policyResult.detections);
 
   // Optionally limit detections
@@ -509,6 +587,7 @@ export function shieldScan(text: string, options?: ScanOptions): ShieldScanResul
   else if (policyResult.verdictFloor === 'REVIEW' && finalVerdict === 'ALLOW') finalVerdict = 'REVIEW';
 
   const trimmedDetections = detections.slice(0, maxDet);
+  const scoring = buildScoringLedger(detections, trimmedDetections.length, score, policyResult.verdictFloor);
 
   // Stats
   const stats = {
@@ -544,6 +623,7 @@ export function shieldScan(text: string, options?: ScanOptions): ShieldScanResul
     detections: trimmedDetections,
     cleaned,
     stats,
+    scoring,
   });
 }
 
@@ -551,12 +631,16 @@ export function shieldScan(text: string, options?: ScanOptions): ShieldScanResul
  * Outbound scan — checks for data leaks in agent output.
  * Uses secret detection rules + outbound-specific patterns.
  */
-export function outboundScan(text: string): ShieldScanResult {
+export function outboundScan(text: string, options?: Pick<ScanOptions, 'exceptionOverlays'>): ShieldScanResult {
   const start = performance.now();
 
   // Run secret rules + sensitive path rules on outbound content
-  const secretDetections = scanRules(text, secretRules);
-  const pathDetections = scanRules(text, sensitivePathRules);
+  const exceptionOverlays = mergeExceptionOverlays(
+    getActiveInvestigationExceptions('outbound'),
+    options?.exceptionOverlays,
+  );
+  const secretDetections = scanRules(text, secretRules, { exceptionOverlays });
+  const pathDetections = scanRules(text, sensitivePathRules, { exceptionOverlays });
 
   // OUT-* and OUT-PII-* detections previously emitted from in-source loops
   // over OUTBOUND_PATTERNS / PII_PATTERNS here. As of Task 9 (policy-
@@ -568,7 +652,7 @@ export function outboundScan(text: string): ShieldScanResult {
   // Layer in policy-framework detections (system + custom; curated is mirror).
   // This runs alongside the hardcoded ALL_RULES detection set; both feed
   // into the same computeScore + computeVerdict pipeline below.
-  const policyResult = evaluatePolicies(text, 'outbound');
+  const policyResult = evaluatePolicies(text, 'outbound', exceptionOverlays);
   allDetections.push(...policyResult.detections);
 
   // Restore category="outbound-leak" on the 12 policy detections that
@@ -612,6 +696,7 @@ export function outboundScan(text: string): ShieldScanResult {
   const cleaned = redact(prepared);
 
   const elapsed = `${(performance.now() - start).toFixed(1)}ms`;
+  const scoring = buildScoringLedger(allDetections, allDetections.length, score, policyResult.verdictFloor);
 
   return enrichScanResult({
     verdict: finalVerdict,
@@ -620,6 +705,7 @@ export function outboundScan(text: string): ShieldScanResult {
     detections: allDetections,
     cleaned,
     stats,
+    scoring,
   });
 }
 

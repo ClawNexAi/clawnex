@@ -27,7 +27,7 @@ This manual covers: dashboard navigation, shield verdict interpretation, traffic
 
 ### 0.3 Accessibility
 
-ClawNex targets WCAG 2.1 Level AA conformance. Every user action described in this manual is reachable with keyboard-only navigation. Interactive elements with hover tooltips also expose their content via `aria-describedby` on focus (`Tab`). The TIPS system can be globally disabled for screen reader users who prefer uninterrupted announcements (section 2.1c). Known accessibility gaps are catalogued in `docs/22-keyboard-shortcuts.md` §1.2.
+ClawNex targets WCAG 2.1 Level AA conformance. Every user action described in this manual is reachable with keyboard-only navigation. Interactive elements with hover tooltips also expose their content via `aria-describedby` on focus (`Tab`). The header's **A−** and **A+** controls adjust dashboard text from one pixel below the former baseline through three pixels above it; ClawNex defaults to `+1px` and saves the selection in the browser. The TIPS system can be globally disabled for screen reader users who prefer uninterrupted announcements (section 2.1c). Known accessibility gaps are catalogued in `docs/22-keyboard-shortcuts.md` §1.2.
 
 ### 0.4 See Also
 
@@ -119,6 +119,7 @@ When your account is locked, the login page shows a message: *"Your account is l
 - **Version pill** — current product version (e.g. `v0.9.2`) followed by an **ALPHA** chip while ClawNex is in pre-release.
 - **UPDATES pill (added 2026-05-01)** — the always-on update notifier. When everything is up to date the pill reads `UPDATES` in muted text. When one or more updates are actionable, it brightens to the brand colour and shows a count: `1 UPDATE`, `2 UPDATES`, etc. Click it to expand a dropdown listing every source ClawNex tracks (Host Security Scanner, OpenClaw, ClawNex Shield Rules) with installed → latest version, the time of the last check, and a **REFRESH** button. Sources that have an in-app update flow (currently just Host Security Scanner) are counted in the badge; sources without an in-app path (OpenClaw, ClawNex Shield Rules) appear in the dropdown with an `INFO` tag so you can see drift without inflating the count. The **View details →** link jumps straight to Configuration → Updates. Polled every 15 minutes; refreshes immediately after you run an update from the Configuration card.
 - **Theme toggle (rewritten 2026-05-01)** — sun (☀) in dark mode, moon (☾) in light mode, rendered as a brand-orange SVG icon at 16px so it's visible against any background. Click to flip themes; your choice persists across reloads.
+- **Text size controls** — **A−** decreases and **A+** increases dashboard text in one-pixel steps. The supported range is `−1px` through `+3px`; the default is `+1px`. Your selection persists in this browser.
 - **TIPS toggle** — the global on/off switch for the tooltip system (see §2.1c).
 
 **Header status row (under the pill row).** Below the pill row, the header status strip shows live posture facts. As of 2026-05-02 the row reads from left to right:
@@ -522,6 +523,18 @@ The queue collapses repeats — three rows with the same Exec+Write combo across
 5. **Fix / Control** — the recommended remediation in operator-readable prose. The longer narrative lives here so the queue row stays a one-line `Verb · target`.
 
 As of v0.14.5, all 9 source families have a per-source resolver: alert / cost-signal / collector-health / trust-audit / correlation / blast-radius / auth-rbac / update-cve / policy-warning. Pre-v0.14.5 only the first 4 dispatched; the other 5 fell back to a generic resolver. After v0.14.5, every queue row drills into source-aware stage copy. Toggle state persists per artifact in `sessionStorage` so triaging multiple alerts doesn't re-collapse the snippet on each one.
+
+**The Investigation Workbench.** Alert-backed investigations continue below the Triage Graph with five views:
+
+1. **Overview** — verdict, score, direction, model/provider, agent/session, evidence hash, and capture completeness.
+2. **Payload** — retained request and response context shown separately with line numbers, search, wrapping, redacted copy, and explicit truncation or missing-evidence notices.
+3. **Detection Analysis** — every triggered rule, its immutable decision-time snapshot, score contribution, threshold calculation, risk explanation, and verification guidance.
+4. **Related Activity** — same-session traffic immediately before and after the alert, including whether the Shield allowed, reviewed, or blocked it.
+5. **Decision** — record True Positive, False Positive, Expected Activity, Needs More Evidence, or Escalated with a required rationale. Changes remain in append-only case history.
+
+The Decision view can also create an inert exception draft. Replay must reproduce the original rule and prove the candidate exception removes that rule before activation becomes available. Activated exceptions can be deactivated immediately. Escalating an investigation creates a linked incident; exporting produces a management-readable Markdown summary without embedding raw payload content.
+
+ClawNex cannot recover content that was never captured. Extended redacted evidence is the default. Metadata-only mode stores no payload text or match samples. Encrypted forensic mode is an explicit opt-in under **Configuration → Shield Settings → Investigation Evidence**; plaintext reveal is restricted, reason-gated, audited before decryption, session-only in the browser, and retained for no more than 72 hours.
 
 **Setup banner.** On a fresh install where the wizard hasn't been dismissed, Mission Control shows a warn-tinted banner at the top: *"Tiles below show 0 because nothing has been observed yet — not because everything is clear."* Primary CTA navigates to Fleet Command (where the wizard lives). The sidebar nav item also shows a small warn-tinted setup-pending dot until the wizard is dismissed. Demo mode hides both.
 

@@ -71,6 +71,58 @@ export interface ShieldScanResult {
     low: number;
     categories: string[];
   };
+  /** Versioned explanation of how the final score and verdict were reached. */
+  scoring?: ShieldScoringLedger;
+}
+
+export interface ShieldRuleSnapshot {
+  stable_id: string;
+  name: string;
+  source: string;
+  category: string;
+  severity: string;
+  confidence: number;
+  pattern?: string;
+  flags?: string;
+  is_regex?: boolean;
+  direction?: string;
+  action?: string;
+  exceptions?: string;
+  tags?: string[];
+  updated_at?: string | null;
+  policy?: {
+    id: string;
+    name: string;
+    source: string;
+    lifecycle: string;
+    version: string | null;
+    enabled: boolean;
+    updated_at: string;
+  };
+}
+
+export interface ShieldScoringLedger {
+  version: 'shield-score-v1';
+  formula: 'severity_weight * confidence * min(match_count, 5)';
+  severity_weights: Record<'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW', number>;
+  raw_total: number;
+  rounded_total: number;
+  capped_score: number;
+  review_threshold: number;
+  block_threshold: number;
+  evaluated_detection_count: number;
+  returned_detection_count: number;
+  verdict_basis: string;
+  entries: Array<{
+    stable_rule_id: string;
+    rule_name: string;
+    severity: string;
+    confidence: number;
+    match_count: number;
+    score_contribution: number;
+    action?: string;
+    category: string;
+  }>;
 }
 
 export interface ShieldDetection {
@@ -96,6 +148,10 @@ export interface ShieldDetection {
   policy_rule_id?: string;
   rule_key?: string;
   action?: RuleAction;
+  /** Unrounded contribution used by shield-score-v1. */
+  score_contribution?: number;
+  /** Immutable rule/policy facts captured when the detection fired. */
+  rule_snapshot?: ShieldRuleSnapshot;
 }
 
 // --- Alerts ---

@@ -61,6 +61,27 @@ import { FloatingAvatar } from "./panels/FloatingAvatar";
 import { ChatPanel } from "./panels/ChatPanel";
 import { DemoGuide } from "./panels/DemoGuide";
 
+const FONT_SIZE_MIN = -1;
+const FONT_SIZE_MAX = 3;
+const FONT_SIZE_DEFAULT = 1;
+const FONT_SIZE_CLASSES = [
+  "clawnex-font-size-minus-1",
+  "clawnex-font-size-0",
+  "clawnex-font-size-1",
+  "clawnex-font-size-2",
+  "clawnex-font-size-3",
+];
+
+function clampFontSizeStep(value: number): number {
+  return Math.max(FONT_SIZE_MIN, Math.min(FONT_SIZE_MAX, Math.round(value)));
+}
+
+function applyFontSizeStep(value: number): void {
+  const step = clampFontSizeStep(value);
+  document.documentElement.classList.remove(...FONT_SIZE_CLASSES);
+  document.documentElement.classList.add(step < 0 ? "clawnex-font-size-minus-1" : `clawnex-font-size-${step}`);
+}
+
 // ---------------------------------------------------------------------------
 // Global Tooltip Toggle Button — lives in the dashboard header, next to the
 // help (?) and Tour buttons. Always visible. Click to flip tooltips on/off
@@ -304,6 +325,7 @@ function SentinelDashboardInner() {
   const [enabledModules, setEnabledModules] = useState<Record<string, boolean>>({});
   const [theme, setThemeState] = useState<"dark" | "light">("dark");
   const [highContrast, setHighContrastState] = useState(false);
+  const [fontSizeStep, setFontSizeStep] = useState(FONT_SIZE_DEFAULT);
   const [mounted, setMounted] = useState(false);
   const themeStyleRef = useRef<HTMLStyleElement | null>(null);
 
@@ -317,6 +339,12 @@ function SentinelDashboardInner() {
       if (saved === "light") { setTheme("light"); setThemeState("light"); }
       const hc = localStorage.getItem("clawnex_high_contrast");
       if (hc === "1") { applyHighContrast(true); setHighContrastState(true); }
+      const storedFontSize = Number(localStorage.getItem("clawnex_font_size_step"));
+      const nextFontSize = Number.isFinite(storedFontSize) && localStorage.getItem("clawnex_font_size_step") !== null
+        ? clampFontSizeStep(storedFontSize)
+        : FONT_SIZE_DEFAULT;
+      applyFontSizeStep(nextFontSize);
+      setFontSizeStep(nextFontSize);
     } catch {}
     // Also check config_defaults for server-persisted value
     (async () => {
@@ -332,6 +360,9 @@ function SentinelDashboardInner() {
         }
       } catch {}
     })();
+    if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
+    window.scrollTo(0, 0);
+    window.requestAnimationFrame(() => window.scrollTo(0, 0));
     setMounted(true);
   }, []);
 
@@ -416,6 +447,15 @@ function SentinelDashboardInner() {
       `;
     }
   }, [theme]);
+
+  const adjustFontSize = useCallback((delta: number) => {
+    setFontSizeStep((current) => {
+      const next = clampFontSizeStep(current + delta);
+      applyFontSizeStep(next);
+      try { localStorage.setItem("clawnex_font_size_step", String(next)); } catch {}
+      return next;
+    });
+  }, []);
 
   // --- Derived state ---
   const since = useMemo(() => getTimeSince(timeRange), [timeRange]);
@@ -945,6 +985,38 @@ function SentinelDashboardInner() {
             )}
           </button>
           </Tooltip>
+          <div
+            role="group"
+            aria-label={`Dashboard text size ${fontSizeStep >= 0 ? `plus ${fontSizeStep}` : `minus ${Math.abs(fontSizeStep)}`} pixels`}
+            style={{ display: "inline-flex", alignItems: "center", gap: 2 }}
+          >
+            <Tooltip placement="bottom" variant="compact" content={<span>Decrease dashboard text size. Current adjustment: <strong>{fontSizeStep >= 0 ? `+${fontSizeStep}` : fontSizeStep}px</strong>.</span>}>
+              <button
+                type="button"
+                onClick={() => adjustFontSize(-1)}
+                disabled={fontSizeStep <= FONT_SIZE_MIN}
+                aria-label="Decrease dashboard text size"
+                style={{
+                  width: 30, height: 24, padding: 0, borderRadius: 4, cursor: fontSizeStep <= FONT_SIZE_MIN ? "not-allowed" : "pointer",
+                  background: "transparent", border: `1px solid ${C.brd}`, color: C.txS,
+                  fontFamily: F.sans, fontSize: 12, fontWeight: 800, opacity: fontSizeStep <= FONT_SIZE_MIN ? 0.45 : 1,
+                }}
+              >A−</button>
+            </Tooltip>
+            <Tooltip placement="bottom" variant="compact" content={<span>Increase dashboard text size. Current adjustment: <strong>{fontSizeStep >= 0 ? `+${fontSizeStep}` : fontSizeStep}px</strong>.</span>}>
+              <button
+                type="button"
+                onClick={() => adjustFontSize(1)}
+                disabled={fontSizeStep >= FONT_SIZE_MAX}
+                aria-label="Increase dashboard text size"
+                style={{
+                  width: 30, height: 24, padding: 0, borderRadius: 4, cursor: fontSizeStep >= FONT_SIZE_MAX ? "not-allowed" : "pointer",
+                  background: `${C.cyan}12`, border: `1px solid ${C.cyan}44`, color: C.cyan,
+                  fontFamily: F.sans, fontSize: 12, fontWeight: 800, opacity: fontSizeStep >= FONT_SIZE_MAX ? 0.45 : 1,
+                }}
+              >A+</button>
+            </Tooltip>
+          </div>
           <Tooltip placement="bottom" variant="detail" content={<span><strong>Performance Mode</strong> — disables glass blur, gradient backdrops, and the rotating Shield avatar. Aimed at low-end hardware, remote sessions over Tailscale, and screen-sharing where heavy effects stutter. Visual fidelity drops; data fidelity is unchanged.</span>}>
           <button onClick={() => { setPerformanceMode(!performanceMode); setPerfMode(!performanceMode); }} style={{
             padding: "2px 8px", borderRadius: 3, fontSize: 11, fontWeight: 700, fontFamily: F.sans, cursor: "pointer",

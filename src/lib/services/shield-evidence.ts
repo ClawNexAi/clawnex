@@ -1,8 +1,11 @@
-import { redact } from '../shield/scanner';
 import type { ShieldScanResult } from '../types';
 import { logEvent } from './audit-logger';
-
-const MAX_EVIDENCE_EXCERPT = 4096;
+import {
+  getInvestigationCapturePolicy,
+  redactInvestigationEvidence,
+  sanitizeDetectionsForCapture,
+  storeForensicPayload,
+} from './investigation-capture';
 
 export interface ShieldRiskContext {
   why_risky: string;
@@ -113,11 +116,16 @@ export interface BuiltShieldEvidence {
  * and verdict context only, never payload text.
  */
 export function buildShieldEvidence(context: ShieldEvidenceContext): BuiltShieldEvidence {
-  const redactedPayload = redact(context.content);
-  const payloadExcerpt = redactedPayload.length <= MAX_EVIDENCE_EXCERPT
-    ? redactedPayload
-    : `${redactedPayload.slice(0, MAX_EVIDENCE_EXCERPT / 2)}\n…[truncated]…\n${redactedPayload.slice(-MAX_EVIDENCE_EXCERPT / 2)}`;
-  const detectionNames = context.scanResult.detections.slice(0, 5).map((d) => d.name).join(', ');
+  const capturePolicy = getInvestigationCapturePolicy();
+  const persistedDetections = sanitizeDetectionsForCapture(context.scanResult.detections, capturePolicy.mode);
+  const redactedPayload = redactInvestigationEvidence(context.content, context.scanResult.detections);
+  const captureRedacted = capturePolicy.mode !== 'metadata';
+  const payloadExcerpt = !captureRedacted
+    ? ''
+    : redactedPayload.length <= capturePolicy.redactedLimit
+      ? redactedPayload
+      : `${redactedPayload.slice(0, capturePolicy.redactedLimit / 2)}\n…[truncated]…\n${redactedPayload.slice(-capturePolicy.redactedLimit / 2)}`;
+  const detectionNames = persistedDetections.slice(0, 5).map((d) => d.name).join(', ');
   const extraSummary = Object.entries(context.summaryContext ?? {})
     .filter(([, value]) => value !== null && value !== undefined && value !== '')
     .map(([key, value]) => `${key}: ${String(value)}`)
@@ -126,6 +134,7 @@ export function buildShieldEvidence(context: ShieldEvidenceContext): BuiltShield
   const sourceEventId = context.proxyTrafficId ?? context.shieldScanId ?? null;
 
   const detail = {
+    evidence_schema_version: 2,
     summary: [
       `Direction: ${context.direction}`,
       `Score: ${context.scanResult.score}`,
@@ -134,14 +143,18 @@ export function buildShieldEvidence(context: ShieldEvidenceContext): BuiltShield
       extraSummary,
       `Detections: ${detectionNames || 'none'}`,
     ].filter(Boolean).join(' | '),
-    shield_detections: context.scanResult.detections.map((detection) => ({
+    shield_detections: persistedDetections.map((detection) => ({
       ...detection,
       risk_context: riskContext(detection.category, detection.severity),
     })),
+    scoring_ledger: context.scanResult.scoring ?? null,
     prompt_hash: context.promptHash,
     payload_excerpt: payloadExcerpt,
-    payload_excerpt_truncated: redactedPayload.length > MAX_EVIDENCE_EXCERPT,
+    payload_excerpt_truncated: captureRedacted && redactedPayload.length > capturePolicy.redactedLimit,
     payload_total_length: context.content.length,
+    capture_mode: capturePolicy.mode,
+    capture_complete: captureRedacted && redactedPayload.length <= capturePolicy.redactedLimit,
+    forensic_capture_available: capturePolicy.mode === 'forensic' && capturePolicy.forensicAvailable,
     shield_scan_id: context.shieldScanId ?? null,
     proxy_traffic_id: context.proxyTrafficId ?? null,
     source_event_type: sourceEventType,
@@ -186,6 +199,13 @@ export function recordShieldEvidence(context: ShieldEvidenceContext): ShieldEvid
     JSON.stringify(built.detail),
     context.auditSource,
   );
+  if (context.scanResult.verdict !== 'ALLOW') {
+    storeForensicPayload({
+      auditEventId: audit.id,
+      direction: context.direction === 'outbound' ? 'outbound' : 'inbound',
+      content: context.content,
+    });
+  }
 
   return {
     auditEventId: audit.id,

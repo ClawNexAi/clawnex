@@ -588,7 +588,9 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
                   background: isCritical
                     ? `linear-gradient(180deg, ${C.glassPanel}, ${C.glassPanel2})`
                     : C.glassSurfTrans,
-                  border: `1px solid ${sc}22`,
+                  borderTop: `1px solid ${sc}22`,
+                  borderRight: `1px solid ${sc}22`,
+                  borderBottom: `1px solid ${sc}22`,
                   borderLeft: `4px solid ${sc}`,
                   // operator-flagged 2026-05-08 from internal dogfood: row spacing/radius
                   // diverged from ShieldTests (which is the established
@@ -841,7 +843,9 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
                 background: isCritical
                   ? `linear-gradient(180deg, ${C.glassPanel}, ${C.glassPanel2})`
                   : C.glassSurfTrans,
-                border: `1px solid ${sc}33`,
+                borderTop: `1px solid ${sc}33`,
+                borderRight: `1px solid ${sc}33`,
+                borderBottom: `1px solid ${sc}33`,
                 borderLeft: `4px solid ${sc}`,
                 borderRadius: 8, padding: 12, marginBottom: 6,
                 boxShadow: isCritical ? `0 0 16px ${C.danger}22, ${C.glassCardShadow}` : C.glassCardShadow,
