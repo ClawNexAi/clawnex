@@ -360,6 +360,17 @@ export function TriageGraphCard({
           </div>
         )}
 
+        {/* The evidence-driven workbench is the primary investigation surface.
+            Keep it ahead of the legacy triage graph so operators immediately
+            see Overview, Payload, Detection Analysis, Related Activity, and
+            Decision after opening an alert. */}
+        {graph.issue.kind === "alert" && (
+          <InvestigationWorkbench
+            alertId={graph.issue.id}
+            onNavigate={onNavigate}
+          />
+        )}
+
         {/* ----------------------------------------------------------------
             WORKFLOW ROW — 5-column grid stepper.
             internal reviewer flagged the prior flex-wrap layout as visually uneven. Grid
@@ -437,12 +448,6 @@ export function TriageGraphCard({
           />
         )}
 
-        {graph.issue.kind === "alert" && (
-          <InvestigationWorkbench
-            alertId={graph.issue.id}
-            onNavigate={onNavigate}
-          />
-        )}
       </Card>
     </div>
   );

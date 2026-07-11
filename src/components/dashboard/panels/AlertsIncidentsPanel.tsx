@@ -126,14 +126,16 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
   // controls the description/workflow body) so operators can have the
   // description expanded without the full triage graph, and vice-versa.
   const [investigatingAlertId, setInvestigatingAlertId] = useState<string | null>(null);
-  // Evidence inline-expand state. Keyed by alert id. Lazily fetched on first
-  // open of "View Evidence". { loading | record | error } captures the three
-  // possible states without a separate boolean per alert.
+  // Evidence data and inline visibility are intentionally separate. The
+  // investigation graph needs evidence to resolve its artifacts, but loading
+  // that data must not also expand the large inline fallback and push the
+  // workbench controls below the viewport.
   type EvidenceState =
     | { kind: "loading" }
     | { kind: "ok"; data: EvidencePayload }
     | { kind: "error"; message: string };
   const [evidenceMap, setEvidenceMap] = useState<Record<string, EvidenceState>>({});
+  const [visibleEvidenceIds, setVisibleEvidenceIds] = useState<Set<string>>(new Set());
 
   const fetchEvidence = useCallback(async (alertId: string) => {
     setEvidenceMap(prev => ({ ...prev, [alertId]: { kind: "loading" } }));
@@ -158,17 +160,17 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
   }, []);
 
   const toggleEvidence = useCallback((alertId: string) => {
-    if (evidenceMap[alertId]) {
-      // Already loaded / loading — collapse.
-      setEvidenceMap(prev => {
-        const next = { ...prev };
-        delete next[alertId];
+    if (visibleEvidenceIds.has(alertId)) {
+      setVisibleEvidenceIds((current) => {
+        const next = new Set(current);
+        next.delete(alertId);
         return next;
       });
       return;
     }
-    fetchEvidence(alertId);
-  }, [evidenceMap, fetchEvidence]);
+    setVisibleEvidenceIds((current) => new Set(current).add(alertId));
+    if (!evidenceMap[alertId]) fetchEvidence(alertId);
+  }, [evidenceMap, fetchEvidence, visibleEvidenceIds]);
 
   // v0.11.x+: primary "View Evidence" handler. Resolves the alert's audit
   // row via /api/alerts/:id/evidence, then deep-links to Audit & Evidence
@@ -202,6 +204,7 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
           ...prev,
           [alertId]: { kind: "error", message: body?.reason || body?.error || `HTTP ${res.status}` },
         }));
+        setVisibleEvidenceIds((current) => new Set(current).add(alertId));
         return;
       }
       const data = (await res.json()) as EvidencePayload;
@@ -212,6 +215,7 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
         // detail — better than dropping them into Audit & Evidence with
         // no anchor.
         setEvidenceMap(prev => ({ ...prev, [alertId]: { kind: "ok", data } }));
+        setVisibleEvidenceIds((current) => new Set(current).add(alertId));
         return;
       }
       // Happy path: deep-link to the exact row. `focus: "evidence"` is
@@ -226,6 +230,7 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
         ...prev,
         [alertId]: { kind: "error", message: err instanceof Error ? err.message : "Network error" },
       }));
+      setVisibleEvidenceIds((current) => new Set(current).add(alertId));
     }
   }, [onNavigate, toggleEvidence]);
 
@@ -690,11 +695,11 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
                             includes a "→" arrow on the primary path so the
                             navigation affordance is obvious without hover. */}
                         {alertHasEvidence(a) && (
-                          <Tooltip placement="top" variant="detail" content={evidenceMap[a.id] ? <span><strong>Hide Evidence</strong> — collapse the inline fallback view (the deep-link to Audit &amp; Evidence couldn&apos;t resolve, so we showed it inline instead).</span> : <span><strong>Open in Audit &amp; Evidence</strong> &rarr; — navigates to the exact audit row for this alert and opens its evidence detail. If the linked audit row isn&apos;t resolvable, we&apos;ll render the evidence inline here as a fallback.</span>}>
+                          <Tooltip placement="top" variant="detail" content={visibleEvidenceIds.has(a.id) ? <span><strong>Hide Evidence</strong> — collapse the inline fallback view (the deep-link to Audit &amp; Evidence couldn&apos;t resolve, so we showed it inline instead).</span> : <span><strong>Open in Audit &amp; Evidence</strong> &rarr; — navigates to the exact audit row for this alert and opens its evidence detail. If the linked audit row isn&apos;t resolvable, we&apos;ll render the evidence inline here as a fallback.</span>}>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (evidenceMap[a.id]) {
+                                if (visibleEvidenceIds.has(a.id)) {
                                   // Inline fallback is open → collapse.
                                   toggleEvidence(a.id);
                                 } else {
@@ -704,7 +709,7 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
                               }}
                               style={{ padding: "2px 8px", background: `linear-gradient(135deg, ${C.cyan}, ${C.glassGreen})`, border: 0, borderRadius: 10, color: "#06121f", fontSize: 10, cursor: "pointer", fontWeight: 850, textTransform: "uppercase", letterSpacing: "0.05em" }}
                             >
-                              {evidenceMap[a.id] ? "Hide Evidence" : "View Evidence →"}
+                              {visibleEvidenceIds.has(a.id) ? "Hide Evidence" : "View Evidence →"}
                             </button>
                           </Tooltip>
                         )}
@@ -765,7 +770,7 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
                         char context window. The match span is highlighted via
                         a tinted background so the operator can confirm at a
                         glance which exact text triggered the alert. */}
-                    {evidenceMap[a.id] && (
+                    {visibleEvidenceIds.has(a.id) && evidenceMap[a.id] && (
                       <EvidenceInline state={evidenceMap[a.id]} />
                     )}
                   </div>
