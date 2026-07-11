@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
 import { C, F } from "../constants";
 import { Badge, LoadingSpinner, EmptyState } from "../shared";
 import { Tooltip } from "../tooltip";
@@ -116,6 +116,7 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
   const qFilter = (urlState.q ?? "").toLowerCase();
   const deepLinkId = urlState.id;
   const highlightId = urlState.highlight ?? urlState.id;
+  const highlightedAlertRef = useRef<string | null>(null);
   // Pagination + row-expansion stay in local state — they're per-render
   // ephemeral, not view state worth preserving across reload.
   const [alertPageSize, setAlertPageSize] = useState(15);
@@ -126,6 +127,27 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
   // controls the description/workflow body) so operators can have the
   // description expanded without the full triage graph, and vice-versa.
   const [investigatingAlertId, setInvestigatingAlertId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!investigatingAlertId) return;
+
+    // The workbench is inserted below the selected alert. Bring its command
+    // surface into view after React commits so operators do not have to infer
+    // that the Payload and Decision tabs exist below the fold.
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        document.getElementById(`alert-investigation-${investigatingAlertId}`)?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame) window.cancelAnimationFrame(secondFrame);
+    };
+  }, [investigatingAlertId]);
   // Evidence data and inline visibility are intentionally separate. The
   // investigation graph needs evidence to resolve its artifacts, but loading
   // that data must not also expand the large inline fallback and push the
@@ -258,7 +280,11 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
   // per-row) because React forbids calling hooks inside .map() — the row
   // markup carries the data attribute and this effect drives the animation.
   useEffect(() => {
-    if (!highlightId) return;
+    if (!highlightId) {
+      highlightedAlertRef.current = null;
+      return;
+    }
+    if (highlightedAlertRef.current === highlightId) return;
     // Lazily inject the keyframe + class once. Idempotent.
     const flag = "__clawnex_highlight_pulse_injected__";
     const w = window as unknown as Record<string, unknown>;
@@ -283,6 +309,7 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
     const raf = requestAnimationFrame(() => {
       const el = document.querySelector<HTMLElement>(`[data-alert-id="${CSS.escape(highlightId)}"]`);
       if (!el) return;
+      highlightedAlertRef.current = highlightId;
       try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch { el.scrollIntoView(); }
       el.classList.add("clawnex-highlight-pulse");
       setTimeout(() => el.classList.remove("clawnex-highlight-pulse"), 4200);
@@ -441,16 +468,6 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
           operator might wonder why they only see one row. */}
       {deepLinkId && (
         <div
-          ref={(el) => {
-            // v0.8.4+: scroll the deep-link banner into view on mount so
-            // operators don't miss it. Same pattern as CorrelationsPanel.
-            if (el) {
-              requestAnimationFrame(() => {
-                try { el.scrollIntoView({ behavior: "smooth", block: "start" }); }
-                catch { el.scrollIntoView(); }
-              });
-            }
-          }}
           style={{
             display: "flex", alignItems: "center", gap: 10, marginBottom: 12,
             padding: "8px 12px", borderRadius: 4,
@@ -789,7 +806,12 @@ export function AlertsIncidentsPanel({ filters, demoMode, onNavigate, focusedAle
                 const evState = evidenceMap[a.id];
                 const evPayload = evState?.kind === "ok" ? evState.data : null;
                 return (
-                  <div style={{ marginBottom: 12 }}>
+                  <div
+                    id={`alert-investigation-${a.id}`}
+                    role="region"
+                    aria-label={`Investigation workbench for ${displayTitle}`}
+                    style={{ marginBottom: 12, scrollMarginTop: 12 }}
+                  >
                     <TriageGraphCard
                       graph={resolveAlertTriageGraph({
                         alert: a,

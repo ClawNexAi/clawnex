@@ -12,6 +12,7 @@
 #     --host  operator@host.example \
 #     --domain <deployment-domain> \
 #     [--version 0.10.0-alpha]   # default: read from package.json
+#                               # current version is packaged fresh before upload
 #     [--sudo-pass-stdin]       # read sudo pw from stdin (recommended)
 #     [--sudo-pass-env VAR]     # OR read from a named env var
 #     [--dry-run]               # print plan, don't execute
@@ -150,12 +151,20 @@ if [ "$PRESERVE_DATA" = "-1" ]; then
 fi
 
 # Resolve VERSION from package.json if not given (same regex package.sh uses
-# so the source of truth stays single-file)
-if [ -z "$VERSION" ]; then
-  VERSION=$(grep -E '^\s*"version"' "$REPO_ROOT/package.json" \
-              | head -1 \
-              | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
-  [ -n "$VERSION" ] || die "could not parse version from $REPO_ROOT/package.json"
+# so the source of truth stays single-file).
+CURRENT_VERSION=$(grep -E '^\s*"version"' "$REPO_ROOT/package.json" \
+                    | head -1 \
+                    | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+[ -n "$CURRENT_VERSION" ] || die "could not parse version from $REPO_ROOT/package.json"
+[ -n "$VERSION" ] || VERSION="$CURRENT_VERSION"
+
+# A deploy must never silently reuse an artifact from an earlier source tree.
+# Package the current version immediately before upload. An explicit historical
+# --version remains an artifact-only deployment because package.sh intentionally
+# builds only the version declared by the current package.json.
+if [ "$DRY_RUN" != "1" ] && [ "$VERSION" = "$CURRENT_VERSION" ]; then
+  info "building fresh deployment package from current source"
+  bash "$REPO_ROOT/deploy/package.sh"
 fi
 
 LOCAL_TARBALL="$REPO_ROOT/deploy/clawnex-v${VERSION}-deploy.tar.gz"
