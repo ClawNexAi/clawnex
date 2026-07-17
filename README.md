@@ -154,6 +154,7 @@ Read the [security validation summary](docs/security-validation-summary.md), [se
 | Integrate with API or MCP | [API and MCP guide](docs/19-api-mcp-integration-guide.md) |
 | Troubleshoot | [Troubleshooting guide](docs/17-troubleshooting-guide.md) |
 | Use keyboard navigation | [Keyboard shortcuts](docs/22-keyboard-shortcuts.md) |
+| Follow planned improvements | [Public roadmap](ROADMAP.md) |
 
 The hosted operator documentation is at [docs.clawnexai.com](https://docs.clawnexai.com).
 
@@ -186,6 +187,7 @@ npm run sbom
 ClawNex follows Semantic Versioning with pre-release suffixes. Alpha releases can change APIs, configuration keys, schemas, and operator workflows without backward-compatibility guarantees. Review the changelog before upgrading and test upgrades against a copy of operational data.
 
 - Bugs and feature requests: [GitHub Issues](https://github.com/ClawNexAi/clawnex/issues)
+- Planned improvements: [Public roadmap](ROADMAP.md) and [live GitHub Project](https://github.com/orgs/ClawNexAi/projects/1)
 - Security reports: `security@clawnexai.com`
 - Support, documentation, legal, commercial, and general inquiries: `contact@clawnexai.com`
 

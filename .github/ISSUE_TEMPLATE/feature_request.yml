@@ -8,7 +8,7 @@ body:
       value: |
         Thanks for proposing a feature. Before continuing:
 
-          1. **Check the [roadmap](https://github.com/clawnexai/clawnex/blob/main/docs/20-product-roadmap.md)** — your idea may already be planned.
+          1. **Check the [roadmap](https://github.com/ClawNexAi/clawnex/blob/main/ROADMAP.md)** — your idea may already be planned.
           2. For **questions or design discussions**, prefer
              [Discussions](https://github.com/clawnexai/clawnex/discussions).
           3. ClawNex is opinionated about scope (it's a security SOC for AI
