@@ -36,6 +36,21 @@ Section ordering per release: **Added, Changed, Deprecated, Removed, Fixed, Secu
 - `scripts/install.sh` (offered the deleted Docker path) and
   `deploy/deploy.sh` (legacy Ubuntu deployer) — superseded by `install.sh`.
 
+## [0.15.8-alpha] - 2026-07-17
+
+### Added
+
+- The global instance, client, and severity filters now use a shared ClawNex-styled listbox with keyboard navigation, screen-reader semantics, focus restoration, outside-click dismissal, and viewport-aware positioning.
+- The public repository now includes a concise roadmap and structured feature-request workflow for tracking planned work.
+
+### Changed
+
+- The expanded sidebar now scales with the operator's dashboard text-size setting while keeping full panel names readable and avoiding excess space before Favorite controls.
+
+### Security
+
+- Resolved the outstanding CodeQL findings for log injection and remote property injection, including regression coverage for persisted special-property keys and active investigation-exception cache behavior.
+
 ## [0.15.7-alpha] - 2026-07-17
 
 ### Added

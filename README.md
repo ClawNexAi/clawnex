@@ -11,12 +11,12 @@
   <a href="https://github.com/ClawNexAi/clawnex/actions/workflows/codeql.yml"><img src="https://github.com/ClawNexAi/clawnex/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"></a>
   <a href="DCO"><img src="https://img.shields.io/badge/Sign--off-DCO-brightgreen" alt="DCO"></a>
-  <a href="https://github.com/ClawNexAi/clawnex/releases/tag/v0.15.7-alpha"><img src="https://img.shields.io/badge/version-0.15.7--alpha-orange" alt="Version 0.15.7-alpha"></a>
+  <a href="https://github.com/ClawNexAi/clawnex/releases/tag/v0.15.8-alpha"><img src="https://img.shields.io/badge/version-0.15.8--alpha-orange" alt="Version 0.15.8-alpha"></a>
 </p>
 
 ClawNex is a local-first security control plane for AI agents. It connects to OpenClaw and Hermes on the same host, routes supported model traffic through a pinned LiteLLM proxy, applies Prompt Shield policy, and gives operators one place to investigate alerts, fleet posture, trust boundaries, cost, and audit evidence.
 
-**Current release:** [`v0.15.7-alpha`](https://github.com/ClawNexAi/clawnex/releases/tag/v0.15.7-alpha) · Public alpha · macOS and Linux
+**Current release:** [`v0.15.8-alpha`](https://github.com/ClawNexAi/clawnex/releases/tag/v0.15.8-alpha) · Public alpha · macOS and Linux
 
 [Website](https://clawnexai.com) · [Documentation](https://docs.clawnexai.com) · [Product gallery](https://clawnexai.com/gallery) · [Releases](https://github.com/ClawNexAi/clawnex/releases)
 
@@ -89,13 +89,13 @@ ClawNex protects traffic only when that traffic passes through a supported inspe
 
 OAuth- and session-bound provider traffic cannot always be transparently proxied because the client owns the authentication channel. ClawNex marks those paths read-only and can provide retrospective visibility when a supported local watcher can observe the session data. A `DIRECT` route is visible but is not receiving real-time Prompt Shield inspection.
 
-ClawNex currently supports same-host operation. A supported remote collector or remote traffic bridge is not part of `v0.15.7-alpha`.
+ClawNex currently supports same-host operation. A supported remote collector or remote traffic bridge is not part of `v0.15.8-alpha`.
 
 ## Current Release
 
-`v0.15.7-alpha` adds operator-scoped navigation Favorites and Recents, improves nested-panel contrast and sidebar legibility, and includes the investigation and evidence workflows delivered in the current `0.15` release line.
+`v0.15.8-alpha` adds responsive sidebar sizing and ClawNex-styled global instance, client, and severity filters with complete keyboard and focus behavior. It also includes the CodeQL remediations and public roadmap updates completed since `v0.15.7-alpha`.
 
-See the [GitHub release](https://github.com/ClawNexAi/clawnex/releases/tag/v0.15.7-alpha) and [changelog](CHANGELOG.md) for release-by-release detail.
+See the [GitHub release](https://github.com/ClawNexAi/clawnex/releases/tag/v0.15.8-alpha) and [changelog](CHANGELOG.md) for release-by-release detail.
 
 ## Architecture
 
