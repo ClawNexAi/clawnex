@@ -43,10 +43,10 @@ export function mergeExceptionOverlays(
   candidate?: Record<string, string[]>,
 ): Record<string, string[]> {
   if (!candidate) return base;
-  const merged: Record<string, string[]> = {};
-  for (const [key, values] of Object.entries(base)) merged[key] = [...values];
+  const merged = new Map<string, string[]>();
+  for (const [key, values] of Object.entries(base)) merged.set(key, [...values]);
   for (const [key, values] of Object.entries(candidate)) {
-    merged[key] = [...(merged[key] || []), ...values];
+    merged.set(key, [...(merged.get(key) || []), ...values]);
   }
-  return merged;
+  return Object.fromEntries(merged);
 }

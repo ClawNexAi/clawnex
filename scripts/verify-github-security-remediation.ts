@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { c2Rules } from "../src/lib/shield/rules";
 import { sanitizeLogField } from "../src/lib/security/log-sanitize";
+import { mergeExceptionOverlays } from "../src/lib/services/investigation-exceptions";
 
 let failed = 0;
 
@@ -76,6 +77,26 @@ const chatRoute = read("src/app/api/chat/route.ts");
 check("Chat route sanitizes logged upstream/shield errors", /sanitizeLogField\(err\.message\)/.test(chatRoute) && /sanitizeLogField\(error\.message\)/.test(chatRoute));
 const sessionWatcher = read("src/lib/services/session-watcher.ts");
 check("Session watcher sanitizes logged file and scan errors", /sanitizeLogField\(err\.message\)/.test(sessionWatcher) && !/console\.error\('\[SessionWatcher\][^']*:', err\)/.test(sessionWatcher));
+
+const shieldScanRoute = read("src/app/api/shield/scan/route.ts");
+check("Shield scan route sanitizes workflow errors before logging",
+  /sanitizeLogField\(detail\)/.test(shieldScanRoute) &&
+  !/console\.error\("\[Shield Scan\] workflow write error:", workflowErr\)/.test(shieldScanRoute));
+
+const prototypeKey = "__proto__";
+const constructorKey = "constructor";
+const mergedOverlays = mergeExceptionOverlays(
+  Object.fromEntries([[prototypeKey, ["base"]]]),
+  Object.fromEntries([
+    [prototypeKey, ["candidate"]],
+    [constructorKey, ["literal-key"]],
+  ]),
+);
+check("Investigation exception overlays treat prototype-like rule ids as inert Map keys",
+  Object.prototype.hasOwnProperty.call(mergedOverlays, prototypeKey) &&
+  Object.prototype.hasOwnProperty.call(mergedOverlays, constructorKey) &&
+  mergedOverlays[prototypeKey].join(",") === "base,candidate" &&
+  mergedOverlays[constructorKey][0] === "literal-key");
 
 const apiKeyService = read("src/lib/services/api-key-service.ts");
 check("API key service documents generated high-entropy bearer tokens", /160-bit random bearer tokens/.test(apiKeyService));
