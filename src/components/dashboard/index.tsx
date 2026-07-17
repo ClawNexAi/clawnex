@@ -64,6 +64,8 @@ import { DemoGuide } from "./panels/DemoGuide";
 const FONT_SIZE_MIN = -1;
 const FONT_SIZE_MAX = 3;
 const FONT_SIZE_DEFAULT = 1;
+const SIDEBAR_WIDTH_AT_DEFAULT_TEXT = 204;
+const SIDEBAR_WIDTH_PER_TEXT_STEP = 8;
 const FONT_SIZE_CLASSES = [
   "clawnex-font-size-minus-1",
   "clawnex-font-size-0",
@@ -525,6 +527,9 @@ function SentinelDashboardInner() {
   const dashboardFilters: DashboardFilters = useMemo(() => ({
     timeRange, since, selectedInstance, selectedClient, selectedSeverity, productionOnly: urlState.productionOnly,
   }), [timeRange, since, selectedInstance, selectedClient, selectedSeverity, urlState.productionOnly]);
+
+  const sidebarExpandedWidth =
+    SIDEBAR_WIDTH_AT_DEFAULT_TEXT + (fontSizeStep * SIDEBAR_WIDTH_PER_TEXT_STEP);
 
   // --- Gateway instances for instance dropdown ---
   const [gatewayInstances, setGatewayInstances] = useState<Array<{ id: string; name: string; status: string; clientName: string }>>([]);
@@ -1437,10 +1442,11 @@ function SentinelDashboardInner() {
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
         {/* LEFT NAV SIDEBAR — v0.8.1+ supports per-group collapse + minimize-to-rail.
-            Width: 170px normal, 48px when minimized (icons-only with hover-tooltips). */}
+            Expanded width follows the accessibility text-size preference so
+            navigation labels remain readable; minimized stays a stable 48px. */}
         <nav style={{
-          width: sidebarMinimized ? 48 : 170,
-          minWidth: sidebarMinimized ? 48 : 170,
+          width: sidebarMinimized ? 48 : sidebarExpandedWidth,
+          minWidth: sidebarMinimized ? 48 : sidebarExpandedWidth,
           // v0.13.0+: glass design language. Vertical gradient drops the brightness
           // toward the bottom so deep groups (SYSTEM / ABOUT) recede slightly while
           // the primary COMMAND group stays bright. backdrop-filter keeps the
