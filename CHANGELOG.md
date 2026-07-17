@@ -36,6 +36,12 @@ Section ordering per release: **Added, Changed, Deprecated, Removed, Fixed, Secu
 - `scripts/install.sh` (offered the deleted Docker path) and
   `deploy/deploy.sh` (legacy Ubuntu deployer) — superseded by `install.sh`.
 
+## [0.15.7-alpha] - 2026-07-17
+
+### Added
+
+- The dashboard sidebar now supports up to five operator-scoped Favorites and three persistent Recent panels. Star controls remain beside the canonical navigation entries, unavailable panels are excluded, and the Help panel documents both workflows.
+
 ## [0.15.5-alpha] - 2026-07-02
 
 ### Added

@@ -82,6 +82,61 @@ function applyFontSizeStep(value: number): void {
   document.documentElement.classList.add(step < 0 ? "clawnex-font-size-minus-1" : `clawnex-font-size-${step}`);
 }
 
+const FAVORITE_TABS_KEY_PREFIX = "clawnex_favorite_tabs";
+const RECENT_TABS_KEY_PREFIX = "clawnex_recent_tabs";
+const MAX_FAVORITE_TABS = 5;
+const MAX_RECENT_TABS = 3;
+const ROLE_HIDDEN_TABS: Record<string, TabId[]> = {
+  viewer: ["shield", "shieldTests", "trafficMonitor", "accessControl", "accessLists", "workspace", "auditEvidence", "executiveReports", "configuration"],
+  auditor: ["instance", "correlations", "securityPosture", "shield", "shieldTests", "trafficMonitor", "accessControl", "accessLists", "agents", "workspace", "toolsAccess", "modelsCost", "infrastructure", "alertsIncidents", "configuration"],
+};
+
+function FavoriteStarButton({
+  label,
+  favorite,
+  onToggle,
+  placement = "right",
+  size = 24,
+}: {
+  label: string;
+  favorite: boolean;
+  onToggle: () => void;
+  placement?: "top" | "right" | "bottom" | "left";
+  size?: number;
+}) {
+  const actionLabel = favorite
+    ? `Remove ${label} from Favorites`
+    : `Add ${label} to Favorites`;
+
+  return (
+    <Tooltip placement={placement} variant="compact" content={actionLabel}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={actionLabel}
+        aria-pressed={favorite}
+        style={{
+          width: size,
+          height: size,
+          minWidth: size,
+          display: "grid",
+          placeItems: "center",
+          padding: 0,
+          border: "1px solid transparent",
+          borderRadius: 4,
+          background: favorite ? `${C.warn}14` : "transparent",
+          color: favorite ? C.warn : C.txG,
+          cursor: "pointer",
+          fontSize: size >= 28 ? 18 : 15,
+          lineHeight: 1,
+        }}
+      >
+        <span aria-hidden="true">{favorite ? "\u2605" : "\u2606"}</span>
+      </button>
+    </Tooltip>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Global Tooltip Toggle Button — lives in the dashboard header, next to the
 // help (?) and Tour buttons. Always visible. Click to flip tooltips on/off
@@ -331,6 +386,7 @@ function SentinelDashboardInner() {
 
   // RBAC operator identity
   const [operator, setOperator] = useState<{ username: string; role: string; displayName?: string } | null>(null);
+  const [navigationStorageScope, setNavigationStorageScope] = useState<string | null>(null);
 
   // Apply saved theme + high contrast after mount (client-only) to avoid hydration mismatch
   useEffect(() => {
@@ -373,13 +429,19 @@ function SentinelDashboardInner() {
         const res = await fetch('/api/auth/me');
         if (res.ok) {
           const data = await res.json();
+          const storageIdentity = String(data.id || data.username || "local").trim();
+          setNavigationStorageScope(storageIdentity || "local");
           // /api/auth/me returns operator fields at top level when RBAC is enabled
           // When RBAC is disabled, id will be 'system' — skip display in that case
           if (data.username && data.id !== 'system') {
             setOperator({ username: data.username, role: data.role, displayName: data.displayName || undefined });
           }
+        } else {
+          setNavigationStorageScope("local");
         }
-      } catch {}
+      } catch {
+        setNavigationStorageScope("local");
+      }
       // Also fetch CSRF token for mutation requests
       try { await fetch('/api/auth/csrf'); } catch {}
     })();
@@ -660,6 +722,141 @@ function SentinelDashboardInner() {
     NAV.forEach(item => { if (!map.has(item.group)) map.set(item.group, []); map.get(item.group)!.push(item); });
     return map;
   }, []);
+  const visibleNavItems = useMemo(() => {
+    const hiddenForRole = operator ? (ROLE_HIDDEN_TABS[operator.role] || []) : [];
+    return NAV.filter(item => enabledModules[item.id] !== false && !hiddenForRole.includes(item.id));
+  }, [enabledModules, operator]);
+  const visibleTabIds = useMemo(() => new Set(visibleNavItems.map(item => item.id)), [visibleNavItems]);
+  const favoriteStorageKey = navigationStorageScope
+    ? `${FAVORITE_TABS_KEY_PREFIX}:${encodeURIComponent(navigationStorageScope)}`
+    : null;
+  const recentStorageKey = navigationStorageScope
+    ? `${RECENT_TABS_KEY_PREFIX}:${encodeURIComponent(navigationStorageScope)}`
+    : null;
+
+  const [favoriteTabs, setFavoriteTabs] = useState<TabId[]>([]);
+  const [favoritesReady, setFavoritesReady] = useState(false);
+  const [favoriteMessage, setFavoriteMessage] = useState("");
+
+  useEffect(() => {
+    if (!favoriteStorageKey) return;
+
+    setFavoritesReady(false);
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem(favoriteStorageKey) || "[]");
+      const stored = Array.isArray(parsed) ? parsed : [];
+      const uniqueTabs = stored
+        .filter((tab): tab is TabId => typeof tab === "string" && NAV.some(item => item.id === tab))
+        .filter((tab, index, tabs) => tabs.indexOf(tab) === index);
+      const next = uniqueTabs.slice(0, MAX_FAVORITE_TABS);
+      setFavoriteTabs(next);
+      setFavoriteMessage(
+        uniqueTabs.length > MAX_FAVORITE_TABS
+          ? `Only the first ${MAX_FAVORITE_TABS} saved favorites were loaded.`
+          : "",
+      );
+    } catch {
+      setFavoriteTabs([]);
+      setFavoriteMessage("Favorites could not be loaded in this browser.");
+    }
+    setFavoritesReady(true);
+  }, [favoriteStorageKey]);
+
+  const saveFavoriteTabs = useCallback((tabs: TabId[]) => {
+    if (!favoriteStorageKey) return false;
+    try {
+      localStorage.setItem(favoriteStorageKey, JSON.stringify(tabs));
+      return true;
+    } catch {
+      return false;
+    }
+  }, [favoriteStorageKey]);
+
+  const toggleFavorite = useCallback((tab: TabId) => {
+    if (!favoritesReady || !visibleTabIds.has(tab)) return;
+    const item = NAV.find(candidate => candidate.id === tab);
+    if (!item) return;
+
+    if (favoriteTabs.includes(tab)) {
+      const next = favoriteTabs.filter(candidate => candidate !== tab);
+      setFavoriteTabs(next);
+      setFavoriteMessage(saveFavoriteTabs(next) ? "" : "Favorites could not be saved in this browser.");
+      return;
+    }
+
+    if (favoriteTabs.length >= MAX_FAVORITE_TABS) {
+      setFavoriteMessage(`Favorites are full (${MAX_FAVORITE_TABS}/${MAX_FAVORITE_TABS}). Unpin one before adding ${item.label}.`);
+      return;
+    }
+
+    const next = [...favoriteTabs, tab];
+    setFavoriteTabs(next);
+    setFavoriteMessage(saveFavoriteTabs(next) ? "" : "Favorites could not be saved in this browser.");
+  }, [favoriteTabs, favoritesReady, saveFavoriteTabs, visibleTabIds]);
+
+  const visibleFavoriteItems = useMemo(
+    () => favoriteTabs
+      .map(tab => visibleNavItems.find(item => item.id === tab))
+      .filter((item): item is NavItem => Boolean(item)),
+    [favoriteTabs, visibleNavItems],
+  );
+  const hiddenFavoriteCount = favoritesReady ? favoriteTabs.length - visibleFavoriteItems.length : 0;
+  const unpinUnavailableFavorites = useCallback(() => {
+    const next = favoriteTabs.filter(tab => visibleTabIds.has(tab));
+    const removedCount = favoriteTabs.length - next.length;
+    setFavoriteTabs(next);
+    setFavoriteMessage(
+      saveFavoriteTabs(next)
+        ? `${removedCount} unavailable favorite${removedCount === 1 ? "" : "s"} unpinned.`
+        : "Favorites could not be saved in this browser.",
+    );
+  }, [favoriteTabs, saveFavoriteTabs, visibleTabIds]);
+
+  const [recentTabs, setRecentTabs] = useState<TabId[]>([]);
+  const [recentsReady, setRecentsReady] = useState(false);
+  const previousTabRef = useRef<TabId>(activeTab);
+
+  useEffect(() => {
+    if (!recentStorageKey) return;
+
+    setRecentsReady(false);
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem(recentStorageKey) || "[]");
+      const stored = Array.isArray(parsed) ? parsed : [];
+      const next = stored
+        .filter((tab): tab is TabId => typeof tab === "string" && NAV.some(item => item.id === tab))
+        .filter((tab, index, tabs) => tab !== activeTab && tabs.indexOf(tab) === index)
+        .slice(0, MAX_RECENT_TABS);
+      setRecentTabs(next);
+    } catch {
+      setRecentTabs([]);
+    }
+    setRecentsReady(true);
+  }, [recentStorageKey]);
+
+  useEffect(() => {
+    const previousTab = previousTabRef.current;
+    previousTabRef.current = activeTab;
+    if (!recentsReady || !recentStorageKey || previousTab === activeTab) return;
+
+    setRecentTabs(current => {
+      const next = [
+        previousTab,
+        ...current.filter(tab => tab !== previousTab && tab !== activeTab),
+      ].slice(0, MAX_RECENT_TABS);
+      try { localStorage.setItem(recentStorageKey, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, [activeTab, recentStorageKey, recentsReady]);
+
+  const visibleRecentItems = useMemo(
+    () => recentTabs
+      .filter(tab => tab !== activeTab)
+      .map(tab => visibleNavItems.find(item => item.id === tab))
+      .filter((item): item is NavItem => Boolean(item))
+      .slice(0, MAX_RECENT_TABS),
+    [activeTab, recentTabs, visibleNavItems],
+  );
 
   // --- Sidebar UI state (v0.8.1+) ---
   // Per-group collapse + sidebar minimize-to-rail. Both persist to localStorage
@@ -1260,14 +1457,106 @@ function SentinelDashboardInner() {
           transition: "width 0.18s ease, min-width 0.18s ease",
         }}>
           <div style={{ flex: 1, padding: "4px 0" }}>
+            {!sidebarMinimized && favoritesReady && (
+              <div style={{ padding: "4px 8px 8px", borderBottom: `1px solid ${C.glassBorderSubtle}` }}>
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "5px 2px 3px", color: C.txG, fontFamily: F.sans,
+                  fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+                }}>
+                  <span>Favorites</span>
+                  <span style={{ color: favoriteTabs.length >= MAX_FAVORITE_TABS ? C.warn : C.txT, fontFamily: F.mono, letterSpacing: 0 }}>
+                    {favoriteTabs.length}/{MAX_FAVORITE_TABS}
+                  </span>
+                </div>
+                {visibleFavoriteItems.length > 0 ? visibleFavoriteItems.map(item => {
+                  const isActive = activeTab === item.id;
+                  return (
+                    <div
+                      key={`favorite-${item.id}`}
+                      style={{
+                        display: "flex", alignItems: "center", minHeight: 30,
+                        borderRadius: 4, background: isActive ? `${C.brand}12` : "transparent",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab(item.id)}
+                        title={item.label}
+                        style={{
+                          minWidth: 0, flex: 1, display: "flex", alignItems: "center", gap: 6,
+                          padding: "5px 2px", background: "transparent", border: "none",
+                          color: isActive ? C.brand : C.txS, fontFamily: F.sans,
+                          fontSize: 11, fontWeight: isActive ? 600 : 400, cursor: "pointer", textAlign: "left",
+                        }}
+                      >
+                        <span style={{ width: 14, textAlign: "center", flexShrink: 0 }}>{item.icon}</span>
+                        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.label}</span>
+                      </button>
+                      <FavoriteStarButton
+                        label={item.label}
+                        favorite
+                        onToggle={() => toggleFavorite(item.id)}
+                        placement="right"
+                        size={24}
+                      />
+                    </div>
+                  );
+                }) : (
+                  <div style={{ padding: "4px 2px", color: C.txT, fontSize: 10, lineHeight: 1.4 }}>
+                    Select a star beside any panel to pin it here.
+                  </div>
+                )}
+                {hiddenFavoriteCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={unpinUnavailableFavorites}
+                    style={{
+                      width: "100%", marginTop: 3, padding: "4px 2px", background: "transparent",
+                      border: "none", color: C.warn, fontSize: 10, fontFamily: F.sans,
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                  >
+                    Remove {hiddenFavoriteCount} unavailable favorite{hiddenFavoriteCount === 1 ? "" : "s"}
+                  </button>
+                )}
+                {favoriteMessage && (
+                  <div role="status" style={{ padding: "4px 2px 0", color: C.warn, fontSize: 10, lineHeight: 1.4 }}>
+                    {favoriteMessage}
+                  </div>
+                )}
+
+                <div style={{
+                  padding: "9px 2px 3px", color: C.txG, fontFamily: F.sans,
+                  fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+                }}>
+                  Recent
+                </div>
+                {recentsReady && visibleRecentItems.length > 0 ? visibleRecentItems.map(item => (
+                  <button
+                    key={`recent-${item.id}`}
+                    type="button"
+                    onClick={() => setActiveTab(item.id)}
+                    title={item.label}
+                    style={{
+                      width: "100%", minWidth: 0, display: "flex", alignItems: "center", gap: 6,
+                      padding: "5px 2px", background: "transparent", border: "none",
+                      color: C.txS, fontFamily: F.sans, fontSize: 11,
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                  >
+                    <span style={{ width: 14, textAlign: "center", flexShrink: 0 }}>{item.icon}</span>
+                    <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.label}</span>
+                  </button>
+                )) : (
+                  <div style={{ padding: "4px 2px", color: C.txT, fontSize: 10, lineHeight: 1.4 }}>
+                    Previously visited panels appear here.
+                  </div>
+                )}
+              </div>
+            )}
             {Array.from(groups.entries()).map(([group, items]) => {
-              // Role-based tab visibility — hide tabs the operator can't access
-              const ROLE_HIDDEN_TABS: Record<string, string[]> = {
-                viewer: ["shield", "shieldTests", "trafficMonitor", "accessControl", "accessLists", "workspace", "auditEvidence", "executiveReports", "configuration"],
-                auditor: ["instance", "correlations", "securityPosture", "shield", "shieldTests", "trafficMonitor", "accessControl", "accessLists", "agents", "workspace", "toolsAccess", "modelsCost", "infrastructure", "alertsIncidents", "configuration"],
-              };
-              const hiddenForRole = operator ? (ROLE_HIDDEN_TABS[operator.role] || []) : [];
-              const visibleItems = items.filter(item => enabledModules[item.id] !== false && !hiddenForRole.includes(item.id));
+              const visibleItems = items.filter(item => visibleTabIds.has(item.id));
               if (visibleItems.length === 0) return null;
               const isCollapsed = collapsedGroups.has(group);
               // In rail mode, group headers shrink to a thin separator + a hover-tooltipped count.
@@ -1322,68 +1611,81 @@ function SentinelDashboardInner() {
                     ? `${item.label} — Setup is still in progress; tiles will populate once the wizard is dismissed.`
                     : undefined;
                   return (
-                    <button
-                      key={item.id}
-                      onClick={() => setActiveTab(item.id)}
-                      title={
-                        sidebarMinimized
-                          ? item.label + (badge > 0 ? ` (${badge})` : "") + (showSetupPending ? " · setup pending" : "")
-                          : setupTitle
-                      }
-                      style={{
-                        display: "flex", alignItems: "center", gap: sidebarMinimized ? 0 : 6,
-                        width: "100%", padding: sidebarMinimized ? "6px 0" : "5px 10px",
-                        justifyContent: sidebarMinimized ? "center" : "flex-start",
-                        background: isActive ? `${C.brand}12` : "transparent",
-                        border: "none", borderLeft: isActive ? `2px solid ${C.brand}` : "2px solid transparent",
-                        color: isActive ? C.brand : C.txS, fontSize: 11, fontFamily: F.sans, fontWeight: isActive ? 600 : 400,
-                        cursor: "pointer", textAlign: "left", transition: "all 0.15s ease", whiteSpace: "nowrap", position: "relative",
-                      }}
-                    >
-                      <span style={{ fontSize: sidebarMinimized ? 14 : 11, width: sidebarMinimized ? "100%" : 14, textAlign: "center", flexShrink: 0 }}>{item.icon}</span>
-                      {!sidebarMinimized && (
-                        <span style={{ flex: 1, display: "flex", alignItems: "center", overflow: "hidden", gap: 6 }}>
-                          {item.label}
-                          {showSetupPending && (
-                            <span
-                              aria-label="Setup pending"
-                              style={{
-                                display: "inline-block",
-                                width: 6,
-                                height: 6,
-                                borderRadius: 999,
-                                background: C.warn,
-                                boxShadow: `0 0 6px ${C.warn}88`,
-                                flexShrink: 0,
-                              }}
-                            />
-                          )}
-                          <CountBadge count={badge} color={C.orange} />
-                        </span>
+                    <div key={item.id} style={{ position: "relative" }}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab(item.id)}
+                        title={
+                          sidebarMinimized
+                            ? item.label + (badge > 0 ? ` (${badge})` : "") + (showSetupPending ? " · setup pending" : "")
+                            : setupTitle
+                        }
+                        style={{
+                          display: "flex", alignItems: "center", gap: sidebarMinimized ? 0 : 6,
+                          width: "100%", padding: sidebarMinimized ? "6px 0" : "5px 34px 5px 10px",
+                          justifyContent: sidebarMinimized ? "center" : "flex-start",
+                          background: isActive ? `${C.brand}12` : "transparent",
+                          border: "none", borderLeft: isActive ? `2px solid ${C.brand}` : "2px solid transparent",
+                          color: isActive ? C.brand : C.txS, fontSize: 11, fontFamily: F.sans, fontWeight: isActive ? 600 : 400,
+                          cursor: "pointer", textAlign: "left", transition: "all 0.15s ease", whiteSpace: "nowrap", position: "relative",
+                        }}
+                      >
+                        <span style={{ fontSize: sidebarMinimized ? 14 : 11, width: sidebarMinimized ? "100%" : 14, textAlign: "center", flexShrink: 0 }}>{item.icon}</span>
+                        {!sidebarMinimized && (
+                          <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", overflow: "hidden", gap: 6 }}>
+                            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{item.label}</span>
+                            {showSetupPending && (
+                              <span
+                                aria-label="Setup pending"
+                                style={{
+                                  display: "inline-block",
+                                  width: 6,
+                                  height: 6,
+                                  borderRadius: 999,
+                                  background: C.warn,
+                                  boxShadow: `0 0 6px ${C.warn}88`,
+                                  flexShrink: 0,
+                                }}
+                              />
+                            )}
+                            <CountBadge count={badge} color={C.orange} />
+                          </span>
+                        )}
+                        {sidebarMinimized && showSetupPending && badge === 0 && (
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              position: "absolute", top: 4, right: 6,
+                              width: 6, height: 6, borderRadius: 999,
+                              background: C.warn, boxShadow: `0 0 6px ${C.warn}88`,
+                            }}
+                          />
+                        )}
+                        {sidebarMinimized && badge > 0 && (
+                          <span
+                            style={{
+                              position: "absolute", top: 2, right: 4,
+                              background: C.orange,
+                              color: "#fff", fontSize: 8, fontWeight: 700, fontFamily: F.mono,
+                              borderRadius: 8, padding: "1px 4px", lineHeight: 1, minWidth: 12, textAlign: "center",
+                            }}
+                          >
+                            {badge > 99 ? "99+" : badge}
+                          </span>
+                        )}
+                      </button>
+                      {!sidebarMinimized && favoritesReady && (
+                        <div style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)" }}>
+                          <FavoriteStarButton
+                            label={item.label}
+                            favorite={favoriteTabs.includes(item.id)}
+                            onToggle={() => toggleFavorite(item.id)}
+                            placement="right"
+                            size={24}
+                          />
+                        </div>
                       )}
-                      {sidebarMinimized && showSetupPending && badge === 0 && (
-                        <span
-                          aria-hidden="true"
-                          style={{
-                            position: "absolute", top: 4, right: 6,
-                            width: 6, height: 6, borderRadius: 999,
-                            background: C.warn, boxShadow: `0 0 6px ${C.warn}88`,
-                          }}
-                        />
-                      )}
-                      {sidebarMinimized && badge > 0 && (
-                        <span
-                          style={{
-                            position: "absolute", top: 2, right: 4,
-                            background: C.orange,
-                            color: "#fff", fontSize: 8, fontWeight: 700, fontFamily: F.mono,
-                            borderRadius: 8, padding: "1px 4px", lineHeight: 1, minWidth: 12, textAlign: "center",
-                          }}
-                        >
-                          {badge > 99 ? "99+" : badge}
-                        </span>
-                      )}
-                    </button>
+                    </div>
                   );
                 })}
               </div>

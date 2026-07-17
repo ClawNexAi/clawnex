@@ -296,6 +296,19 @@ export function HelpPanel({ onNavigate }: { onNavigate: (tab: TabId) => void }) 
         </div>
       </CollapsibleCard>
 
+      <CollapsibleCard title="Sidebar Favorites & Recents" accent={C.warn} defaultOpen={false} count={2}>
+        <div style={{ fontSize: 13, color: C.txS, lineHeight: 1.65 }}>
+          <p style={{ margin: "0 0 8px" }}>
+            Select the <strong style={{ color: C.warn }}>star</strong> beside a sidebar panel to pin it under <strong style={{ color: C.tx }}>Favorites</strong>.
+            Each operator can keep up to five favorites in this browser. Select the filled star again to unpin it.
+          </p>
+          <p style={{ margin: 0 }}>
+            <strong style={{ color: C.tx }}>Recent</strong> keeps the last three panels you left, so you can move back through active work without changing your favorites.
+            Hidden or role-restricted panels are not shown in either list.
+          </p>
+        </div>
+      </CollapsibleCard>
+
       {/* Panel Reference — expandable rows per group */}
       <CollapsibleCard title="Panel Reference" accent={C.brand} count={PANEL_GUIDE.reduce((s, g) => s + g.panels.length, 0)} defaultOpen={false}>
         <p style={{ fontSize: 12, color: C.txT, marginBottom: 12, margin: "0 0 12px" }}>
