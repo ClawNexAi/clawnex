@@ -127,7 +127,7 @@ function FavoriteStarButton({
           background: favorite ? `${C.warn}14` : "transparent",
           color: favorite ? C.warn : C.txG,
           cursor: "pointer",
-          fontSize: size >= 28 ? 18 : 15,
+          fontSize: size >= 28 ? 17 : 13,
           lineHeight: 1,
         }}
       >
