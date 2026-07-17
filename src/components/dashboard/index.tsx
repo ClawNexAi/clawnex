@@ -64,8 +64,8 @@ import { DemoGuide } from "./panels/DemoGuide";
 const FONT_SIZE_MIN = -1;
 const FONT_SIZE_MAX = 3;
 const FONT_SIZE_DEFAULT = 1;
-const SIDEBAR_WIDTH_AT_DEFAULT_TEXT = 204;
-const SIDEBAR_WIDTH_PER_TEXT_STEP = 8;
+const SIDEBAR_WIDTH_AT_DEFAULT_TEXT = 184;
+const SIDEBAR_WIDTH_PER_TEXT_STEP = 6;
 const FONT_SIZE_CLASSES = [
   "clawnex-font-size-minus-1",
   "clawnex-font-size-0",
