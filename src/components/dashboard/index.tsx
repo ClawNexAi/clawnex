@@ -1462,7 +1462,7 @@ function SentinelDashboardInner() {
                 <div style={{
                   display: "flex", alignItems: "center", justifyContent: "space-between",
                   padding: "5px 2px 3px", color: C.txG, fontFamily: F.sans,
-                  fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+                  fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
                 }}>
                   <span>Favorites</span>
                   <span style={{ color: favoriteTabs.length >= MAX_FAVORITE_TABS ? C.warn : C.txT, fontFamily: F.mono, letterSpacing: 0 }}>
@@ -1487,7 +1487,7 @@ function SentinelDashboardInner() {
                           minWidth: 0, flex: 1, display: "flex", alignItems: "center", gap: 6,
                           padding: "5px 2px", background: "transparent", border: "none",
                           color: isActive ? C.brand : C.txS, fontFamily: F.sans,
-                          fontSize: 11, fontWeight: isActive ? 600 : 400, cursor: "pointer", textAlign: "left",
+                          fontSize: 12, fontWeight: isActive ? 600 : 400, cursor: "pointer", textAlign: "left",
                         }}
                       >
                         <span style={{ width: 14, textAlign: "center", flexShrink: 0 }}>{item.icon}</span>
@@ -1503,7 +1503,7 @@ function SentinelDashboardInner() {
                     </div>
                   );
                 }) : (
-                  <div style={{ padding: "4px 2px", color: C.txT, fontSize: 10, lineHeight: 1.4 }}>
+                  <div style={{ padding: "4px 2px", color: C.txT, fontSize: 11, lineHeight: 1.45 }}>
                     Select a star beside any panel to pin it here.
                   </div>
                 )}
@@ -1528,7 +1528,7 @@ function SentinelDashboardInner() {
 
                 <div style={{
                   padding: "9px 2px 3px", color: C.txG, fontFamily: F.sans,
-                  fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+                  fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
                 }}>
                   Recent
                 </div>
@@ -1541,7 +1541,7 @@ function SentinelDashboardInner() {
                     style={{
                       width: "100%", minWidth: 0, display: "flex", alignItems: "center", gap: 6,
                       padding: "5px 2px", background: "transparent", border: "none",
-                      color: C.txS, fontFamily: F.sans, fontSize: 11,
+                      color: C.txS, fontFamily: F.sans, fontSize: 12,
                       cursor: "pointer", textAlign: "left",
                     }}
                   >
@@ -1549,7 +1549,7 @@ function SentinelDashboardInner() {
                     <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.label}</span>
                   </button>
                 )) : (
-                  <div style={{ padding: "4px 2px", color: C.txT, fontSize: 10, lineHeight: 1.4 }}>
+                  <div style={{ padding: "4px 2px", color: C.txT, fontSize: 11, lineHeight: 1.45 }}>
                     Previously visited panels appear here.
                   </div>
                 )}
@@ -1576,7 +1576,7 @@ function SentinelDashboardInner() {
                     style={{
                       display: "flex", alignItems: "center", gap: 4, width: "100%",
                       padding: "8px 10px 2px", background: "transparent", border: "none",
-                      fontSize: 9, color: C.txG, textTransform: "uppercase", letterSpacing: "0.14em",
+                      fontSize: 10, color: C.txG, textTransform: "uppercase", letterSpacing: "0.12em",
                       fontWeight: 700, fontFamily: F.sans, cursor: "pointer", textAlign: "left",
                     }}
                   >
@@ -1589,7 +1589,7 @@ function SentinelDashboardInner() {
                     >▶</span>
                     <span>{group}</span>
                     {isCollapsed && (
-                      <span style={{ marginLeft: "auto", fontSize: 9, color: C.txT, fontFamily: F.mono, fontWeight: 500, letterSpacing: 0 }}>{visibleItems.length}</span>
+                      <span style={{ marginLeft: "auto", fontSize: 10, color: C.txT, fontFamily: F.mono, fontWeight: 500, letterSpacing: 0 }}>{visibleItems.length}</span>
                     )}
                   </button>
                 )}
@@ -1626,7 +1626,7 @@ function SentinelDashboardInner() {
                           justifyContent: sidebarMinimized ? "center" : "flex-start",
                           background: isActive ? `${C.brand}12` : "transparent",
                           border: "none", borderLeft: isActive ? `2px solid ${C.brand}` : "2px solid transparent",
-                          color: isActive ? C.brand : C.txS, fontSize: 11, fontFamily: F.sans, fontWeight: isActive ? 600 : 400,
+                          color: isActive ? C.brand : C.txS, fontSize: 12, fontFamily: F.sans, fontWeight: isActive ? 600 : 400,
                           cursor: "pointer", textAlign: "left", transition: "all 0.15s ease", whiteSpace: "nowrap", position: "relative",
                         }}
                       >

@@ -42,6 +42,10 @@ Section ordering per release: **Added, Changed, Deprecated, Removed, Fixed, Secu
 
 - The dashboard sidebar now supports up to five operator-scoped Favorites and three persistent Recent panels. Star controls remain beside the canonical navigation entries, unavailable panels are excluded, and the Help panel documents both workflows.
 
+### Changed
+
+- Dark and light theme muted-text tiers now maintain readable contrast on nested panel surfaces. Sidebar Favorites, Recent items, group headings, and navigation labels use larger type so the new hierarchy remains legible without enabling accessibility mode.
+
 ## [0.15.5-alpha] - 2026-07-02
 
 ### Added

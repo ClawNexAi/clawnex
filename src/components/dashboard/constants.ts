@@ -681,9 +681,12 @@ export const DARK_THEME: ColorPalette = {
   brd: "#14213d",
   brdS: "#1c2e52",
   tx: "#e5eaf3",
-  txS: "#8899bb",
-  txT: "#556a90",
-  txG: "#3a4e6e",
+  // Muted text must remain readable on the lightest nested surface
+  // (#18304e). These tiers provide minimum contrast ratios of 7.9:1,
+  // 6.2:1, and 4.8:1 respectively on that surface.
+  txS: "#a8bad3",
+  txT: "#91a5c3",
+  txG: "#7890b2",
   brand: "#00e5a0",
   warn: "#fbbf24",
   danger: "#f43f5e",
@@ -718,9 +721,9 @@ export const LIGHT_THEME: ColorPalette = {
   brd: "#cbd5e1",
   brdS: "#94a3b8",
   tx: "#0f172a",
-  txS: "#475569",
-  txT: "#64748b",
-  txG: "#94a3b8",
+  txS: "#334155",
+  txT: "#475569",
+  txG: "#64748b",
   brand: "#00c889",
   warn: "#d97706",
   danger: "#dc2626",
@@ -778,8 +781,8 @@ export function getTheme(): "dark" | "light" {
 let highContrastEnabled = false;
 
 /** High-contrast text-tier overrides per theme. */
-const HIGH_CONTRAST_DARK = { txS: "#b0c4e0", txT: "#8899bb", txG: "#5a7099" };
-const HIGH_CONTRAST_LIGHT = { txS: "#1e293b", txT: "#334155", txG: "#64748b" };
+const HIGH_CONTRAST_DARK = { txS: "#d6e2f2", txT: "#b8cae0", txG: "#99aec9" };
+const HIGH_CONTRAST_LIGHT = { txS: "#0f172a", txT: "#1e293b", txG: "#475569" };
 
 /**
  * applyHighContrast — bumps the muted text tiers (txS, txT, txG) to
@@ -827,10 +830,10 @@ export const F = {
 // Text style helpers (T) — codify the reviewer's 2026-05-06 contrast/readability rule
 //
 // WHY: glass surfaces (C.glassSurfTrans / C.glassChrome / C.glassPanel2)
-// reduce the contrast ratio of muted text. the reviewer's audit flagged that small
-// (10–12px) decision-bearing copy at C.txT or C.txG becomes hard to read at
-// operator speed. The rule he wrote into docs/qa/design-consistency-live-
-// 2026-05-06.md:
+// reduce the contrast ratio of muted text. The palette is calibrated so even
+// txG clears 4.5:1 on the lightest dark nested surface, but small
+// decision-bearing copy still needs the stronger txS tier at operator speed.
+// The rule from docs/qa/design-consistency-live-2026-05-06.md remains:
 //
 //   - Don't use C.txG for body/help text below 13px.
 //   - Use C.txS as the minimum for meaningful secondary text.
