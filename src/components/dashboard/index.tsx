@@ -28,6 +28,7 @@ import { BrandWordmark } from "./BrandWordmark";
 import { Tooltip, TooltipsProvider, useTooltipsEnabled } from "./tooltip";
 import { CLAWNEX_VERSION_SHORT, CLAWNEX_CHANNEL } from "@/lib/version";
 import { UpdateBadge } from "./UpdateBadge";
+import { GlobalFilterSelect, type GlobalFilterOption } from "./GlobalFilterSelect";
 
 // Panels
 import { FleetCommandPanel } from "./panels/FleetCommandPanel";
@@ -572,6 +573,43 @@ function SentinelDashboardInner() {
     gatewayInstances.forEach(g => { if (g.clientName) set.add(g.clientName); });
     return Array.from(set).sort();
   }, [demoMode, fleet, gatewayInstances]);
+
+  const instanceFilterOptions = useMemo<GlobalFilterOption[]>(() => {
+    const options = new Map<string, string>();
+    if (fleet) {
+      fleet.forEach((instance) => options.set(
+        instance.id,
+        `${instance.status === "healthy" ? "●" : "○"} ${instance.id} — ${instance.client}`,
+      ));
+    }
+    if (demoMode) {
+      INST.forEach((instance) => {
+        if (!options.has(instance.id)) {
+          options.set(
+            instance.id,
+            `${instance.status === "healthy" ? "●" : "○"} ${instance.id} — ${instance.client} (demo)`,
+          );
+        }
+      });
+    }
+    return [
+      { value: "all", label: "All Instances" },
+      ...Array.from(options, ([value, label]) => ({ value, label })),
+    ];
+  }, [demoMode, fleet]);
+
+  const clientFilterOptions = useMemo<GlobalFilterOption[]>(() => [
+    { value: "all", label: "All Clients" },
+    ...uniqueClients.map((client) => ({ value: client, label: client })),
+  ], [uniqueClients]);
+
+  const severityFilterOptions = useMemo<GlobalFilterOption[]>(() => [
+    { value: "all", label: "All Severity" },
+    { value: "CRITICAL", label: "CRITICAL" },
+    { value: "HIGH", label: "HIGH" },
+    { value: "MEDIUM", label: "MEDIUM" },
+    { value: "LOW", label: "LOW" },
+  ], []);
 
   // --- Data fetching ---
   const fetchHealth = useCallback(async () => {
@@ -1245,7 +1283,7 @@ function SentinelDashboardInner() {
       </div>
 
       {/* ===== CONTEXT BAR (38px) ===== */}
-      <div style={{ height: 38, minHeight: 38, display: "flex", alignItems: "center", gap: 8, padding: "0 16px", ...G.context }}>
+      <div style={{ height: 38, minHeight: 38, display: "flex", alignItems: "center", gap: 8, padding: "0 16px", position: "relative", zIndex: 100, overflow: "visible", ...G.context }}>
         <Tooltip as="div" placement="bottom" variant="detail" content={
           <span>
             <strong style={{ color: C.tx }}>Global time range.</strong> Controls the window for every panel in the dashboard — threats, alerts, cost, metrics, audit events, correlations. Selecting <strong>1h</strong> narrows everything to the last hour; <strong>30d</strong> widens it to the last month. Change it here and the whole dashboard refocuses.
@@ -1264,22 +1302,28 @@ function SentinelDashboardInner() {
           </div>
         </Tooltip>
         <div style={{ width: 1, height: 18, background: C.glassBorderSubtle }} />
-        <select value={selectedInstance} onChange={e => setSelectedInstance(e.target.value)} style={{ padding: "3px 8px", background: C.glassSurfTrans, border: `1px solid ${selectedInstance !== "all" ? `${C.cyan}88` : C.glassSurfBorder}`, borderRadius: 6, color: selectedInstance !== "all" ? C.cyan : C.txS, fontSize: 14, fontFamily: F.mono, outline: "none" }}>
-          <option value="all">All Instances</option>
-          {fleet && fleet.map(f => <option key={f.id} value={f.id}>{f.status === "healthy" ? "\u25CF" : "\u25CB"} {f.id} — {f.client}</option>)}
-          {demoMode && INST.map(f => <option key={f.id} value={f.id}>{f.status === "healthy" ? "\u25CF" : "\u25CB"} {f.id} — {f.client} (demo)</option>)}
-        </select>
-        <select value={selectedClient} onChange={e => setSelectedClient(e.target.value)} style={{ padding: "3px 8px", background: C.glassSurfTrans, border: `1px solid ${selectedClient !== "all" ? `${C.cyan}88` : C.glassSurfBorder}`, borderRadius: 6, color: selectedClient !== "all" ? C.cyan : C.txS, fontSize: 14, fontFamily: F.mono, outline: "none" }}>
-          <option value="all">All Clients</option>
-          {uniqueClients.map(cl => <option key={cl} value={cl}>{cl}</option>)}
-        </select>
-        <select value={selectedSeverity} onChange={e => setSelectedSeverity(e.target.value)} style={{ padding: "3px 8px", background: C.glassSurfTrans, border: `1px solid ${selectedSeverity !== "all" ? `${sevColor(selectedSeverity)}88` : C.glassSurfBorder}`, borderRadius: 6, color: selectedSeverity !== "all" ? sevColor(selectedSeverity) : C.txS, fontSize: 14, fontFamily: F.mono, outline: "none" }}>
-          <option value="all">All Severity</option>
-          <option value="CRITICAL">CRITICAL</option>
-          <option value="HIGH">HIGH</option>
-          <option value="MEDIUM">MEDIUM</option>
-          <option value="LOW">LOW</option>
-        </select>
+        <GlobalFilterSelect
+          ariaLabel="Filter dashboard by instance"
+          value={selectedInstance}
+          options={instanceFilterOptions}
+          onChange={setSelectedInstance}
+          minWidth={220}
+        />
+        <GlobalFilterSelect
+          ariaLabel="Filter dashboard by client"
+          value={selectedClient}
+          options={clientFilterOptions}
+          onChange={setSelectedClient}
+          minWidth={150}
+        />
+        <GlobalFilterSelect
+          ariaLabel="Filter dashboard by severity"
+          value={selectedSeverity}
+          options={severityFilterOptions}
+          onChange={setSelectedSeverity}
+          accent={selectedSeverity === "all" ? C.cyan : sevColor(selectedSeverity)}
+          minWidth={150}
+        />
       </div>
 
       {/* Developer Tools "active simulation runs" ribbon (v0.9.3+).
