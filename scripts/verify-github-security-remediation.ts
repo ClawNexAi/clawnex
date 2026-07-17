@@ -79,9 +79,10 @@ const sessionWatcher = read("src/lib/services/session-watcher.ts");
 check("Session watcher sanitizes logged file and scan errors", /sanitizeLogField\(err\.message\)/.test(sessionWatcher) && !/console\.error\('\[SessionWatcher\][^']*:', err\)/.test(sessionWatcher));
 
 const shieldScanRoute = read("src/app/api/shield/scan/route.ts");
-check("Shield scan route sanitizes workflow errors before logging",
-  /sanitizeLogField\(detail\)/.test(shieldScanRoute) &&
-  !/console\.error\("\[Shield Scan\] workflow write error:", workflowErr\)/.test(shieldScanRoute));
+check("Shield scan route does not write request-derived workflow errors to logs",
+  /console\.error\("\[Shield Scan\] workflow write error", \{ scanId \}\)/.test(shieldScanRoute) &&
+  !/workflowErr instanceof Error/.test(shieldScanRoute) &&
+  !/sanitizeLogField\(detail\)/.test(shieldScanRoute));
 
 const prototypeKey = "__proto__";
 const constructorKey = "constructor";
