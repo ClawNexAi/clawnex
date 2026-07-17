@@ -24,6 +24,10 @@ const { recordShieldEvidence } = await import('../src/lib/services/shield-eviden
 const { createReplayCase } = await import('../src/lib/services/shield-workflow');
 const { createAlert } = await import('../src/lib/services/alert-manager');
 const {
+  getActiveInvestigationExceptions,
+  invalidateInvestigationExceptionCache,
+} = await import('../src/lib/services/investigation-exceptions');
+const {
   getInvestigationCapturePolicy,
   revealForensicPayload,
   updateInvestigationCapturePolicy,
@@ -148,6 +152,17 @@ const afterActivation = shieldScan(payload, { includeRedacted: true });
 assert(!afterActivation.detections.some((detection) =>
   (detection.rule_key || detection.rule_snapshot?.stable_id || detection.id) === target.stable_rule_id),
   'activated exception suppresses only its target rule for matching context');
+run("UPDATE investigation_exception_drafts SET target_rule_key = '__proto__' WHERE id = ?", [draft.id]);
+invalidateInvestigationExceptionCache();
+const prototypeKeyExceptions = getActiveInvestigationExceptions('inbound');
+assert(
+  Object.prototype.hasOwnProperty.call(prototypeKeyExceptions, '__proto__') &&
+  prototypeKeyExceptions.__proto__[0] === 'GODMODE: ENABLED' &&
+  Object.getPrototypeOf(prototypeKeyExceptions) === Object.prototype,
+  'active exception cache treats prototype-like rule ids as inert data',
+);
+run('UPDATE investigation_exception_drafts SET target_rule_key = ? WHERE id = ?', [target.stable_rule_id, draft.id]);
+invalidateInvestigationExceptionCache();
 run("UPDATE alerts SET created_at = '2000-01-01T00:00:00.000Z' WHERE id = ?", [alert.id]);
 run("UPDATE investigation_cases SET created_at = '2000-01-01T00:00:00.000Z' WHERE id = ?", [decided.id]);
 run("UPDATE investigation_exception_drafts SET created_at = '2000-01-01T00:00:00.000Z' WHERE id = ?", [draft.id]);

@@ -380,7 +380,7 @@ export function replayInvestigationExceptionDraft(draftId: string, actor: string
   if (draft.status === 'activated' || draft.status === 'deactivated' || draft.status === 'discarded') throw new Error(`Draft is ${draft.status}`);
   const alert = queryOne<AlertRecord>('SELECT * FROM alerts WHERE id = ?', [draft.alert_id]);
   if (!alert) throw new Error('Alert not found');
-  const { audit, detail } = resolvePrimaryEvidence(alert);
+  const { detail } = resolvePrimaryEvidence(alert);
   const specimen = detail.payload_excerpt || '';
   if (!specimen) throw new Error('No stored redacted payload is available for replay');
   const direction = draft.direction === 'both'

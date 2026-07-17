@@ -16,6 +16,7 @@ import { recordShieldEvidence } from "@/lib/services/shield-evidence";
 import { ingestEvent } from "@/lib/services/correlation-engine";
 import { createReplayCase, createReviewQueueItem } from "@/lib/services/shield-workflow";
 import { getActiveInspectionProfile } from "@/lib/services/shield-profiles";
+import { sanitizeLogField } from "@/lib/security/log-sanitize";
 import { createHash } from "node:crypto";
 import {
   type Origin,
@@ -131,7 +132,8 @@ export async function POST(request: NextRequest) {
         profileId: activeProfile.id,
       });
     } catch (workflowErr) {
-      console.error("[Shield Scan] workflow write error:", workflowErr);
+      const detail = workflowErr instanceof Error ? workflowErr.message : workflowErr;
+      console.error(`[Shield Scan] workflow write error: ${sanitizeLogField(detail)}`);
     }
 
     // Distinguish actual blocks from observed threats before persisting the
