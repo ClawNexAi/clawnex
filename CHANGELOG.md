@@ -36,6 +36,20 @@ Section ordering per release: **Added, Changed, Deprecated, Removed, Fixed, Secu
 - `scripts/install.sh` (offered the deleted Docker path) and
   `deploy/deploy.sh` (legacy Ubuntu deployer) — superseded by `install.sh`.
 
+## [0.15.9-alpha] - 2026-07-18
+
+### Added
+
+- The Investigation Workbench now distinguishes exact evidence links from best-match fallback correlations and unresolved evidence, with plain-language provenance for each result.
+- Related Activity identifies the primary proxy traffic record separately from nearby same-session context and explains the relationship and time offset.
+- Traffic deep links open the exact selected record in Traffic Monitor, where operators can return to the complete traffic stream.
+- Legacy session-watcher alerts can recover the nearest same-session audit evidence without presenting fallback correlation as deterministic proof.
+
+### Changed
+
+- Proxy traffic timestamps are normalized as UTC before evidence-window comparisons, preventing timezone-dependent correlation errors.
+- Investigation exception drafts remain bound to their originating alert throughout replay and activation workflows.
+
 ## [0.15.8-alpha] - 2026-07-17
 
 ### Added
