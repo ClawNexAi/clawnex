@@ -12,6 +12,11 @@ import {
 } from '@/lib/services/investigation-capture';
 import { invalidateInvestigationExceptionCache } from '@/lib/services/investigation-exceptions';
 import type { ShieldDetection, ShieldScoringLedger } from '@/lib/types';
+import {
+  parseAlertEvidenceMetadata,
+  resolveAlertEvidence,
+  type AlertEvidenceMetadata,
+} from '@/lib/services/alert-evidence-resolver';
 
 export type InvestigationDisposition =
   | 'true_positive'
@@ -41,20 +46,6 @@ interface EvidenceDetail {
   shield_scan_id?: string | null;
   source_event_type?: string | null;
   profile_id?: string | null;
-}
-
-interface AlertMetadata {
-  audit_event_id?: string | null;
-  session_id?: string | null;
-  agent_id?: string | null;
-  proxy_traffic_id?: string | null;
-  shield_scan_id?: string | null;
-  prompt_hash?: string | null;
-  direction?: string | null;
-  model?: string | null;
-  provider?: string | null;
-  verdict?: string | null;
-  score?: number | null;
 }
 
 export interface InvestigationCaseRow {
@@ -97,13 +88,21 @@ function parseJson<T>(value: string | null | undefined, fallback: T): T {
   try { return JSON.parse(value) as T; } catch { return fallback; }
 }
 
-function resolvePrimaryEvidence(alert: AlertRecord): { audit: AuditRecord | null; detail: EvidenceDetail; meta: AlertMetadata } {
-  const meta = parseJson<AlertMetadata>(alert.metadata, {});
-  const auditId = meta.audit_event_id;
-  const audit = auditId
-    ? queryOne<AuditRecord>('SELECT * FROM audit_log WHERE id = ?', [auditId]) || null
-    : null;
-  return { audit, detail: parseJson<EvidenceDetail>(audit?.detail, {}), meta };
+function resolvePrimaryEvidence(alert: AlertRecord): {
+  audit: AuditRecord | null;
+  detail: EvidenceDetail;
+  meta: AlertEvidenceMetadata;
+  correlationMethod: 'forward' | 'fallback_nearest' | 'unresolved';
+  correlationReason: string;
+} {
+  const resolved = resolveAlertEvidence(alert);
+  return {
+    audit: resolved.audit,
+    detail: parseJson<EvidenceDetail>(resolved.audit?.detail, {}),
+    meta: resolved.metadata,
+    correlationMethod: resolved.correlationMethod,
+    correlationReason: resolved.correlationReason,
+  };
 }
 
 function evidenceHash(alert: AlertRecord, audit: AuditRecord | null, detail: EvidenceDetail): string {
@@ -151,7 +150,7 @@ function listPayloadEvidence(
   const policy = getInvestigationCapturePolicy();
   const rows: AuditRecord[] = [];
   if (primaryAudit) rows.push(primaryAudit);
-  const sessionId = primaryDetail.session_id || parseJson<AlertMetadata>(alert.metadata, {}).session_id;
+  const sessionId = primaryDetail.session_id || parseAlertEvidenceMetadata(alert.metadata).session_id;
   if (sessionId) {
     const center = Date.parse(primaryAudit?.created_at || alert.created_at);
     const windowMs = policy.relatedWindowMinutes * 60_000;
@@ -185,9 +184,9 @@ function listPayloadEvidence(
   });
 }
 
-function relatedActivity(alert: AlertRecord, detail: EvidenceDetail): Array<Record<string, unknown>> {
+function relatedActivity(alert: AlertRecord, detail: EvidenceDetail, primaryTrafficId: string | null): Array<Record<string, unknown>> {
   const policy = getInvestigationCapturePolicy();
-  const sessionId = detail.session_id || parseJson<AlertMetadata>(alert.metadata, {}).session_id;
+  const sessionId = detail.session_id || parseAlertEvidenceMetadata(alert.metadata).session_id;
   if (!sessionId) return [];
   const center = Date.parse(alert.created_at);
   const windowMs = policy.relatedWindowMinutes * 60_000;
@@ -199,7 +198,21 @@ function relatedActivity(alert: AlertRecord, detail: EvidenceDetail): Array<Reco
      WHERE session_id = ? AND julianday(timestamp) BETWEEN julianday(?) AND julianday(?)
      ORDER BY timestamp ASC LIMIT 100`,
     [sessionId, new Date(center - windowMs).toISOString(), new Date(center + windowMs).toISOString()],
-  );
+  ).map((row) => {
+    const rawTimestamp = String(row.timestamp || '');
+    const hasTimezone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(rawTimestamp);
+    const rowTime = Date.parse(hasTimezone ? rawTimestamp : `${rawTimestamp}Z`);
+    const isPrimary = row.id === primaryTrafficId;
+    return {
+      ...row,
+      relationship_method: isPrimary ? 'exact_traffic_id' : 'same_session_window',
+      relationship_reason: isPrimary
+        ? 'Exact proxy traffic record stored with the alert.'
+        : 'Same session within the configured investigation window; supporting context, not proof of causation.',
+      relationship_confidence: isPrimary ? 'exact' : 'supporting',
+      offset_seconds: Number.isFinite(rowTime) ? Math.round((rowTime - center) / 1000) : null,
+    };
+  });
 }
 
 function normalizeDraft(row: DraftRow): Record<string, unknown> {
@@ -209,7 +222,7 @@ function normalizeDraft(row: DraftRow): Record<string, unknown> {
 export function getInvestigationWorkbench(alertId: string): Record<string, unknown> | null {
   const alert = queryOne<AlertRecord>('SELECT * FROM alerts WHERE id = ?', [alertId]);
   if (!alert) return null;
-  const { audit, detail, meta } = resolvePrimaryEvidence(alert);
+  const { audit, detail, meta, correlationMethod, correlationReason } = resolvePrimaryEvidence(alert);
   const currentCase = queryOne<InvestigationCaseRow>('SELECT * FROM investigation_cases WHERE alert_id = ?', [alert.id]) || null;
   const drafts = queryAll<DraftRow>(
     'SELECT * FROM investigation_exception_drafts WHERE alert_id = ? ORDER BY created_at DESC',
@@ -251,11 +264,18 @@ export function getInvestigationWorkbench(alertId: string): Record<string, unkno
     payloads,
     detections,
     scoring: detail.scoring_ledger ?? null,
-    related_activity: relatedActivity(alert, detail),
+    related_activity: relatedActivity(alert, detail, detail.proxy_traffic_id ?? meta.proxy_traffic_id ?? null),
     case: currentCase ? { ...currentCase, events: caseEvents(currentCase.id) } : null,
     drafts,
     capture_policy: capturePolicy,
     evidence_hash: evidenceHash(alert, audit, detail),
+    provenance: {
+      correlation_method: correlationMethod,
+      correlation_reason: correlationReason,
+      audit_event_id: audit?.id ?? null,
+      audit_created_at: audit?.created_at ?? null,
+      deterministic: correlationMethod === 'forward' && Boolean(audit),
+    },
   };
 }
 
@@ -374,9 +394,10 @@ export function createInvestigationExceptionDraft(input: {
   return normalizeDraft(queryOne<DraftRow>('SELECT * FROM investigation_exception_drafts WHERE id = ?', [id])!);
 }
 
-export function replayInvestigationExceptionDraft(draftId: string, actor: string): Record<string, unknown> {
+export function replayInvestigationExceptionDraft(draftId: string, actor: string, alertId: string): Record<string, unknown> {
   const draft = queryOne<DraftRow>('SELECT * FROM investigation_exception_drafts WHERE id = ?', [draftId]);
   if (!draft) throw new Error('Draft not found');
+  if (draft.alert_id !== alertId) throw new Error('Draft does not belong to this alert');
   if (draft.status === 'activated' || draft.status === 'deactivated' || draft.status === 'discarded') throw new Error(`Draft is ${draft.status}`);
   const alert = queryOne<AlertRecord>('SELECT * FROM alerts WHERE id = ?', [draft.alert_id]);
   if (!alert) throw new Error('Alert not found');
@@ -438,9 +459,10 @@ export function replayInvestigationExceptionDraft(draftId: string, actor: string
   return normalizeDraft(queryOne<DraftRow>('SELECT * FROM investigation_exception_drafts WHERE id = ?', [draft.id])!);
 }
 
-export function activateInvestigationExceptionDraft(draftId: string, actor: string): Record<string, unknown> {
+export function activateInvestigationExceptionDraft(draftId: string, actor: string, alertId: string): Record<string, unknown> {
   const draft = queryOne<DraftRow>('SELECT * FROM investigation_exception_drafts WHERE id = ?', [draftId]);
   if (!draft) throw new Error('Draft not found');
+  if (draft.alert_id !== alertId) throw new Error('Draft does not belong to this alert');
   if (draft.status !== 'ready' || !draft.replay_case_id) throw new Error('Draft must pass replay before activation');
   const now = new Date().toISOString();
   run(
@@ -458,9 +480,10 @@ export function activateInvestigationExceptionDraft(draftId: string, actor: stri
   return normalizeDraft(queryOne<DraftRow>('SELECT * FROM investigation_exception_drafts WHERE id = ?', [draft.id])!);
 }
 
-export function discardInvestigationExceptionDraft(draftId: string, actor: string): Record<string, unknown> {
+export function discardInvestigationExceptionDraft(draftId: string, actor: string, alertId: string): Record<string, unknown> {
   const draft = queryOne<DraftRow>('SELECT * FROM investigation_exception_drafts WHERE id = ?', [draftId]);
   if (!draft) throw new Error('Draft not found');
+  if (draft.alert_id !== alertId) throw new Error('Draft does not belong to this alert');
   if (draft.status === 'activated') throw new Error('Deactivate this exception before discarding it');
   const now = new Date().toISOString();
   run("UPDATE investigation_exception_drafts SET status = 'discarded' WHERE id = ?", [draft.id]);
@@ -473,9 +496,10 @@ export function discardInvestigationExceptionDraft(draftId: string, actor: strin
   return normalizeDraft(queryOne<DraftRow>('SELECT * FROM investigation_exception_drafts WHERE id = ?', [draft.id])!);
 }
 
-export function deactivateInvestigationExceptionDraft(draftId: string, actor: string): Record<string, unknown> {
+export function deactivateInvestigationExceptionDraft(draftId: string, actor: string, alertId: string): Record<string, unknown> {
   const draft = queryOne<DraftRow>('SELECT * FROM investigation_exception_drafts WHERE id = ?', [draftId]);
   if (!draft) throw new Error('Draft not found');
+  if (draft.alert_id !== alertId) throw new Error('Draft does not belong to this alert');
   if (draft.status !== 'activated') throw new Error('Only an activated exception can be deactivated');
   const now = new Date().toISOString();
   run("UPDATE investigation_exception_drafts SET status = 'deactivated' WHERE id = ?", [draft.id]);

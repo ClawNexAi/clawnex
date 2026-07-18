@@ -1,6 +1,7 @@
 /**
  * GET /api/proxy/traffic — Returns recent proxy traffic from proxy_traffic table.
- * Supports ?limit=N (default 100) and ?offset=N for pagination.
+ * Supports ?limit=N (default 100), ?offset=N, and exact ?id=<traffic-id>
+ * for investigation deep links.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -54,6 +55,7 @@ export async function GET(request: NextRequest) {
   const model = searchParams.get("model");
   const source = searchParams.get("source");
   const instance = searchParams.get("instance");
+  const id = searchParams.get("id");
 
   // Map instance to effective source filter for proxy_traffic rows
   const effectiveSource = source
@@ -66,7 +68,7 @@ export async function GET(request: NextRequest) {
   try {
     // When no source filter, use UNION to get a balanced mix from each source
     // This ensures litellm/proxy entries aren't buried by session-watcher volume
-    if (!effectiveSource && !verdict && !model && !excludeHermes) {
+    if (!id && !effectiveSource && !verdict && !model && !excludeHermes) {
       const balancedSql = `
         SELECT * FROM (SELECT * FROM proxy_traffic WHERE source = 'litellm' ORDER BY timestamp DESC LIMIT ?)
         UNION ALL
@@ -91,6 +93,11 @@ export async function GET(request: NextRequest) {
     let sql = "SELECT * FROM proxy_traffic";
     const params: unknown[] = [];
     const conditions: string[] = [];
+
+    if (id) {
+      conditions.push("id = ?");
+      params.push(id);
+    }
 
     if (verdict) {
       conditions.push("shield_verdict = ?");

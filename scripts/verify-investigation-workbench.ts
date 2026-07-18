@@ -72,6 +72,7 @@ const evidence = recordShieldEvidence({
   agentId: 'verify-agent',
   model: 'verify-model',
   provider: 'verify-provider',
+  proxyTrafficId: 'verify-traffic-1',
 });
 const alert = createAlert(
   'Verification block',
@@ -104,6 +105,56 @@ assert(workbench.scoring.verdict_basis.length > 0, 'verdict basis is available t
 assert(workbench.related_activity.length === 1, 'related proxy activity is correlated by session and capture window');
 assert(workbench.related_activity[0].upstream_url === 'https://models.example.test/v1/chat/completions', 'related activity includes the upstream destination');
 assert(workbench.related_activity[0].blocked === 1 && workbench.related_activity[0].status_code === 403, 'related activity includes the blocked outcome and response status');
+assert(workbench.provenance.correlation_method === 'forward' && workbench.provenance.deterministic === true, 'workbench identifies exact forward evidence provenance');
+assert(workbench.related_activity[0].relationship_method === 'exact_traffic_id', 'primary proxy traffic is identified by exact stored ID');
+assert(workbench.related_activity[0].relationship_confidence === 'exact', 'primary proxy traffic is labeled as exact evidence');
+assert(workbench.related_activity[0].offset_seconds === 0, 'exact proxy traffic timestamp is normalized as UTC');
+
+const supportingTrafficTime = new Date(Date.parse(alert.created_at) + 5_000).toISOString();
+run(
+  `INSERT INTO proxy_traffic
+    (id, timestamp, direction, model, provider, upstream_url, prompt_hash, messages_count,
+     shield_verdict, shield_score, blocked, block_reason, session_id, status_code, source)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  [
+    'verify-traffic-supporting', supportingTrafficTime, 'outbound', 'verify-model', 'verify-provider',
+    'https://models.example.test/v1/chat/completions', 'd'.repeat(64), 1,
+    'ALLOW', 0, 0, null,
+    '11111111-1111-4111-8111-111111111111', 200, 'proxy',
+  ],
+);
+const workbenchWithSupportingActivity = getInvestigationWorkbench(alert.id) as any;
+const supportingActivity = workbenchWithSupportingActivity.related_activity.find((row: any) => row.id === 'verify-traffic-supporting');
+assert(supportingActivity?.relationship_method === 'same_session_window', 'nearby session traffic is identified by its actual correlation method');
+assert(supportingActivity?.relationship_confidence === 'supporting', 'nearby session traffic is not presented as causal evidence');
+assert(supportingActivity?.relationship_reason.includes('not proof of causation'), 'supporting activity explains the relationship limitation');
+
+const legacySessionId = '22222222-2222-4222-8222-222222222222';
+const legacyEvidence = recordShieldEvidence({
+  actor: 'verify',
+  action: 'shield_detected',
+  auditSource: 'session-watcher',
+  resourceType: 'session',
+  resourceId: legacySessionId,
+  content: payload,
+  scanResult: scan,
+  direction: 'inbound',
+  promptHash: 'e'.repeat(64),
+  shieldScanId: 'verify-legacy-scan',
+  sessionId: legacySessionId,
+});
+const legacyAlert = createAlert(
+  'Legacy session watcher block',
+  `Session: ${legacySessionId}`,
+  'HIGH',
+  'session-watcher',
+  { session_id: legacySessionId },
+);
+run('UPDATE alerts SET created_at = ? WHERE id = ?', [new Date().toISOString(), legacyAlert.id]);
+const legacyWorkbench = getInvestigationWorkbench(legacyAlert.id) as any;
+assert(legacyWorkbench?.overview?.audit_event_id === legacyEvidence.auditEventId, 'legacy session-watcher alert resolves nearest same-session audit evidence');
+assert(legacyWorkbench?.provenance?.correlation_method === 'fallback_nearest', 'legacy evidence discloses best-match fallback provenance');
+assert(legacyWorkbench?.provenance?.deterministic === false, 'legacy fallback evidence is not represented as deterministic');
 
 const revealed = revealForensicPayload(evidence.auditEventId, 'security-manager', 'Validate whether this block is a false positive');
 assert(revealed?.content === payload, 'authorized forensic reveal decrypts the original payload');
@@ -144,9 +195,13 @@ const draft = createInvestigationExceptionDraft({
   actor: 'analyst-b',
 }) as any;
 assert(draft.status === 'draft', 'exception starts inert as a draft');
-const replayed = replayInvestigationExceptionDraft(draft.id, 'analyst-b') as any;
+let crossAlertMutationRejected = false;
+try { replayInvestigationExceptionDraft(draft.id, 'analyst-b', legacyAlert.id); }
+catch { crossAlertMutationRejected = true; }
+assert(crossAlertMutationRejected, 'draft actions reject an alert ID that does not own the draft');
+const replayed = replayInvestigationExceptionDraft(draft.id, 'analyst-b', alert.id) as any;
 assert(replayed.status === 'ready', 'draft becomes ready only when replay removes the target rule');
-const activated = activateInvestigationExceptionDraft(draft.id, 'security-manager') as any;
+const activated = activateInvestigationExceptionDraft(draft.id, 'security-manager', alert.id) as any;
 assert(activated.status === 'activated', 'replay-ready exception can be explicitly activated');
 const afterActivation = shieldScan(payload, { includeRedacted: true });
 assert(!afterActivation.detections.some((detection) =>
@@ -173,7 +228,7 @@ const restoredCreatedAt = new Date().toISOString();
 run('UPDATE alerts SET created_at = ? WHERE id = ?', [restoredCreatedAt, alert.id]);
 run('UPDATE investigation_cases SET created_at = ? WHERE id = ?', [restoredCreatedAt, decided.id]);
 run('UPDATE investigation_exception_drafts SET created_at = ? WHERE id = ?', [restoredCreatedAt, draft.id]);
-const deactivated = deactivateInvestigationExceptionDraft(draft.id, 'security-manager') as any;
+const deactivated = deactivateInvestigationExceptionDraft(draft.id, 'security-manager', alert.id) as any;
 assert(deactivated.status === 'deactivated', 'activated exception has an explicit deactivation path');
 const afterDeactivation = shieldScan(payload, { includeRedacted: true });
 assert(afterDeactivation.detections.some((detection) =>

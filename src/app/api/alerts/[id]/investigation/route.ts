@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getOperatorFromRequest, isRbacEnabled, requirePermission, requireSession } from '@/lib/rbac/guard';
 import { requireLocalhost } from '@/lib/middleware/localhost-guard';
+import { hasPermission } from '@/lib/rbac/permissions';
 import {
   getInvestigationWorkbench,
   recordInvestigationDecision,
@@ -22,7 +23,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (blocked) return blocked;
   const workbench = getInvestigationWorkbench((await params).id);
   if (!workbench) return NextResponse.json({ error: 'Alert not found' }, { status: 404 });
-  return NextResponse.json({ workbench }, { headers: { 'Cache-Control': 'no-store' } });
+  const operator = getOperatorFromRequest(request);
+  const rbacEnabled = isRbacEnabled();
+  const can = (permission: Parameters<typeof hasPermission>[1]) => !rbacEnabled || Boolean(operator && hasPermission(operator.role, permission));
+  return NextResponse.json({
+    workbench: {
+      ...workbench,
+      capabilities: {
+        manage_alerts: can('alerts:manage'),
+        manage_exceptions: can('policies:write'),
+        replay_exceptions: can('shield:scan'),
+        reveal_forensic: can('evidence:raw'),
+      },
+    },
+  }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

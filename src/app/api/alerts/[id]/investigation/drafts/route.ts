@@ -22,6 +22,7 @@ function guard(request: NextRequest, permission: 'alerts:manage' | 'shield:scan'
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const body = await request.json();
+    const alertId = (await params).id;
     const action = typeof body.action === 'string' ? body.action : 'create';
     const permission = action === 'activate' || action === 'deactivate' ? 'policies:write' : action === 'replay' ? 'shield:scan' : 'alerts:manage';
     const blocked = guard(request, permission);
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     let draft: Record<string, unknown>;
     if (action === 'create') {
       draft = createInvestigationExceptionDraft({
-        alertId: (await params).id,
+        alertId,
         targetRuleKey: typeof body.targetRuleKey === 'string' ? body.targetRuleKey : '',
         targetRuleName: typeof body.targetRuleName === 'string' ? body.targetRuleName : undefined,
         exceptionText: typeof body.exceptionText === 'string' ? body.exceptionText : '',
@@ -39,13 +40,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         actor,
       });
     } else if (action === 'replay') {
-      draft = replayInvestigationExceptionDraft(String(body.draftId || ''), actor);
+      draft = replayInvestigationExceptionDraft(String(body.draftId || ''), actor, alertId);
     } else if (action === 'activate') {
-      draft = activateInvestigationExceptionDraft(String(body.draftId || ''), actor);
+      draft = activateInvestigationExceptionDraft(String(body.draftId || ''), actor, alertId);
     } else if (action === 'deactivate') {
-      draft = deactivateInvestigationExceptionDraft(String(body.draftId || ''), actor);
+      draft = deactivateInvestigationExceptionDraft(String(body.draftId || ''), actor, alertId);
     } else if (action === 'discard') {
-      draft = discardInvestigationExceptionDraft(String(body.draftId || ''), actor);
+      draft = discardInvestigationExceptionDraft(String(body.draftId || ''), actor, alertId);
     } else {
       return NextResponse.json({ error: 'Unknown draft action' }, { status: 400 });
     }

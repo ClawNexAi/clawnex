@@ -56,12 +56,21 @@ interface ProxyStats {
   topThreats: Array<{ name: string; count: number; severity?: string; lastSeen?: string; sample?: string; actors?: Array<{ actor: string; count: number }> }>;
 }
 
+function formatTrafficTime(timestamp: string | null | undefined): string {
+  if (!timestamp) return "---";
+  const hasTimezone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(timestamp);
+  const parsed = new Date(hasTimezone ? timestamp : `${timestamp}Z`);
+  return Number.isNaN(parsed.getTime()) ? "---" : parsed.toLocaleTimeString();
+}
+
 export function TrafficMonitorPanel({ filters, onNavigate, demoMode, incomingFromMissionControl, onMissionControlBackConsumed }: { filters: DashboardFilters; onNavigate: (tab: TabId) => void; demoMode?: boolean; incomingFromMissionControl?: boolean; onMissionControlBackConsumed?: () => void }) {
   const [traffic, setTraffic] = useState<ProxyTrafficEntry[]>([]);
   const [stats, setStats] = useState<ProxyStats | null>(null);
   const [blockMode, setBlockMode] = useState("off");
   const [watcherStatus, setWatcherStatus] = useState<WatcherStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [urlState, updateUrl] = useHashState();
+  const trafficIdFilter = urlState.id ?? "";
   // v0.11.5+: pagination matches the global standard operator approved 2026-05-05.
   // Default 5 rows / page; size options [5, 10, 15, 25, 50]; footer hidden when
   // totalPages <= 1. Mirrors the AuditEvidencePanel + Cost By Session pattern.
@@ -104,10 +113,11 @@ export function TrafficMonitorPanel({ filters, onNavigate, demoMode, incomingFro
     }
     try {
       const instanceParam = filters.selectedInstance !== "all" ? `&instance=${encodeURIComponent(filters.selectedInstance)}` : "";
+      const trafficIdParam = trafficIdFilter ? `&id=${encodeURIComponent(trafficIdFilter)}` : "";
       const statsInstanceParam = filters.selectedInstance !== "all" ? `?instance=${encodeURIComponent(filters.selectedInstance)}` : "";
       const [blockRes, trafficRes, statsRes, watcherRes] = await Promise.allSettled([
         fetch("/api/proxy/block-mode"),
-        fetch(`/api/proxy/traffic?limit=50${instanceParam}`),
+        fetch(`/api/proxy/traffic?limit=50${instanceParam}${trafficIdParam}`),
         fetch(`/api/proxy/stats${statsInstanceParam}`),
         fetch("/api/watcher/status"),
       ]);
@@ -127,7 +137,7 @@ export function TrafficMonitorPanel({ filters, onNavigate, demoMode, incomingFro
       }
     } catch { /* silent */ }
     setLoading(false);
-  }, [filters.selectedInstance, demoMode]);
+  }, [filters.selectedInstance, demoMode, trafficIdFilter]);
 
   useEffect(() => {
     fetchAll();
@@ -146,7 +156,6 @@ export function TrafficMonitorPanel({ filters, onNavigate, demoMode, incomingFro
   // scoreMin (numeric range) doesn't fit the multi-select widget shape; kept
   // as a separate hand-rolled <select> beside PanelFilters for now. Future
   // enhancement: add a Range dimension to PanelFilters.
-  const [urlState, updateUrl] = useHashState();
   const sourceSel = urlState.source ?? [];
   const modelSel = urlState.scope ?? [];
   const providerSel = urlState.actor ?? [];
@@ -172,6 +181,7 @@ export function TrafficMonitorPanel({ filters, onNavigate, demoMode, incomingFro
   // Same semantics as Alerts/Audit/Risk Acceptances refactors.
   const filteredTraffic = useMemo(() => {
     return traffic.filter(t => {
+      if (trafficIdFilter && t.id !== trafficIdFilter) return false;
       const tSource = t.source || "litellm";
       if (sourceSel.length > 0 && !sourceSel.includes(tSource)) return false;
       if (modelSel.length > 0 && (!t.model || !modelSel.includes(t.model))) return false;
@@ -187,7 +197,7 @@ export function TrafficMonitorPanel({ filters, onNavigate, demoMode, incomingFro
       }
       return true;
     });
-  }, [traffic, sourceSel, modelSel, providerSel, verdictSel, scoreMinFilter, qFilter]);
+  }, [traffic, trafficIdFilter, sourceSel, modelSel, providerSel, verdictSel, scoreMinFilter, qFilter]);
 
   // v0.11.5+: pagination derivation. Reset to page 0 whenever filters change
   // or page size changes — otherwise a filter that drops the row count below
@@ -196,9 +206,9 @@ export function TrafficMonitorPanel({ filters, onNavigate, demoMode, incomingFro
   const pagedTraffic = filteredTraffic.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
   useEffect(() => {
     setCurrentPage(0);
-  }, [sourceSel, modelSel, providerSel, verdictSel, scoreMinFilter, qFilter, pageSize]);
+  }, [trafficIdFilter, sourceSel, modelSel, providerSel, verdictSel, scoreMinFilter, qFilter, pageSize]);
 
-  const hasActiveFilters = sourceSel.length > 0 || modelSel.length > 0 || providerSel.length > 0 || verdictSel.length > 0 || scoreMinFilter !== "0" || !!qFilter;
+  const hasActiveFilters = !!trafficIdFilter || sourceSel.length > 0 || modelSel.length > 0 || providerSel.length > 0 || verdictSel.length > 0 || scoreMinFilter !== "0" || !!qFilter;
 
   if (loading) return <div style={{ padding: 20, textAlign: "center", color: C.txT }}>Loading traffic monitor...</div>;
 
@@ -321,6 +331,16 @@ export function TrafficMonitorPanel({ filters, onNavigate, demoMode, incomingFro
       <CollapsibleCard title="LIVE TRAFFIC" accent={C.info} count={filteredTraffic.length} dimGlow actions={
         <span style={{ fontSize: 11, color: C.txT, fontFamily: F.mono }}>Auto-refresh 5s &middot; {filteredTraffic.length}/{traffic.length} entries</span>
       }>
+        {trafficIdFilter && (
+          <div role="status" style={{ marginBottom: 10, padding: "8px 10px", border: `1px solid ${C.cyan}66`, borderRadius: 6, background: `${C.cyan}0d`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ color: C.txS, fontSize: 12 }}>
+              Showing the traffic record selected from an investigation: <span style={{ color: C.cyan, fontFamily: F.mono }}>{trafficIdFilter}</span>
+            </span>
+            <button type="button" onClick={() => updateUrl({ id: undefined })} style={{ padding: "5px 9px", borderRadius: 4, border: `1px solid ${C.cyan}`, background: "transparent", color: C.cyan, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+              Show all traffic
+            </button>
+          </div>
+        )}
         {/* v0.8.3: 4 multi-select dimensions live in the shared PanelFilters
             widget; scoreMin (numeric range) stays a separate hand-rolled
             <select> beside it because the multi-select dropdown shape doesn't
@@ -413,7 +433,7 @@ export function TrafficMonitorPanel({ filters, onNavigate, demoMode, incomingFro
                     transition: "background 0.2s",
                   }}>
                     <td style={{ padding: "7px 6px", color: C.txS, whiteSpace: "nowrap" }}>
-                      {t.timestamp ? new Date(t.timestamp + "Z").toLocaleTimeString() : "---"}
+                      {formatTrafficTime(t.timestamp)}
                     </td>
                     <td style={{ padding: "7px 6px" }}>
                       <span style={{
