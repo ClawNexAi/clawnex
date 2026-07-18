@@ -108,6 +108,7 @@ assert(workbench.related_activity[0].blocked === 1 && workbench.related_activity
 assert(workbench.provenance.correlation_method === 'forward' && workbench.provenance.deterministic === true, 'workbench identifies exact forward evidence provenance');
 assert(workbench.related_activity[0].relationship_method === 'exact_traffic_id', 'primary proxy traffic is identified by exact stored ID');
 assert(workbench.related_activity[0].relationship_confidence === 'exact', 'primary proxy traffic is labeled as exact evidence');
+assert(workbench.related_activity[0].offset_seconds === 0, 'exact proxy traffic timestamp is normalized as UTC');
 
 const supportingTrafficTime = new Date(Date.parse(alert.created_at) + 5_000).toISOString();
 run(

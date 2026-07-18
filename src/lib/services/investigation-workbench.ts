@@ -199,7 +199,9 @@ function relatedActivity(alert: AlertRecord, detail: EvidenceDetail, primaryTraf
      ORDER BY timestamp ASC LIMIT 100`,
     [sessionId, new Date(center - windowMs).toISOString(), new Date(center + windowMs).toISOString()],
   ).map((row) => {
-    const rowTime = Date.parse(String(row.timestamp || ''));
+    const rawTimestamp = String(row.timestamp || '');
+    const hasTimezone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(rawTimestamp);
+    const rowTime = Date.parse(hasTimezone ? rawTimestamp : `${rawTimestamp}Z`);
     const isPrimary = row.id === primaryTrafficId;
     return {
       ...row,
