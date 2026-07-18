@@ -526,13 +526,13 @@ As of v0.14.5, all 9 source families have a per-source resolver: alert / cost-si
 
 **The Investigation Workbench.** Alert-backed investigations continue below the Triage Graph with five views:
 
-1. **Overview** — verdict, score, direction, model/provider, agent/session, evidence hash, and capture completeness.
+1. **Overview** — verdict, score, direction, model/provider, agent/session, evidence hash, capture completeness, and evidence provenance. An **Exact link** means the alert stored the audit event ID. A **Best match** is a disclosed legacy fallback and must be verified before relying on it.
 2. **Payload** — retained request and response context shown separately with line numbers, search, wrapping, redacted copy, and explicit truncation or missing-evidence notices.
 3. **Detection Analysis** — every triggered rule, its immutable decision-time snapshot, score contribution, threshold calculation, risk explanation, and verification guidance.
-4. **Related Activity** — same-session traffic immediately before and after the alert, including whether the Shield allowed, reviewed, or blocked it.
+4. **Related Activity** — same-session traffic immediately before and after the alert, including whether the Shield allowed, reviewed, or blocked it. Each record explains why it is related. An exact stored traffic ID is evidence; a nearby same-session record is supporting context, not proof of causation.
 5. **Decision** — record True Positive, False Positive, Expected Activity, Needs More Evidence, or Escalated with a required rationale. Changes remain in append-only case history.
 
-The Decision view can also create an inert exception draft. Replay must reproduce the original rule and prove the candidate exception removes that rule before activation becomes available. Activated exceptions can be deactivated immediately. Escalating an investigation creates a linked incident; exporting produces a management-readable Markdown summary without embedding raw payload content.
+The Decision view can also create an inert exception draft. Replay must reproduce the original rule and prove the candidate exception removes that rule before activation becomes available. Draft actions are bound to their originating alert. Activated exceptions can be deactivated immediately. Escalating an investigation creates a linked incident; exporting produces a management-readable Markdown summary without embedding raw payload content. Controls that require additional permissions are disabled with an explanation instead of failing only after submission.
 
 ClawNex cannot recover content that was never captured. Extended redacted evidence is the default. Metadata-only mode stores no payload text or match samples. Encrypted forensic mode is an explicit opt-in under **Configuration → Shield Settings → Investigation Evidence**; plaintext reveal is restricted, reason-gated, audited before decryption, session-only in the browser, and retained for no more than 72 hours.
 

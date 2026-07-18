@@ -10,11 +10,12 @@
  *
  *   1. Forward link (preferred):
  *      alert.metadata.audit_event_id → direct row lookup. This path is hit by
- *      current Shield producers persist audit_event_id in alert metadata before
+ *      Current Shield producers persist audit_event_id in alert metadata before
  *      alert creation through the shared shield-evidence writer.
  *
  *   2. Fallback correlation (legacy alerts only):
- *      Parse session_id from the alert description (regex `Session: <uuid>`)
+ *      Read session_id from alert metadata, or parse it from the legacy alert
+ *      description (regex `Session: <uuid>`),
  *      and find the closest audit_log row matching:
  *        - source = 'session-watcher'
  *        - action IN ('shield_detected', 'shield_review')
@@ -56,8 +57,8 @@ import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/gua
 import { requireLocalhost } from '@/lib/middleware/localhost-guard';
 import { queryOne } from '@/lib/db/index';
 import type { AlertRecord } from '@/lib/services/alert-manager';
-import type { AuditRecord } from '@/lib/services/audit-logger';
 import type { ShieldDetection } from '@/lib/types';
+import { resolveAlertEvidence } from '@/lib/services/alert-evidence-resolver';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -89,25 +90,6 @@ interface AuditDetailJson {
   score?: number;
 }
 
-interface AlertMetadataJson {
-  audit_event_id?: string | null;
-  source_event_id?: string | null;
-  source_event_type?: string | null;
-  shield_scan_id?: string | null;
-  proxy_traffic_id?: string | null;
-  session_id?: string | null;
-  direction?: string | null;
-  model?: string | null;
-  provider?: string | null;
-  agent_id?: string | null;
-  verdict?: string | null;
-  score?: number | null;
-  detection_count?: number | null;
-  primary_rule_key?: string | null;
-  primary_rule_name?: string | null;
-  [key: string]: unknown;
-}
-
 function safeParseJson<T>(s: string | null | undefined): T | null {
   if (!s) return null;
   try {
@@ -115,17 +97,6 @@ function safeParseJson<T>(s: string | null | undefined): T | null {
   } catch {
     return null;
   }
-}
-
-/**
- * Extract a session UUID from an alert description. Session watcher writes
- * "Session: <uuid>" as part of every alert description it produces, so the
- * fallback correlation path leans on that contract.
- */
-function extractSessionId(description: string | null): string | null {
-  if (!description) return null;
-  const m = description.match(/Session:\s*([0-9a-f-]{36})/i);
-  return m ? m[1] : null;
 }
 
 /**
@@ -203,42 +174,6 @@ function buildMatchedSnippets(
   return out;
 }
 
-function fetchAuditById(auditId: string): AuditRecord | undefined {
-  return queryOne<AuditRecord>('SELECT * FROM audit_log WHERE id = ?', [auditId]);
-}
-
-/**
- * Fallback correlation: nearest shield_detected/shield_review row for the
- * given session within ±60 seconds of the alert's created_at.
- */
-function fetchAuditByFallback(
-  sessionId: string,
-  alertCreatedAt: string,
-): AuditRecord | undefined {
-  const alertTs = Date.parse(alertCreatedAt);
-  if (!Number.isFinite(alertTs)) return undefined;
-
-  // Look up candidates within ±60s. SQLite stores ISO8601 strings — string
-  // comparison works for that format.
-  const lower = new Date(alertTs - 60_000).toISOString();
-  const upper = new Date(alertTs + 60_000).toISOString();
-
-  // queryAll — but we keep the import surface small by inlining via queryOne
-  // when only the nearest is needed. Order rows by absolute(timestamp - alert)
-  // to surface nearest first. SQLite julianday gives a portable diff.
-  return queryOne<AuditRecord>(
-    `SELECT * FROM audit_log
-     WHERE source = 'session-watcher'
-       AND action IN ('shield_detected', 'shield_review')
-       AND resource_id = ?
-       AND created_at >= ?
-       AND created_at <= ?
-     ORDER BY ABS(julianday(created_at) - julianday(?)) ASC
-     LIMIT 1`,
-    [sessionId, lower, upper, alertCreatedAt],
-  );
-}
-
 // ---------------------------------------------------------------------------
 // GET handler
 // ---------------------------------------------------------------------------
@@ -267,52 +202,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const meta = safeParseJson<AlertMetadataJson>(alert.metadata);
-
-    let auditRow: AuditRecord | undefined;
-    let correlationMethod: 'forward' | 'fallback_nearest';
-
-    if (meta?.audit_event_id) {
-      // Forward link.
-      auditRow = fetchAuditById(meta.audit_event_id);
-      correlationMethod = 'forward';
-    } else {
-      // Fallback path for legacy alerts. Only meaningful for session-watcher
-      // alerts since that's the only correlator we know how to walk back from
-      // (other sources can be added as their evidence shape stabilizes).
-      if (alert.source !== 'session-watcher') {
-        return NextResponse.json(
-          {
-            error: 'No evidence backlink available',
-            reason: 'alert has no audit_event_id and source is not session-watcher',
-            alert_id: id,
-            alert_source: alert.source,
-          },
-          { status: 404 },
-        );
-      }
-      const sessionId = extractSessionId(alert.description);
-      if (!sessionId) {
-        return NextResponse.json(
-          {
-            error: 'No evidence backlink available',
-            reason: 'could not parse session id from alert description for fallback correlation',
-            alert_id: id,
-          },
-          { status: 404 },
-        );
-      }
-      auditRow = fetchAuditByFallback(sessionId, alert.created_at);
-      correlationMethod = 'fallback_nearest';
-    }
+    const resolved = resolveAlertEvidence(alert);
+    const meta = resolved.metadata;
+    const auditRow = resolved.audit;
+    const correlationMethod = resolved.correlationMethod;
 
     if (!auditRow) {
       return NextResponse.json(
         {
           error: 'No evidence backlink available',
-          reason: correlationMethod === 'forward'
-            ? 'audit_event_id in alert metadata did not resolve to an audit_log row'
-            : 'no shield_detected/shield_review audit row found within ±60s of this alert',
+          reason: resolved.correlationReason,
           alert_id: id,
           correlation_method: correlationMethod,
         },
@@ -343,7 +242,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // beyond the local SQLite audit_log. "Fetchable from cold storage" therefore
     // reduces to: "was the record found via a stable, deterministic key lookup?"
     // That is exactly `correlation_method !== 'fallback_nearest'`.
-    const outsideWindowFetchable: boolean = correlationMethod !== 'fallback_nearest';
+    const outsideWindowFetchable: boolean = correlationMethod === 'forward';
 
     const proxyTrafficId = detailJson.proxy_traffic_id
       ?? meta?.proxy_traffic_id

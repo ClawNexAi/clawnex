@@ -159,6 +159,25 @@ interface RelatedActivityRow {
   block_reason?: string | null;
   status_code?: number | null;
   source?: string | null;
+  relationship_method?: string | null;
+  relationship_reason?: string | null;
+  relationship_confidence?: "exact" | "supporting" | null;
+  offset_seconds?: number | null;
+}
+
+interface WorkbenchProvenance {
+  correlation_method?: "forward" | "fallback_nearest" | "unresolved";
+  correlation_reason?: string | null;
+  audit_event_id?: string | null;
+  audit_created_at?: string | null;
+  deterministic?: boolean;
+}
+
+interface WorkbenchCapabilities {
+  manage_alerts?: boolean;
+  manage_exceptions?: boolean;
+  replay_exceptions?: boolean;
+  reveal_forensic?: boolean;
 }
 
 interface InvestigationCaseEvent {
@@ -234,6 +253,8 @@ interface InvestigationWorkbenchData {
   drafts?: InvestigationDraft[];
   capture_policy?: InvestigationCapturePolicy | null;
   evidence_hash?: string | null;
+  provenance?: WorkbenchProvenance | null;
+  capabilities?: WorkbenchCapabilities | null;
 }
 
 interface WorkbenchResponse {
@@ -565,7 +586,7 @@ function StateBanner({
 }) {
   const color = bannerColor(tone);
   return (
-    <div style={{
+    <div role={tone === "error" ? "alert" : "status"} aria-live={tone === "error" ? "assertive" : "polite"} style={{
       padding: "8px 10px",
       borderRadius: 8,
       border: `1px solid ${color}55`,
@@ -799,6 +820,10 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
   }, []);
 
   const handleRevealForensic = useCallback(async (payload: WorkbenchPayload) => {
+    if (!workbench?.capabilities?.reveal_forensic) {
+      setBanner({ tone: "error", text: "Your role cannot reveal encrypted forensic content." });
+      return;
+    }
     if (!forensicReason.trim()) {
       setBanner({ tone: "error", text: "Type a reason before revealing forensic content." });
       return;
@@ -830,9 +855,13 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
     } finally {
       setForensicBusyId(null);
     }
-  }, [alertId, forensicReason]);
+  }, [alertId, forensicReason, workbench?.capabilities?.reveal_forensic]);
 
   const handleSaveDecision = useCallback(async () => {
+    if (!workbench?.capabilities?.manage_alerts) {
+      setBanner({ tone: "error", text: "Your role can review this investigation but cannot record a disposition." });
+      return;
+    }
     if (!decision.rationale.trim()) {
       setBanner({ tone: "error", text: "A decision rationale is required before saving." });
       setActiveView("decision");
@@ -861,9 +890,13 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
     } finally {
       setSavingDecision(false);
     }
-  }, [alertId, decision, loadWorkbench]);
+  }, [alertId, decision, loadWorkbench, workbench?.capabilities?.manage_alerts]);
 
   const handleCreateDraft = useCallback(async () => {
+    if (!workbench?.capabilities?.manage_alerts) {
+      setBanner({ tone: "error", text: "Your role cannot create exception drafts." });
+      return;
+    }
     if (!selectedDetection) {
       setBanner({ tone: "error", text: "Choose a triggered detection before drafting an exception." });
       return;
@@ -903,9 +936,18 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
     } finally {
       setDraftBusyId(null);
     }
-  }, [alertId, draftForm, loadWorkbench, selectedDetection]);
+  }, [alertId, draftForm, loadWorkbench, selectedDetection, workbench?.capabilities?.manage_alerts]);
 
   const handleDraftAction = useCallback(async (action: "replay" | "activate" | "deactivate" | "discard", draftId: string) => {
+    const allowed = action === "replay"
+      ? workbench?.capabilities?.replay_exceptions
+      : action === "activate" || action === "deactivate"
+        ? workbench?.capabilities?.manage_exceptions
+        : workbench?.capabilities?.manage_alerts;
+    if (!allowed) {
+      setBanner({ tone: "error", text: "Your role cannot perform this exception action." });
+      return;
+    }
     setDraftBusyId(`${action}:${draftId}`);
     setBanner(null);
     try {
@@ -935,7 +977,7 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
     } finally {
       setDraftBusyId(null);
     }
-  }, [alertId, loadWorkbench]);
+  }, [alertId, loadWorkbench, workbench?.capabilities]);
 
   const handleExport = useCallback(() => {
     window.location.assign(`/api/alerts/${encodeURIComponent(alertId)}/investigation/export`);
@@ -975,10 +1017,12 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
   const loadedWorkbench = workbench;
   const overview = loadedWorkbench.overview ?? {};
   const scoring = loadedWorkbench.scoring ?? null;
+  const capabilities = loadedWorkbench.capabilities ?? {};
   const currentPayloadSearch = searchQuery.trim();
   const centerTimestamp = Date.parse(loadedWorkbench.alert.created_at || "");
 
   function renderOverviewView() {
+    const provenance = loadedWorkbench.provenance;
     return (
       <div style={{ display: "grid", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -1000,7 +1044,7 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
             {overview.proxy_traffic_id && (
               <button
                 type="button"
-                onClick={() => onNavigate("trafficMonitor", { focus: safeString(overview.proxy_traffic_id) })}
+                onClick={() => onNavigate("trafficMonitor", { id: safeString(overview.proxy_traffic_id) })}
                 style={shellButtonStyle()}
               >
                 Open Traffic
@@ -1063,6 +1107,25 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
             <DetailField label="Redacted limit" value={formatMaybeNumber(loadedWorkbench.capture_policy?.redactedLimit, " chars")} mono />
             <DetailField label="Related window" value={formatMaybeNumber(loadedWorkbench.capture_policy?.relatedWindowMinutes, " min")} mono />
             <DetailField label="Forensic retention" value={formatMaybeNumber(loadedWorkbench.capture_policy?.forensicRetentionHours, " hr")} mono />
+          </div>
+        </div>
+
+        <div style={{ ...surfaceStyle(), display: "grid", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 13, color: C.tx, fontWeight: 700 }}>Evidence provenance</div>
+            <Badge
+              label={provenance?.deterministic ? "EXACT LINK" : provenance?.correlation_method === "fallback_nearest" ? "BEST MATCH" : "UNRESOLVED"}
+              color={provenance?.deterministic ? C.green : provenance?.correlation_method === "fallback_nearest" ? C.warn : C.danger}
+            />
+          </div>
+          <div style={{ fontSize: 12, color: C.txS, lineHeight: 1.55 }}>
+            {provenance?.correlation_reason || "No evidence-correlation explanation was returned."}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+            <DetailField label="Correlation method" value={humanize(provenance?.correlation_method)} mono />
+            <DetailField label="Audit event" value={provenance?.audit_event_id || "Not resolved"} mono />
+            <DetailField label="Audit time" value={formatDateTime(provenance?.audit_created_at)} />
+            <DetailField label="Evidence hash" value={loadedWorkbench.evidence_hash || "Unavailable"} mono />
           </div>
         </div>
       </div>
@@ -1152,9 +1215,11 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
                     setForensicDraftTarget((current) => current === payload.audit_event_id ? null : payload.audit_event_id);
                     setForensicReason("");
                   }}
+                  disabled={!capabilities.reveal_forensic}
+                  title={!capabilities.reveal_forensic ? "Requires the evidence:raw permission" : undefined}
                   style={shellButtonStyle(forensicDraftTarget === payload.audit_event_id)}
                 >
-                  Reveal forensic copy
+                  {capabilities.reveal_forensic ? "Reveal forensic copy" : "Forensic reveal unavailable to your role"}
                 </button>
               )}
             </div>
@@ -1447,7 +1512,12 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {row.shield_verdict && <Badge label={row.shield_verdict} color={verdictColor(row.shield_verdict)} />}
                   {row.direction && <Badge label={row.direction} color={C.cyan} />}
+                  <Badge label={row.relationship_confidence === "exact" ? "EXACT LINK" : "SUPPORTING"} color={row.relationship_confidence === "exact" ? C.green : C.warn} />
                 </div>
+              </div>
+
+              <div style={{ fontSize: 12, color: C.txS, lineHeight: 1.5 }}>
+                {row.relationship_reason || "Related activity in the configured investigation window."}
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
@@ -1458,6 +1528,12 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
                 <DetailField label="Shield score" value={formatMaybeNumber(row.shield_score)} mono />
                 <DetailField label="Message count" value={formatMaybeNumber(row.messages_count)} mono />
                 <DetailField label="Outcome" value={outcome} />
+                <DetailField label="Time offset" value={typeof row.offset_seconds === "number" ? `${row.offset_seconds >= 0 ? "+" : ""}${row.offset_seconds}s` : "Unknown"} mono />
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button type="button" onClick={() => onNavigate("trafficMonitor", { id: row.id })} style={shellButtonStyle()}>
+                  Open traffic record
+                </button>
               </div>
             </div>
           );
@@ -1541,7 +1617,7 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
           </label>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="button" onClick={() => void handleSaveDecision()} disabled={savingDecision || !decision.rationale.trim()} style={primaryButtonStyle(savingDecision || !decision.rationale.trim())}>
+            <button type="button" onClick={() => void handleSaveDecision()} disabled={!capabilities.manage_alerts || savingDecision || !decision.rationale.trim()} style={primaryButtonStyle(!capabilities.manage_alerts || savingDecision || !decision.rationale.trim())} title={!capabilities.manage_alerts ? "Requires alerts:manage permission" : undefined}>
               {savingDecision ? "Saving..." : "Save disposition"}
             </button>
           </div>
@@ -1654,7 +1730,7 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
               </label>
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button type="button" onClick={() => void handleCreateDraft()} disabled={draftBusyId === "create"} style={primaryButtonStyle(draftBusyId === "create")}>
+                <button type="button" onClick={() => void handleCreateDraft()} disabled={!capabilities.manage_alerts || draftBusyId === "create"} style={primaryButtonStyle(!capabilities.manage_alerts || draftBusyId === "create")} title={!capabilities.manage_alerts ? "Requires alerts:manage permission" : undefined}>
                   {draftBusyId === "create" ? "Creating..." : "Create draft"}
                 </button>
               </div>
@@ -1694,22 +1770,22 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {replayable && (
-                        <button type="button" onClick={() => void handleDraftAction("replay", draft.id)} disabled={replayBusy} style={shellButtonStyle()}>
+                        <button type="button" onClick={() => void handleDraftAction("replay", draft.id)} disabled={!capabilities.replay_exceptions || replayBusy} style={shellButtonStyle()} title={!capabilities.replay_exceptions ? "Requires shield:scan permission" : undefined}>
                           {replayBusy ? "Replaying..." : "Replay"}
                         </button>
                       )}
                       {ready && (
-                        <button type="button" onClick={() => void handleDraftAction("activate", draft.id)} disabled={activateBusy} style={primaryButtonStyle(activateBusy)}>
+                        <button type="button" onClick={() => void handleDraftAction("activate", draft.id)} disabled={!capabilities.manage_exceptions || activateBusy} style={primaryButtonStyle(!capabilities.manage_exceptions || activateBusy)} title={!capabilities.manage_exceptions ? "Requires policies:write permission" : undefined}>
                           {activateBusy ? "Activating..." : "Activate"}
                         </button>
                       )}
                       {draft.status === "activated" && (
-                        <button type="button" onClick={() => void handleDraftAction("deactivate", draft.id)} disabled={deactivateBusy} style={shellButtonStyle()}>
+                        <button type="button" onClick={() => void handleDraftAction("deactivate", draft.id)} disabled={!capabilities.manage_exceptions || deactivateBusy} style={shellButtonStyle()} title={!capabilities.manage_exceptions ? "Requires policies:write permission" : undefined}>
                           {deactivateBusy ? "Deactivating..." : "Deactivate"}
                         </button>
                       )}
                       {draft.status !== "activated" && draft.status !== "discarded" && (
-                        <button type="button" onClick={() => void handleDraftAction("discard", draft.id)} disabled={discardBusy} style={shellButtonStyle()}>
+                        <button type="button" onClick={() => void handleDraftAction("discard", draft.id)} disabled={!capabilities.manage_alerts || discardBusy} style={shellButtonStyle()} title={!capabilities.manage_alerts ? "Requires alerts:manage permission" : undefined}>
                           {discardBusy ? "Discarding..." : "Discard"}
                         </button>
                       )}
@@ -1803,6 +1879,21 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
     }
   }
 
+  function handleViewKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? VIEW_OPTIONS.length - 1
+        : (index + (event.key === 'ArrowRight' ? 1 : -1) + VIEW_OPTIONS.length) % VIEW_OPTIONS.length;
+    setActiveView(VIEW_OPTIONS[nextIndex].id);
+    const tablist = event.currentTarget.parentElement;
+    window.requestAnimationFrame(() => {
+      (tablist?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[nextIndex])?.focus();
+    });
+  }
+
   return (
     <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
       <div style={{ ...surfaceStyle(), display: "grid", gap: 10 }}>
@@ -1826,12 +1917,18 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
           </StateBanner>
         )}
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {VIEW_OPTIONS.map((view) => (
+        <div role="tablist" aria-label="Investigation views" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {VIEW_OPTIONS.map((view, index) => (
             <button
               key={view.id}
               type="button"
+              role="tab"
+              id={`investigation-tab-${view.id}`}
+              aria-selected={activeView === view.id}
+              aria-controls={`investigation-panel-${view.id}`}
+              tabIndex={activeView === view.id ? 0 : -1}
               onClick={() => setActiveView(view.id)}
+              onKeyDown={(event) => handleViewKeyDown(event, index)}
               style={shellButtonStyle(activeView === view.id)}
             >
               {view.label}
@@ -1840,7 +1937,13 @@ export function InvestigationWorkbench({ alertId, onNavigate }: InvestigationWor
         </div>
       </div>
 
-      <div style={{ minHeight: 320 }}>
+      <div
+        role="tabpanel"
+        id={`investigation-panel-${activeView}`}
+        aria-labelledby={`investigation-tab-${activeView}`}
+        tabIndex={0}
+        style={{ minHeight: 320 }}
+      >
         {renderActiveView()}
       </div>
     </div>
