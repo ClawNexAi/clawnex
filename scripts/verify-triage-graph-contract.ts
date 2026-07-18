@@ -7,7 +7,6 @@ const requiredFiles = [
   "src/components/dashboard/triage/fixtures.ts",
   "src/components/dashboard/triage/TriageGraphCard.tsx",
   "src/components/dashboard/triage/TriageStageCard.tsx",
-  "src/components/dashboard/triage/TriageArtifactStrip.tsx",
   "src/components/dashboard/triage/TriageArtifactPreview.tsx",
 ];
 
@@ -83,11 +82,10 @@ assert(
 );
 console.log("T13-2 ok: ActionQueue.tsx contains button label \"Investigate ▸\"");
 
-// T13-3: TriageGraphCard must reference all four T7 child component names,
+// T13-3: TriageGraphCard must reference the three active child components,
 // proving the composition uses every required child.
 const triageChildren = [
   "TriageStageCard",
-  "TriageArtifactStrip",
   "TriageArtifactPreview",
   "TriageEmptyState",
 ];
@@ -97,7 +95,20 @@ for (const child of triageChildren) {
     `T13-3 FAIL: TriageGraphCard.tsx does not reference child component ${child}`,
   );
 }
-console.log("T13-3 ok: TriageGraphCard.tsx references all four T7 child components");
+console.log("T13-3 ok: TriageGraphCard.tsx references the active triage child components");
+
+// T13-3a: Stage cards are the sole artifact selector. The removed persistent
+// chip strip must not return because it duplicates the five evidence stages.
+assert(
+  !card.includes("TriageArtifactStrip") && !card.includes("APPLICABLE ARTIFACTS"),
+  "T13-3a FAIL: duplicate artifact-strip navigation returned",
+);
+const stageCard = read("src/components/dashboard/triage/TriageStageCard.tsx");
+assert(
+  stageCard.includes('<button') && stageCard.includes("aria-pressed") && stageCard.includes("disabled={!isInteractive}"),
+  "T13-3a FAIL: stage cards must remain semantic selectable buttons with disabled states",
+);
+console.log("T13-3a ok: stage cards are the sole accessible artifact selectors");
 
 // T13-4: No live UI file under src/components/dashboard/ may contain the draft
 // phrase "Same pattern across issue types" — this was authoring scaffolding that

@@ -3,9 +3,8 @@
 /**
  * TriageStageCard — presentational card for a single investigation workflow stage.
  *
- * Renders ONE of the five canonical stages (Evidence / Source Event / Affected
- * Object / Related Activity / Fix/Control). No fetching, no navigation — the
- * parent TriageGraphCard wires those up in Task 8.
+ * Renders one of the five canonical stages and acts as the sole selector for
+ * that stage's lead artifact. Unavailable stages remain visible but disabled.
  *
  * Design language: post-strip dashboard-flat glass (C.glassSurfTrans body,
  * C.glassSurfBorder border, 12px radius). Active state upgrades to
@@ -21,6 +20,8 @@ import type { TriageStage, TriageLinkState } from "./types";
 export interface TriageStageCardProps {
   stage: TriageStage;
   active?: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
   onClick?: () => void;
 }
 
@@ -62,7 +63,13 @@ function stateLabel(state: TriageLinkState): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export function TriageStageCard({ stage, active = false, onClick }: TriageStageCardProps) {
+export function TriageStageCard({
+  stage,
+  active = false,
+  disabled = false,
+  disabledReason,
+  onClick,
+}: TriageStageCardProps) {
   const accent = stateColor(stage.state);
 
   // Outer container border: cyan when active, normal surf border otherwise.
@@ -72,27 +79,27 @@ export function TriageStageCard({ stage, active = false, onClick }: TriageStageC
   // sibling stage cards without introducing heavy cockpit chrome.
   const boxShadow = active ? `0 0 16px ${C.cyan}33` : undefined;
 
-  const isInteractive = typeof onClick === "function";
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (!isInteractive) return;
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      onClick!();
-    }
-  }
+  const isInteractive = !disabled && typeof onClick === "function";
+  const accessibleLabel = isInteractive
+    ? `${stage.title}. ${stateLabel(stage.state)}. ${stage.summary}`
+    : `${stage.title}. ${stateLabel(stage.state)}. ${disabledReason ?? stage.summary}`;
 
   // State-badge pill: translucent accent bg + 55%-opacity accent border.
   const pillBg     = `${accent}22`;
   const pillBorder = `1px solid ${accent}55`;
 
   return (
-    <div
-      role={isInteractive ? "button" : undefined}
-      tabIndex={isInteractive ? 0 : undefined}
+    <button
+      type="button"
+      aria-label={accessibleLabel}
+      aria-pressed={isInteractive ? active : undefined}
+      disabled={!isInteractive}
+      title={!isInteractive ? disabledReason : undefined}
       onClick={isInteractive ? onClick : undefined}
-      onKeyDown={handleKeyDown}
       style={{
+        width: "100%",
+        appearance: "none",
+        textAlign: "left",
         background: C.glassSurfTrans,
         border: `1px solid ${borderColor}`,
         borderRadius: 12,
@@ -100,7 +107,8 @@ export function TriageStageCard({ stage, active = false, onClick }: TriageStageC
         // artifact strip + preview ride higher in the visible card area on
         // 720px viewports.
         padding: 10,
-        cursor: isInteractive ? "pointer" : undefined,
+        cursor: isInteractive ? "pointer" : "not-allowed",
+        opacity: isInteractive ? 1 : 0.78,
         boxShadow,
         display: "flex",
         flexDirection: "column",
@@ -172,6 +180,6 @@ export function TriageStageCard({ stage, active = false, onClick }: TriageStageC
       }}>
         {stage.summary}
       </div>
-    </div>
+    </button>
   );
 }
