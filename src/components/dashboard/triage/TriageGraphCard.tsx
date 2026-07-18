@@ -1,9 +1,8 @@
 "use client";
 
 /**
- * TriageGraphCard — top-level parent that stitches the five workflow stage cards,
- * artifact selection strip, and inline preview pane into a single glassmorphism
- * investigation card.
+ * TriageGraphCard — top-level parent that stitches the five selectable workflow
+ * stage cards and inline preview pane into a single investigation card.
  *
  * WHY this wraps <Card> from shared.tsx instead of hand-rolling chrome:
  * The shared Card component owns the G.card glass tokens (gradient, blur, cyan
@@ -26,7 +25,6 @@ import { C, F } from "../constants";
 import type { TabId } from "../types";
 import type { NavigateOpts } from "../url-state";
 import { TriageStageCard } from "./TriageStageCard";
-import { TriageArtifactStrip } from "./TriageArtifactStrip";
 import { TriageArtifactPreview } from "./TriageArtifactPreview";
 import { TriageEmptyState } from "./TriageEmptyState";
 import { InvestigationWorkbench } from "./InvestigationWorkbench";
@@ -387,36 +385,28 @@ export function TriageGraphCard({
           marginTop: 10,
           marginBottom: 10,
         }}>
-          {orderedStages.map((stage) => (
-            <TriageStageCard
-              key={stage.id}
-              stage={stage}
-              active={stage.id === activeStageId}
-              // operator-flagged 2026-05-07: stage cards looked clickable but did
-              // nothing. Wire them up: click a stage card → select the lead
-              // artifact for that stage (preferring resolved/derived over missing
-              // so the operator sees actionable content when available).
-              onClick={() => {
-                const candidates = graph.artifacts.filter((a) => a.stageId === stage.id);
-                const lead =
-                  candidates.find((a) => a.state === "resolved")
-                  ?? candidates.find((a) => a.state === "derived")
-                  ?? candidates.find((a) => a.state === "stale")
-                  ?? candidates[0];
-                if (lead) setSelectedId(lead.id);
-              }}
-            />
-          ))}
-        </div>
+          {orderedStages.map((stage) => {
+            const candidates = graph.artifacts.filter((artifact) => artifact.stageId === stage.id);
+            const lead =
+              candidates.find((artifact) => artifact.state === "resolved")
+              ?? candidates.find((artifact) => artifact.state === "derived")
+              ?? candidates.find((artifact) => artifact.state === "stale");
+            const disabledReason = lead
+              ? undefined
+              : stage.reason ?? candidates[0]?.reason ?? `${stage.title} is not available for this alert.`;
 
-        {/* ----------------------------------------------------------------
-            ARTIFACT STRIP — horizontal chip row for artifact selection
-           ---------------------------------------------------------------- */}
-        <TriageArtifactStrip
-          artifacts={graph.artifacts}
-          activeArtifactId={selectedId}
-          onSelectArtifact={setSelectedId}
-        />
+            return (
+              <TriageStageCard
+                key={stage.id}
+                stage={stage}
+                active={stage.id === activeStageId}
+                disabled={!lead}
+                disabledReason={disabledReason}
+                onClick={lead ? () => setSelectedId(lead.id) : undefined}
+              />
+            );
+          })}
+        </div>
 
         {/* ----------------------------------------------------------------
             ARTIFACT PREVIEW or EMPTY STATE
