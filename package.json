@@ -35,6 +35,7 @@
     "start:prod": "node .next/standalone/server.js",
     "lint": "tsc --noEmit --pretty false --incremental false",
     "verify:investigation-workbench": "tsx scripts/verify-investigation-workbench.ts",
+    "verify:operational-data": "tsx scripts/verify-operational-data-accuracy.ts && CLAWNEX_TEST_SKIP_DB_SEED=1 DATABASE_PATH=:memory: tsx scripts/verify-cost-orchestrator.ts",
     "verify:security-remediation": "tsx scripts/verify-github-security-remediation.ts",
     "sbom": "npm sbom --sbom-format=cyclonedx --omit=dev > sbom.json"
   },

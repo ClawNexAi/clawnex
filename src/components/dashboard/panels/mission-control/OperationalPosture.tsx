@@ -233,9 +233,7 @@ export function OperationalPosture({ demoMode, range, onNavigate }: Props) {
               activeSignalCount: cost.data.signals.length,
               unknownOrTokenOnlyCount: 0, // TODO(v1.1)
               totalCostRows: 100, // TODO(v1.1)
-              // CostRiskData.perSource has no `status` field (confirmed data-hooks.ts).
-              // Treat as non-stale until API exposes per-source staleness.
-              anyStaleSource: false, // TODO(v1.1): wire when /api/tokens exposes status
+              anyStaleSource: cost.data.unavailableSources.length > 0,
             })
           : 0,
         weekAvg: 58, // TODO(v1.1)

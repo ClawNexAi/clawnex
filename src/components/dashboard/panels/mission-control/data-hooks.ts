@@ -321,10 +321,12 @@ export function useShieldActivity(range: TimeRange): PolledResult<ShieldActivity
 // ---------------------------------------------------------------------------
 
 export interface CostRiskData {
-  headlineUsd: number;
+  headlineUsd: number | null;
   headlineSource: string;
   perSource: Array<{ source: string; usd: number; count: number }>;
   signals: Array<{ kind: string; severity: string; detail: string }>;
+  sourceStatus: Record<string, "ok" | "unavailable">;
+  unavailableSources: string[];
 }
 
 export function useCostRisk(range: TimeRange): PolledResult<CostRiskData> {
@@ -365,10 +367,14 @@ export function useCostRisk(range: TimeRange): PolledResult<CostRiskData> {
         detail: s.detail ?? "",
       }));
       return {
-        headlineUsd: headline?.total ?? 0,     // plan used headline.usd — actual field is headline.total
+        headlineUsd: headline?.total ?? null,
         headlineSource: headline?.source ?? "unknown",
         perSource,
         signals,
+        sourceStatus: body?.sourceStatus ?? {},
+        unavailableSources: Object.entries(body?.sourceStatus ?? {})
+          .filter(([, state]) => state === "unavailable")
+          .map(([source]) => source),
       };
     },
   });
@@ -384,8 +390,9 @@ export interface CollectorHealthData {
   collectors: Array<{
     name: string;
     status: string;
-    lastSeenMsAgo: number;
+    lastSeenMsAgo: number | null;
     staleThresholdMs: number;
+    activityState: "measured" | "stale" | "unavailable" | "not_applicable";
     // Item #4: version + ingestion_summary from /api/infrastructure ServiceCheck.
     // Optional: absent for services with no version / ingestion concept.
     version?: string;
@@ -412,14 +419,16 @@ export function useCollectorHealth(): PolledResult<CollectorHealthData> {
         last_seen_ms_ago?: number;
         version?: string;
         ingestion_summary?: string;
+        activity_state?: "measured" | "stale" | "unavailable" | "not_applicable";
       }> = (body?.services ?? []).filter((s: { name?: string }) =>
         collectorBelongsToScope(String(s.name ?? ""), selectedInstance),
       );
       const collectors = services.map((s) => ({
         name: s.name,
         status: s.status,
-        lastSeenMsAgo: s.last_seen_ms_ago ?? 0,   // field absent in route; 0 = unknown
+        lastSeenMsAgo: s.last_seen_ms_ago ?? null,
         staleThresholdMs: staleThresholdFor(s.name),
+        activityState: s.activity_state ?? "unavailable",
         // Item #4: pass through version + ingestion_summary when present.
         version: s.version,
         ingestion_summary: s.ingestion_summary,
@@ -427,8 +436,10 @@ export function useCollectorHealth(): PolledResult<CollectorHealthData> {
       // When last_seen_ms_ago is 0 (absent), fall back to the route's own status field
       // as the health signal: "online" counts as healthy, everything else does not.
       const healthy = collectors.filter((c) => {
-        if (c.lastSeenMsAgo > 0) return c.lastSeenMsAgo <= c.staleThresholdMs;
-        return c.status === "online";
+        return c.status === "online"
+          && c.activityState === "measured"
+          && c.lastSeenMsAgo != null
+          && c.lastSeenMsAgo <= c.staleThresholdMs;
       }).length;
       return {
         total: collectors.length,
@@ -519,7 +530,7 @@ export function usePolicyCoverage(): PolledResult<PolicyCoverageData> {
       const policies: Array<{ enabled?: boolean; lifecycle?: string; rule_count?: number }> =
         body?.policies ?? [];
       return {
-        coreRules: 163,  // TODO(v1.1): wire from API; matches spec required-copy "163 core Shield rules"
+        coreRules: ALL_RULES.length,
         // Active policies that are not in lab lifecycle.
         activeEgressStarter: policies.filter((p) => p.enabled === true && p.lifecycle !== "lab").length,
         // Policies held in lab (disabled drafts).

@@ -122,7 +122,7 @@ function ageBucketPenalty(ageMs: number): number {
 
 export interface CollectorFreshness {
   name: string;
-  lastSeenMsAgo: number;
+  lastSeenMsAgo: number | null;
   staleThresholdMs: number;
 }
 
@@ -134,8 +134,9 @@ export interface CollectorFreshness {
  * Empty input → 100 (no collectors registered = target state, not failure).
  */
 export function scoreSourceFreshness(collectors: CollectorFreshness[]): number {
-  if (collectors.length === 0) return 100;
+  if (collectors.length === 0) return 0;
   const perCollectorScores = collectors.map((c) => {
+    if (c.lastSeenMsAgo == null) return 0;
     if (c.lastSeenMsAgo <= c.staleThresholdMs) return 100;
     if (c.lastSeenMsAgo >= 2 * c.staleThresholdMs) return 0;
     const ratio = (c.lastSeenMsAgo - c.staleThresholdMs) / c.staleThresholdMs;

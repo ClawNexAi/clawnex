@@ -209,6 +209,7 @@ function mapCostToKpi(r: ReturnType<typeof useCostRisk>): KpiData {
 
 function costLive(d: CostRiskData, lastRefreshedAt: number): KpiData {
   const sigCount = d.signals.length;
+  const headline = d.headlineUsd;
   // Sort sources descending by USD so the secondary row is the next-highest source
   // after the headline. Falls back gracefully if perSource is empty.
   const sortedSources = [...d.perSource].sort((a, b) => b.usd - a.usd);
@@ -216,19 +217,20 @@ function costLive(d: CostRiskData, lastRefreshedAt: number): KpiData {
   const breakdown: KpiData["breakdown"] = [
     // Spec §16.1 required-copy: "Highest reported monitored spend" verbatim;
     // value is the headline dollar amount per spec §5.4 body layout.
-    { label: "Highest reported monitored spend", value: `$${d.headlineUsd.toFixed(2)}`, accent: "cyan" },
+    { label: "Highest reported monitored spend", value: headline == null ? "Unavailable" : `$${headline.toFixed(2)}`, accent: headline == null ? undefined : "cyan" },
   ];
   if (secondary) {
     breakdown.push({ label: secondary.source, value: `$${secondary.usd.toFixed(2)}`, accent: "cyan" });
   }
   // Spec §16.1 disclosure: source totals are reported side-by-side; never summed.
   breakdown.push({ label: "side-by-side, not summed", value: "" });
+  if (d.unavailableSources.length > 0) breakdown.push({ label: "Unavailable sources", value: d.unavailableSources.join(", ") });
   return {
     id: "costRisk",
-    state: "live",
-    value: `$${d.headlineUsd.toFixed(2)}`,
-    pill: sigCount > 0 ? `${sigCount} SIGNALS` : "OK",
-    pillAccent: sigCount > 0 ? "warn" : "green",
+    state: headline == null ? "empty" : "live",
+    value: headline == null ? "Unavailable" : `$${headline.toFixed(2)}`,
+    pill: d.unavailableSources.length > 0 ? "PARTIAL" : sigCount > 0 ? `${sigCount} SIGNALS` : "OK",
+    pillAccent: d.unavailableSources.length > 0 ? "warn" : sigCount > 0 ? "warn" : "green",
     breakdown,
     footer: sigCount > 0 ? d.signals.map((s) => s.kind).slice(0, 3).join(" · ") : "all clear",
     lastRefreshedAt,
@@ -263,11 +265,10 @@ function stripParenSuffix(name: string): string {
 }
 
 function isCollectorHealthy(c: CollectorHealthData["collectors"][number]): boolean {
-  // When lastSeenMsAgo is 0 the route doesn't expose a fresh probe time;
-  // fall back to the status string. Mirrors useCollectorHealth's own
-  // healthy-count logic in data-hooks.ts.
-  if (c.lastSeenMsAgo > 0) return c.lastSeenMsAgo <= c.staleThresholdMs;
-  return c.status === "online";
+  return c.status === "online"
+    && c.activityState === "measured"
+    && c.lastSeenMsAgo != null
+    && c.lastSeenMsAgo <= c.staleThresholdMs;
 }
 
 /**
@@ -316,7 +317,11 @@ function collectorLive(d: CollectorHealthData, lastRefreshedAt: number): KpiData
     pillAccent: stale === 0 ? "green" : stale <= 2 ? "warn" : "danger",
     breakdown: breakdownSource.map((c) => ({
       label: stripParenSuffix(c.name).replace(/-watcher|-adapter|-logger/, ""),
-      value: isCollectorHealthy(c) ? "● ok" : `● stale ${formatLag(c.lastSeenMsAgo)}`,
+      value: isCollectorHealthy(c)
+        ? "● ok"
+        : c.lastSeenMsAgo == null
+          ? "● unavailable"
+          : `● stale ${formatLag(c.lastSeenMsAgo)}`,
       accent: (isCollectorHealthy(c) ? "green" : "warn") as KpiAccent,
     })),
     lastRefreshedAt,

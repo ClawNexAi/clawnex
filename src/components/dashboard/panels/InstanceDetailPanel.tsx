@@ -18,12 +18,12 @@ export function InstanceDetailPanel({ fleetApi, demoMode, filters, onNavigate }:
 }) {
   const instances = demoMode ? INST : (fleetApi || []).map(f => ({
     id: f.id, client: f.client, ver: f.version || "live", status: f.status,
-    cpu: f.cpu || 0, mem: f.mem || 0, disk: f.disk || 0,
-    threats: f.threats || 0, alerts: f.alerts || 0,
-    region: f.region || "local", agents: f.agents || 0,
-    sessions: f.sessions || 0, p95: f.p95 || 0, cost: f.cost || 0,
+    cpu: f.cpu, mem: f.mem, disk: f.disk ?? null,
+    threats: f.threats, alerts: f.alerts ?? null,
+    region: f.region || "local", agents: f.agents,
+    sessions: f.sessions ?? null, p95: f.p95 ?? null, cost: f.cost ?? null,
     posture: f.posture || 80,
-    spark: Array.from({ length: 12 }, () => Math.round((f.cpu || 30) + (Math.random() - 0.5) * 10)),
+    spark: Array.from({ length: 12 }, () => Math.round((f.cpu ?? 30) + (Math.random() - 0.5) * 10)),
   }));
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [recentAlerts, setRecentAlerts] = useState<Array<{ id: string; title: string; severity: string; source: string; status: string; created_at: string }>>([]);
@@ -100,13 +100,13 @@ export function InstanceDetailPanel({ fleetApi, demoMode, filters, onNavigate }:
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <Stat label="Status" value={(() => { const degraded = services.some(s => s.status === "degraded"); const offline = services.some(s => s.status === "offline"); return offline ? "DEGRADED" : degraded ? "DEGRADED" : inst.status.toUpperCase(); })()} color={(() => { const degraded = services.some(s => s.status === "degraded"); const offline = services.some(s => s.status === "offline"); return offline ? C.danger : degraded ? C.warn : stColor(inst.status); })()} small />
-        <Stat label="Threats" value={inst.threats} color={inst.threats > 0 ? C.danger : C.green} small />
-        <Stat label="CPU" value={`${inst.cpu}%`} color={inst.cpu > 70 ? C.danger : C.brand} small />
-        <Stat label="Memory" value={`${inst.mem}%`} color={inst.mem > 80 ? C.danger : C.brand} small />
-        <Stat label="Agents" value={inst.agents} color={C.cyan} small />
-        <Stat label="Sessions" value={inst.sessions || 0} color={C.info} small />
-        <Stat label={`Cost (${filters.timeRange})`} value={`$${inst.cost}`} color={C.warn} small />
-        <Stat label="P95 Latency" value={`${inst.p95}ms`} color={inst.p95 > 200 ? C.danger : C.green} small />
+        <Stat label="Threats" value={inst.threats ?? "Unavailable"} color={inst.threats == null ? C.txT : inst.threats > 0 ? C.danger : C.green} small />
+        <Stat label="CPU" value={inst.cpu == null ? "Unavailable" : `${inst.cpu}%`} color={inst.cpu == null ? C.txT : inst.cpu > 70 ? C.danger : C.brand} small />
+        <Stat label="Memory" value={inst.mem == null ? "Unavailable" : `${inst.mem}%`} color={inst.mem == null ? C.txT : inst.mem > 80 ? C.danger : C.brand} small />
+        <Stat label="Agents" value={inst.agents ?? "N/A"} color={inst.agents == null ? C.txT : C.cyan} small />
+        <Stat label="Sessions" value={inst.sessions ?? "Unavailable"} color={inst.sessions == null ? C.txT : C.info} small />
+        <Stat label={`Cost (${filters.timeRange})`} value={inst.cost == null ? "Unavailable" : `$${inst.cost}`} color={inst.cost == null ? C.txT : C.warn} small />
+        <Stat label="P95 Latency" value={inst.p95 == null ? "Unavailable" : `${inst.p95}ms`} color={inst.p95 == null ? C.txT : inst.p95 > 200 ? C.danger : C.green} small />
       </div>
 
       {/* Services */}

@@ -38,6 +38,29 @@ interface ServiceCheck {
   //   Computed from shield_scans row count for the openclaw watcher;
   //   undefined for services that have no ingestion concept (LiteLLM, disk, etc.).
   ingestion_summary?: string;
+  observed_at: string | null;
+  stale_after_ms: number | null;
+  last_seen_ms_ago: number | null;
+  activity_state: "measured" | "stale" | "unavailable" | "not_applicable";
+  transport?: string;
+}
+
+function observationFields(
+  observedAt: string | null,
+  staleAfterMs: number | null,
+): Pick<ServiceCheck, "observed_at" | "stale_after_ms" | "last_seen_ms_ago" | "activity_state"> {
+  const parsed = observedAt ? Date.parse(observedAt) : Number.NaN;
+  const age = Number.isFinite(parsed) ? Math.max(0, Date.now() - parsed) : null;
+  return {
+    observed_at: Number.isFinite(parsed) ? new Date(parsed).toISOString() : null,
+    stale_after_ms: staleAfterMs,
+    last_seen_ms_ago: age,
+    activity_state: age == null
+      ? "unavailable"
+      : staleAfterMs != null && age > staleAfterMs
+        ? "stale"
+        : "measured",
+  };
 }
 
 /**
@@ -55,6 +78,7 @@ async function checkService(name: string, url: string, opts: { providerGuard?: b
           status: "offline",
           latency: Math.round(performance.now() - start),
           error: safety.reason || "blocked provider target",
+          ...observationFields(null, 30_000),
         };
       }
     }
@@ -63,10 +87,24 @@ async function checkService(name: string, url: string, opts: { providerGuard?: b
     const res = await fetch(url, { method: "GET", signal: controller.signal, cache: "no-store", redirect: "error" });
     clearTimeout(timeout);
     const latency = Math.round(performance.now() - start);
-    return { name, url, status: res.ok ? "online" : "degraded", latency };
+    return {
+      name,
+      url,
+      status: res.ok ? "online" : "degraded",
+      latency,
+      ...observationFields(new Date().toISOString(), 30_000),
+      transport: new URL(url).protocol.replace(":", "").toUpperCase(),
+    };
   } catch (err: unknown) {
     const latency = Math.round(performance.now() - start);
-    return { name, url, status: "offline", latency, error: err instanceof Error ? err.message : "Unknown error" };
+    return {
+      name,
+      url,
+      status: "offline",
+      latency,
+      error: err instanceof Error ? err.message : "Unknown error",
+      ...observationFields(null, 30_000),
+    };
   }
 }
 
@@ -82,7 +120,7 @@ async function checkService(name: string, url: string, opts: { providerGuard?: b
  * scripts/verify-litellm-health-checks.ts can mock both.
  */
 async function checkLiteLLM(port: number): Promise<ServiceCheck> {
-  return checkLiteLLMImpl(port, {
+  const result = await checkLiteLLMImpl(port, {
     queryProviderCountImpl: () => {
       try {
         const rows = queryAll<{ count: number }>(
@@ -95,6 +133,11 @@ async function checkLiteLLM(port: number): Promise<ServiceCheck> {
     },
     logDegradedEventImpl: logDegradedEvent,
   });
+  return {
+    ...result,
+    ...observationFields(result.status === "online" ? new Date().toISOString() : null, 30_000),
+    transport: "HTTP",
+  };
 }
 
 /**
@@ -138,28 +181,18 @@ function serviceVersion(
   const lc = name.toLowerCase();
   // Paperclip has a real version from its HTTP health endpoint.
   if (lc.includes("paperclip") && paperclipVersion) return paperclipVersion;
-  // OpenClaw: the connector holds the protocol version (v0.4.4) not the
-  // gateway release version. Use the canonical demo-fixture string "HTTP"
-  // which reflects the WebSocket transport identity, matching the visible
-  // version operators see in the OpenClaw TUI.
-  if (lc.includes("openclaw")) return "WS";
-  // Hermes state watcher: no HTTP endpoint — the relevant identity is the
-  // state.db file it reads. "state.db" matches the demo-fixture canonical.
-  if (lc.includes("hermes")) return "state.db";
-  // LiteLLM: standard HTTP proxy — "HTTP" is the appropriate version tag.
-  if (lc.includes("litellm")) return "HTTP";
-  // Autensa / other configured connectors default to "HTTP".
-  if (lc.includes("autensa")) return "HTTP";
-  // ClawNex self-check and provider health checks don't expose versions here.
+  // Transport and storage identities are exposed separately. Do not present
+  // HTTP, WS, or state.db as measured software versions.
+  if (lc.includes("openclaw") || lc.includes("hermes") || lc.includes("litellm") || lc.includes("autensa")) return undefined;
   return undefined;
 }
 
 /**
  * Build an ingestion_summary string for a named service.
  *
- * Only meaningful for the OpenClaw watcher which drives shield_scans.
- * Queries the 24h row count + error count from shield_scans to produce
- * "N events ingested · M errors".
+ * OpenClaw ingestion is the traffic ClawNex actually accepted from OpenClaw's
+ * session watcher. Shield scan count is a different metric and must not be
+ * presented as total ingestion.
  *
  * All other services return undefined — callers must not render the field
  * when absent.
@@ -170,14 +203,14 @@ function serviceIngestionSummary(name: string): string | undefined {
 
   try {
     const since24h = new Date(Date.now() - 24 * 3_600_000).toISOString();
-    const total = queryAll<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM shield_scans WHERE scanned_at >= ?`,
+    const total = queryAll<{ cnt: number; latest: string | null }>(
+      `SELECT COUNT(*) AS cnt, MAX(timestamp) AS latest
+         FROM proxy_traffic
+        WHERE source = 'session-watcher' AND timestamp >= ?`,
       [since24h],
     );
     const count = total[0]?.cnt ?? 0;
-    // shield_scans has no error column — errors manifest as absent rows.
-    // Report "0 errors" (honest: the scanner only writes rows on success).
-    return `${count.toLocaleString()} events ingested · 0 errors`;
+    return `${count.toLocaleString()} session events observed in 24h`;
   } catch {
     return undefined;
   }
@@ -244,6 +277,8 @@ export async function GET(request: NextRequest) {
       status: ocStatus.connected ? "online" : "offline",
       latency: 0, // WebSocket — no HTTP latency
       error: ocStatus.lastError || undefined,
+      ...observationFields(ocStatus.connected ? new Date().toISOString() : ocStatus.lastEvent, 30_000),
+      transport: "WebSocket",
     });
 
     const hermesDiagnostics = diagnoseHermes();
@@ -257,6 +292,8 @@ export async function GET(request: NextRequest) {
       error: hermesDiagnostics.available ? undefined : hermesDiagnostics.statusDetail || undefined,
       detail: hermesDiagnostics.statusDetail || undefined,
       ingestion_summary: `${hermesDiagnostics.messages.last24h.toLocaleString()} messages observed · ${hermesDiagnostics.messages.lastId.toLocaleString()} cursor`,
+      ...observationFields(hermesDiagnostics.lastActivity, 7 * 24 * 60 * 60 * 1000),
+      transport: "SQLite (read-only)",
     });
 
     // Only include Paperclip/Autensa connector data if explicitly configured
@@ -272,6 +309,8 @@ export async function GET(request: NextRequest) {
           status: paperclipStatus.status,
           latency: paperclipStatus.latency,
           error: paperclipStatus.error,
+          ...observationFields(paperclipStatus.lastChecked || null, 30 * 60 * 1000),
+          transport: "HTTP",
         };
       } else {
         services.push({
@@ -280,6 +319,8 @@ export async function GET(request: NextRequest) {
           status: paperclipStatus.status,
           latency: paperclipStatus.latency,
           error: paperclipStatus.error,
+          ...observationFields(paperclipStatus.lastChecked || null, 30 * 60 * 1000),
+          transport: "HTTP",
         });
       }
     }
@@ -293,6 +334,8 @@ export async function GET(request: NextRequest) {
           status: autensaStatus.status,
           latency: autensaStatus.latency,
           error: autensaStatus.error,
+          ...observationFields(autensaStatus.lastChecked || null, 30 * 60 * 1000),
+          transport: "HTTP",
         };
       } else {
         services.push({
@@ -301,6 +344,8 @@ export async function GET(request: NextRequest) {
           status: autensaStatus.status,
           latency: autensaStatus.latency,
           error: autensaStatus.error,
+          ...observationFields(autensaStatus.lastChecked || null, 30 * 60 * 1000),
+          transport: "HTTP",
         });
       }
     }

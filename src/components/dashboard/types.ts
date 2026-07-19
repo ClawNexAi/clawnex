@@ -15,6 +15,7 @@ import type {
   PerSourceTotal,
   SourceStatus,
 } from '@/lib/types/cost-reporting';
+import type { TelemetryValue } from '@/lib/telemetry/value';
 
 // ---------------------------------------------------------------------------
 // Tab / Navigation
@@ -401,18 +402,31 @@ export interface FleetInstance {
   client: string;
   version?: string;
   status: string;
-  cpu: number;
-  mem: number;
-  disk?: number;
-  threats: number;
-  alerts?: number;
-  agents: number;
-  sessions?: number;
+  cpu: number | null;
+  mem: number | null;
+  disk?: number | null;
+  threats: number | null;
+  alerts?: number | null;
+  agents: number | null;
+  sessions?: number | null;
+  storedSessions?: number | null;
   region: string;
-  p95?: number;
-  cost?: number;
+  p95?: number | null;
+  cost?: number | null;
   /** Posture score 0-100. `null` means "unscanned / no real data yet" — do NOT treat as 0 or 100. */
   posture?: number | null;
   uptime?: number;
   isLive?: boolean;
+  telemetry?: {
+    configuredAgents: TelemetryValue<number>;
+    activeSessions: TelemetryValue<number>;
+    storedSessions: TelemetryValue<number>;
+    cpu: TelemetryValue<number>;
+    memory: TelemetryValue<number>;
+    disk: TelemetryValue<number>;
+    threats: TelemetryValue<number>;
+    alerts: TelemetryValue<number>;
+    p95LatencyMs: TelemetryValue<number>;
+    costUsd: TelemetryValue<number>;
+  };
 }

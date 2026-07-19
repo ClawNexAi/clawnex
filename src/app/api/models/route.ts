@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
   }
 
   const models: UnifiedModel[] = [];
-  const sources: { name: string; status: string; count: number }[] = [];
+  const sources: { id: string; name: string; status: string; count: number }[] = [];
 
   // Fetch OpenClaw models
   try {
@@ -54,13 +54,13 @@ export async function GET(request: NextRequest) {
           reasoning: m.reasoning,
         });
       }
-      sources.push({ name: 'OpenClaw Gateway', status: 'online', count: ocModels.length });
+      sources.push({ id: 'openclaw-gateway', name: 'OpenClaw Gateway', status: 'online', count: ocModels.length });
     } else {
-      sources.push({ name: 'OpenClaw Gateway', status: 'offline', count: 0 });
+      sources.push({ id: 'openclaw-gateway', name: 'OpenClaw Gateway', status: 'offline', count: 0 });
     }
   } catch (err) {
     console.error('[API/models] OpenClaw error:', err);
-    sources.push({ name: 'OpenClaw Gateway', status: 'error', count: 0 });
+    sources.push({ id: 'openclaw-gateway', name: 'OpenClaw Gateway', status: 'error', count: 0 });
   }
 
   // Fetch LM Studio models
@@ -79,7 +79,8 @@ export async function GET(request: NextRequest) {
       }
     }
     sources.push({
-      name: inventory.fleet.name,
+      id: 'lmstudio-fleet',
+      name: inventory.fleet.name || 'LM Studio Fleet',
       status: inventory.fleet.status,
       count: inventory.fleet.modelCount,
     });
@@ -96,13 +97,14 @@ export async function GET(request: NextRequest) {
       }
     }
     sources.push({
-      name: inventory.main.name,
+      id: 'lmstudio-main',
+      name: inventory.main.name || 'LM Studio Main',
       status: inventory.main.status,
       count: inventory.main.modelCount,
     });
   } catch (err) {
     console.error('[API/models] LM Studio error:', err);
-    sources.push({ name: 'LM Studio', status: 'error', count: 0 });
+    sources.push({ id: 'lmstudio-inventory', name: 'LM Studio inventory', status: 'error', count: 0 });
   }
 
   return NextResponse.json({

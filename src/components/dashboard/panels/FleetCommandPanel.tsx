@@ -164,21 +164,25 @@ export function FleetCommandPanel({ fleetApi, filters, demoMode, threatTrend, on
     })();
   }, [demoMode, wizardReloadTick]);
 
-  // Real API instances
-  // Note: realInstances has `posture: number | null` (null = unscanned) which
-  // diverges from the demo INST mock (all numbers). Use Omit+override so both
-  // can coexist in the same fleet list; renderers below handle null explicitly.
-  type FleetRow = Omit<typeof INST[0], 'posture'> & { posture: number | null };
+  type FleetRow = {
+    id: string; client: string; ver: string; status: string; up?: number;
+    cpu: number | null; mem: number | null; disk: number | null;
+    threats: number | null; alerts: number | null; region: string; hb?: number;
+    agents: number | null; sessions: number | null; p95: number | null;
+    cost: number | null; posture: number | null; spark: number[];
+    telemetry?: FleetInstance["telemetry"];
+  };
   const realInstances: FleetRow[] = (fleetApi || []).map((f: FleetInstance) => ({
     id: f.id, client: f.client, ver: f.version || "live", status: f.status as string,
     up: f.uptime ? Math.min(99.99, 99 + Math.random()) : 99.9,
-    cpu: f.cpu || 0, mem: f.mem || 0, disk: f.disk || 0,
-    threats: f.threats || 0, alerts: f.alerts || 0,
-    region: f.region || "local", hb: 12, agents: f.agents || 0,
-    sessions: f.sessions || 0, p95: f.p95 || 0, cost: f.cost || 0,
+    cpu: f.cpu, mem: f.mem, disk: f.disk ?? null,
+    threats: f.threats, alerts: f.alerts ?? null,
+    region: f.region || "local", hb: 12, agents: f.agents,
+    sessions: f.sessions ?? null, p95: f.p95 ?? null, cost: f.cost ?? null,
     // Preserve null vs. number so the renderer can distinguish "unscanned" from "score".
     posture: f.posture == null ? null : f.posture,
     spark: threatTrend && threatTrend.length >= 2 ? threatTrend : [50],
+    telemetry: f.telemetry,
   }));
   // Only include demo instances when demoMode is on. Widen demo rows to the
   // same FleetRow shape (posture stays a number for mock data) so both types unify.
@@ -191,11 +195,12 @@ export function FleetCommandPanel({ fleetApi, filters, demoMode, threatTrend, on
     if (filters.selectedClient !== "all" && f.client !== filters.selectedClient) return false;
     return true;
   });
-  const totalThreats = fleet.reduce((s, f) => s + f.threats, 0);
-  const totalAlerts = fleet.reduce((s, f) => s + f.alerts, 0);
-  const totalAgents = fleet.reduce((s, f) => s + f.agents, 0);
-  const totalSessions = fleet.reduce((s, f) => s + f.sessions, 0);
-  const totalCost = fleet.reduce((s, f) => s + f.cost, 0);
+  const totalThreats = fleet.reduce((s, f) => s + (f.threats ?? 0), 0);
+  const totalAlerts = fleet.reduce((s, f) => s + (f.alerts ?? 0), 0);
+  const totalAgents = fleet.reduce((s, f) => s + (f.agents ?? 0), 0);
+  const totalSessions = fleet.reduce((s, f) => s + (f.sessions ?? 0), 0);
+  const totalCost = fleet.reduce((s, f) => s + (f.cost ?? 0), 0);
+  const hasUnavailableCost = fleet.some((f) => f.telemetry?.costUsd.state === "unavailable");
   const healthyCount = fleet.filter(f => f.status === "healthy").length;
 
   // Render the readiness banner above any downstream content (wizard, empty
@@ -373,7 +378,7 @@ export function FleetCommandPanel({ fleetApi, filters, demoMode, threatTrend, on
         }>
           <Stat label="Sessions" value={totalSessions} color={C.info} />
         </Tooltip>
-        <Stat label={`Fleet Cost (${filters.timeRange})`} value={`$${totalCost.toLocaleString()}`} color={C.warn} />
+        <Stat label={`Fleet Cost (${filters.timeRange})`} value={hasUnavailableCost ? "Partial" : `$${totalCost.toLocaleString()}`} color={hasUnavailableCost ? C.txT : C.warn} />
       </div>
 
       <Card title="Fleet - Ranked by Risk" accent={C.brand} actions={<Fresh />}>
@@ -414,13 +419,13 @@ export function FleetCommandPanel({ fleetApi, filters, demoMode, threatTrend, on
             <span key="c" style={{ fontWeight: 600 }}>{f.client}</span>,
             <span key="r" style={{ color: C.txS }}>{f.region}</span>,
             <span key="v" style={{ color: C.txT }}>{f.ver}</span>,
-            <span key="cpu"><Bar value={f.cpu} max={100} color={f.cpu > 70 ? C.danger : f.cpu > 50 ? C.orange : C.brand} h={4} /></span>,
-            <span key="mem"><Bar value={f.mem} max={100} color={f.mem > 80 ? C.danger : f.mem > 60 ? C.orange : C.brand} h={4} /></span>,
-            <span key="disk"><Bar value={f.disk} max={100} h={4} /></span>,
-            <span key="th" style={{ color: f.threats > 0 ? C.danger : C.green, fontWeight: 700 }}>{f.threats}</span>,
-            <span key="p95" style={{ color: f.p95 > 200 ? C.danger : C.txS }}>{f.p95}ms</span>,
-            <span key="ag">{f.agents}</span>,
-            <span key="cost" style={{ color: f.cost > 1000 ? C.warn : C.txS }}>${f.cost}</span>,
+            <span key="cpu">{f.cpu == null ? "Unavailable" : <Bar value={f.cpu} max={100} color={f.cpu > 70 ? C.danger : f.cpu > 50 ? C.orange : C.brand} h={4} />}</span>,
+            <span key="mem">{f.mem == null ? "Unavailable" : <Bar value={f.mem} max={100} color={f.mem > 80 ? C.danger : f.mem > 60 ? C.orange : C.brand} h={4} />}</span>,
+            <span key="disk">{f.disk == null ? "Unavailable" : <Bar value={f.disk} max={100} h={4} />}</span>,
+            <span key="th" style={{ color: f.threats == null ? C.txT : f.threats > 0 ? C.danger : C.green, fontWeight: 700 }}>{f.threats ?? "Unavailable"}</span>,
+            <span key="p95" style={{ color: f.p95 == null ? C.txT : f.p95 > 200 ? C.danger : C.txS }}>{f.p95 == null ? "Unavailable" : `${f.p95}ms`}</span>,
+            <span key="ag">{f.agents ?? "N/A"}</span>,
+            <span key="cost" style={{ color: f.cost == null ? C.txT : f.cost > 1000 ? C.warn : C.txS }}>{f.cost == null ? "Unavailable" : `$${f.cost}`}</span>,
             <span key="pos" style={{ color: f.posture == null ? C.txT : f.posture > 90 ? C.green : f.posture > 75 ? C.warn : C.danger }}>{f.posture == null ? "—" : `${f.posture}%`}</span>,
             <Badge key="st" label={f.status} color={stColor(f.status)} />,
             <Spark key="sp" data={f.spark} color={f.status === "degraded" ? C.danger : f.status === "watching" ? C.warn : C.brand} />,

@@ -181,6 +181,8 @@ export const COST_RISK_DEMO: CostRiskData = {
     { kind: "velocity_spike", severity: "warn", detail: "demo · openclaw · demo-coding-agent" },
     { kind: "context_bloat",  severity: "warn", detail: "demo · openclaw · demo-research-agent" },
   ],
+  sourceStatus: { openclaw: "ok", hermes: "ok", paperclip: "ok" },
+  unavailableSources: [],
 };
 
 /**
@@ -201,6 +203,7 @@ export const COLLECTOR_HEALTH_FIXTURE_DEMO: CollectorHealthData = {
     status: c.status,
     lastSeenMsAgo: c.lastSeenSecondsAgo * 1000,
     staleThresholdMs: c.staleThresholdSeconds * 1000,
+    activityState: c.status === "stale" ? "stale" as const : "measured" as const,
     version: c.version,
     ingestion_summary: c.note,
   })),

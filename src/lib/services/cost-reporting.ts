@@ -138,6 +138,19 @@ export function aggregateBySource(rows: NormalizedRow[]): Record<Source, PerSour
   };
   for (const row of rows) {
     out[row.source].count++;
+    const reportedCost = row.cost_status === 'actual'
+      ? row.actual_cost_usd
+      : row.cost_status === 'estimated'
+        ? row.estimated_cost_usd
+        : row.cost_status === 'recomputed'
+          ? row.recomputed_cost_usd
+          : row.cost_status === 'included'
+            ? 0
+            : null;
+    if (reportedCost !== null && (!Number.isFinite(reportedCost) || reportedCost < 0)) {
+      if (!row.row_flags.includes('invalid_cost')) row.row_flags.push('invalid_cost');
+      continue;
+    }
     const display = display_cost_usd(row);
     if (display !== null) out[row.source].totalUsd += display;
   }

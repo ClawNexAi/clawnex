@@ -364,8 +364,8 @@ export function ActionQueue({ demoMode, range, onNavigate, operator }: Props) {
     ...(alerts.data ?? []).map((a) => alertToRow(a, operator)),
     ...(cost.data?.signals ?? []).map((s, i) => signalToRow(s, i, operator)),
     ...(collector.data?.collectors ?? [])
-      .filter((c) => c.lastSeenMsAgo > c.staleThresholdMs)
-      .map((c) => staleCollectorToRow(c, operator)),
+      .filter((c) => c.lastSeenMsAgo != null && c.lastSeenMsAgo > c.staleThresholdMs)
+      .map((c) => staleCollectorToRow({ ...c, lastSeenMsAgo: c.lastSeenMsAgo! }, operator)),
     ...(trustAudit.data ?? []).map((f) => trustAuditToRow(f, operator)),
     // Phase 6 producers — five upstream sources for dispatch-ready families.
     // Each emits ActionRows whose rawSource.kind matches a Phase 5 resolver,

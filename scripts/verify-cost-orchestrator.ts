@@ -4,7 +4,7 @@
  *  - display_cost_usd resolution per cost_status
  *  - status-downgrade rule (never overwrites actual/estimated/included)
  *  - enrichWithRecompute zero-rate guard (matchedKey===null → null + cost_status downgrade)
- *  - aggregateBySource sums display_cost_usd only, treats null as exclusion
+ *  - aggregateBySource sums valid display costs only; null and negative values are excluded
  *  - highestReportedSourceTotal picks max non-zero source
  *  - Promise.allSettled rejected fallback uses indexed source name
  *  - signal_context: side-channel maps merge into DetectOpts and reach detectSignals
@@ -102,11 +102,14 @@ async function main() {
     baseRow({ row_id: 'c', source: 'hermes', cost_status: 'estimated', estimated_cost_usd: 5.0 }),
     baseRow({ row_id: 'd', source: 'paperclip', cost_status: 'included', actual_cost_usd: 0 }),
     baseRow({ row_id: 'e', source: 'paperclip', cost_status: 'unknown' }), // null → excluded
+    baseRow({ row_id: 'f', source: 'hermes', cost_status: 'actual', actual_cost_usd: -42 }),
   ];
   const agg = aggregateBySource(mixed);
   t('aggregate openclaw total = 3.0', Math.abs(agg.openclaw.totalUsd - 3.0) < 1e-9);
   t('aggregate openclaw count = 2', agg.openclaw.count === 2);
   t('aggregate hermes total = 5.0', Math.abs(agg.hermes.totalUsd - 5.0) < 1e-9);
+  t('aggregate excludes negative costs', agg.hermes.totalUsd === 5.0);
+  t('aggregate flags negative costs as invalid', mixed[5].row_flags.includes('invalid_cost'));
   t('aggregate paperclip total = 0 (included $0 + unknown excluded)', agg.paperclip.totalUsd === 0);
   t('aggregate paperclip count = 2 (rows count, even if cost null)', agg.paperclip.count === 2);
 

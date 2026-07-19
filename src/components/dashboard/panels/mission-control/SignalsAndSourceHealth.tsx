@@ -251,12 +251,13 @@ function SourceHealthCard({
       )}
 
       {d.collectors.map((c) => {
-        // A collector is healthy if last_seen_ms_ago is within its threshold,
-        // OR if the field is absent (0) and the route reported "online".
-        const lagKnown = c.lastSeenMsAgo > 0;
-        const isHealthy = lagKnown
-          ? c.lastSeenMsAgo <= c.staleThresholdMs
-          : c.status === "online";
+        const lag = c.lastSeenMsAgo;
+        const lagKnown = lag != null;
+        const isHealthy = c.status === "online"
+          && c.activityState === "measured"
+          && lagKnown
+          && lag != null
+          && lag <= c.staleThresholdMs;
 
         // Strip common suffix tokens for display — they make the name cleaner
         // without losing identity in this narrow column.
@@ -316,7 +317,7 @@ function SourceHealthCard({
             </span>
             {/* Lag or "ok" */}
             <span style={{ color: C.txT, fontSize: 9, textAlign: "right", paddingTop: 1 }}>
-              {isHealthy ? "ok" : lagKnown ? `lag ${formatLag(c.lastSeenMsAgo)}` : c.status}
+              {isHealthy ? "ok" : lag != null ? `lag ${formatLag(lag)}` : "unavailable"}
             </span>
           </div>
         );

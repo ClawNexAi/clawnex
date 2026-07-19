@@ -16,6 +16,15 @@ import { getLatestClawkeeperPosture } from "@/lib/services/posture-service";
 import { readOpenClawConfig as readOpenClawConfigHelper, resolveOpenClawPaths } from "@/lib/openclaw-paths";
 import { getOpenClawInstalledVersion } from "@/lib/openclaw-version";
 import { diagnoseHermes } from "@/lib/services/hermes-diagnostics";
+import { gatherCostRows } from "@/lib/services/cost-reporting";
+import {
+  derived,
+  measured,
+  nonNegative,
+  notApplicable,
+  unavailable,
+  type TelemetryValue,
+} from "@/lib/telemetry/value";
 import { config } from "@/lib/config";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -41,16 +50,43 @@ function readOpenClawConfig(): Record<string, unknown> | null {
   return readOpenClawConfigHelper();
 }
 
-/** Build cost rates map from openclaw.json providers */
-function buildCostMap(ocConfig: Record<string, unknown>): Record<string, { input: number; output: number }> {
-  const providers = (ocConfig?.models as Record<string, unknown>)?.providers as Record<string, { models?: Array<{ id: string; cost?: { input: number; output: number } }> }> || {};
-  const costMap: Record<string, { input: number; output: number }> = {};
-  for (const prov of Object.values(providers)) {
-    for (const m of prov.models || []) {
-      if (m.cost) costMap[m.id] = { input: m.cost.input, output: m.cost.output };
-    }
-  }
-  return costMap;
+type NumberTelemetry = TelemetryValue<number>;
+
+interface FleetTelemetry {
+  configuredAgents: NumberTelemetry;
+  activeSessions: NumberTelemetry;
+  storedSessions: NumberTelemetry;
+  cpu: NumberTelemetry;
+  memory: NumberTelemetry;
+  disk: NumberTelemetry;
+  threats: NumberTelemetry;
+  alerts: NumberTelemetry;
+  p95LatencyMs: NumberTelemetry;
+  costUsd: NumberTelemetry;
+}
+
+interface FleetApiInstance {
+  id: string;
+  client: string;
+  version: string;
+  status: string;
+  uptime: number;
+  cpu: number | null;
+  mem: number | null;
+  disk: number | null;
+  threats: number | null;
+  alerts: number | null;
+  region: string;
+  heartbeat: number;
+  agents: number | null;
+  sessions: number | null;
+  storedSessions: number | null;
+  p95: number | null;
+  cost: number | null;
+  posture: number | null;
+  isLive: boolean;
+  services: { openclaw: string; paperclip: string; autensa: string };
+  telemetry: FleetTelemetry;
 }
 
 
@@ -127,11 +163,12 @@ export async function GET(request: NextRequest) {
     void ssProdClause;
   } catch {}
 
-  // Agent count from openclaw.json
+  // Configured agents are an inventory measurement. Do not substitute the
+  // connector's active-agent count: those answer different questions.
   let agentCount = 0;
   if (ocConfig) {
     const agentsList = (ocConfig?.agents as { list?: Array<{ id: string }> })?.list || [];
-    agentCount = agentsList.filter(a => a.id !== "main").length;
+    agentCount = agentsList.length;
   }
 
   // Session count from session files
@@ -148,42 +185,44 @@ export async function GET(request: NextRequest) {
   // openclaw.json meta.lastTouchedVersion, which can lag after upgrades.
   const ocVersion = getOpenClawInstalledVersion() || "unknown";
 
-  // Calculate cost
-  let totalCost = 0;
+  // Cost comes from the same canonical orchestrator used by Token & Cost
+  // Intel. Per-source totals are never summed; the headline chooses the best
+  // covered source and carries that provenance in telemetry.
+  let costTelemetry: NumberTelemetry = unavailable("cost-reporting", "No usable cost rows were observed in the selected window");
   try {
-    const tracked = queryOne<{ total: number }>(
-      since
-        ? "SELECT COALESCE(SUM(CASE WHEN cost_usd > 0 THEN cost_usd ELSE 0 END), 0) as total FROM proxy_traffic WHERE timestamp >= ?"
-        : "SELECT COALESCE(SUM(CASE WHEN cost_usd > 0 THEN cost_usd ELSE 0 END), 0) as total FROM proxy_traffic WHERE timestamp >= datetime('now', '-30 days')",
-      since ? [since] : undefined
-    );
-    totalCost = tracked?.total || 0;
-
-    if (ocConfig) {
-      const costMap = buildCostMap(ocConfig);
-      const localModels = queryAll<{ model: string; input_tokens: number; output_tokens: number }>(
-        since
-          ? `SELECT model, COALESCE(SUM(input_tokens), 0) as input_tokens, COALESCE(SUM(output_tokens), 0) as output_tokens
-             FROM proxy_traffic WHERE (cost_usd IS NULL OR cost_usd = 0) AND model IS NOT NULL AND total_tokens > 0 AND timestamp >= ? GROUP BY model`
-          : `SELECT model, COALESCE(SUM(input_tokens), 0) as input_tokens, COALESCE(SUM(output_tokens), 0) as output_tokens
-             FROM proxy_traffic WHERE (cost_usd IS NULL OR cost_usd = 0) AND model IS NOT NULL AND total_tokens > 0 AND timestamp >= datetime('now', '-30 days') GROUP BY model`,
-        since ? [since] : undefined
-      );
-      for (const lm of localModels) {
-        const rates = costMap[lm.model];
-        if (rates) totalCost += (lm.input_tokens * rates.input) + (lm.output_tokens * rates.output);
-      }
+    const sinceMs = since ? Date.parse(since) : Date.now() - 24 * 60 * 60 * 1000;
+    const report = await gatherCostRows({ sinceMs: Number.isFinite(sinceMs) ? sinceMs : undefined, instance: "openclaw-local" });
+    const total = nonNegative(report.headline?.total);
+    if (report.headline && total != null) {
+      costTelemetry = derived(total, `cost-reporting:${report.headline.source}`, {
+        reason: `Highest covered source total; ${report.perSource[report.headline.source].count} rows`,
+      });
     }
-  } catch {}
-  totalCost = Math.round(totalCost * 100) / 100;
+  } catch (err) {
+    costTelemetry = unavailable("cost-reporting", err instanceof Error ? err.message : "Cost reporting failed");
+  }
 
-  // Calculate p95 latency from recent traffic
-  let p95 = 0;
+  // Calculate p95 only when a positive latency sample exists. An empty sample
+  // is unavailable, not a measured 0 ms.
+  let p95Telemetry: NumberTelemetry = unavailable("proxy_traffic.latency_ms", "No positive latency samples were observed");
   try {
-    const latency = queryOne<{ p95: number }>(
-      "SELECT latency_ms as p95 FROM proxy_traffic WHERE latency_ms > 0 ORDER BY latency_ms DESC LIMIT 1 OFFSET (SELECT COUNT(*) / 20 FROM proxy_traffic WHERE latency_ms > 0)"
+    const latency = queryOne<{ p95: number; sample_count: number; observed_at: string | null }>(
+      `SELECT latency_ms AS p95,
+              (SELECT COUNT(*) FROM proxy_traffic WHERE latency_ms > 0) AS sample_count,
+              (SELECT MAX(timestamp) FROM proxy_traffic WHERE latency_ms > 0) AS observed_at
+         FROM proxy_traffic
+        WHERE latency_ms > 0
+        ORDER BY latency_ms DESC
+        LIMIT 1 OFFSET (SELECT CAST(COUNT(*) * 0.05 AS INTEGER) FROM proxy_traffic WHERE latency_ms > 0)`
     );
-    p95 = latency?.p95 || 0;
+    const p95 = nonNegative(latency?.p95);
+    if (p95 != null && (latency?.sample_count ?? 0) > 0) {
+      p95Telemetry = measured(p95, "proxy_traffic.latency_ms", {
+        observedAt: latency?.observed_at,
+        staleAfterMs: 5 * 60 * 1000,
+        reason: `${latency?.sample_count ?? 0} positive latency samples`,
+      });
+    }
   } catch {}
 
   // Posture (Phase 3): the Fleet table column previously called "Posture"
@@ -220,7 +259,17 @@ export async function GET(request: NextRequest) {
   }
 
   // Build the local instance
-  const localInstance = {
+  const observedNow = new Date().toISOString();
+  const configuredAgentsTelemetry = ocConfig
+    ? measured(agentCount, "openclaw.json:agents.list", { observedAt: observedNow, staleAfterMs: 60_000 })
+    : unavailable<number>("openclaw.json:agents.list", "OpenClaw configuration is unavailable");
+  const activeSessionsTelemetry = ocStatus.connected
+    ? measured(ocStatus.sessions, "openclaw-gateway:active-sessions", { observedAt: ocStatus.lastEvent || observedNow, staleAfterMs: 30_000 })
+    : unavailable<number>("openclaw-gateway:active-sessions", "OpenClaw Gateway is not connected");
+  const storedSessionsTelemetry = ocConfig
+    ? measured(sessionCount, "openclaw-session-files", { observedAt: observedNow, staleAfterMs: 60_000 })
+    : unavailable<number>("openclaw-session-files", "OpenClaw session inventory is unavailable");
+  const localInstance: FleetApiInstance = {
     id: "openclaw-local",
     client: clientName,
     version: ocVersion,
@@ -233,10 +282,11 @@ export async function GET(request: NextRequest) {
     alerts: openAlerts,
     region: "Local",
     heartbeat: Date.now(),
-    agents: agentCount || ocStatus.agents || 0,
-    sessions: sessionCount || ocStatus.sessions || 0,
-    p95,
-    cost: totalCost,
+    agents: configuredAgentsTelemetry.value,
+    sessions: activeSessionsTelemetry.value,
+    storedSessions: storedSessionsTelemetry.value,
+    p95: p95Telemetry.value,
+    cost: costTelemetry.value == null ? null : Math.round(costTelemetry.value * 100) / 100,
     posture: postureScore,
     isLive: true,
     services: {
@@ -244,13 +294,25 @@ export async function GET(request: NextRequest) {
       paperclip: paperclip.status,
       autensa: autensa.status,
     },
+    telemetry: {
+      configuredAgents: configuredAgentsTelemetry,
+      activeSessions: activeSessionsTelemetry,
+      storedSessions: storedSessionsTelemetry,
+      cpu: measured(sysReport.system?.cpuUsage ?? 0, "host-system-metrics", { staleAfterMs: 30_000 }),
+      memory: measured(sysReport.system?.memUsage ?? 0, "host-system-metrics", { staleAfterMs: 30_000 }),
+      disk: measured(sysReport.disk?.length > 0 ? parseInt(String(sysReport.disk[0]?.usePct || "0")) : 0, "host-system-metrics", { staleAfterMs: 60_000 }),
+      threats: measured(shieldBlocks, "proxy_traffic:block-verdicts", { staleAfterMs: 30_000 }),
+      alerts: measured(openAlerts, "alerts:active-production", { staleAfterMs: 30_000 }),
+      p95LatencyMs: p95Telemetry,
+      costUsd: costTelemetry,
+    },
   };
 
   // Only include local instance when OpenClaw is actually present on this machine.
   // Fresh installs (no openclaw.json, no connection) return an empty array so the
   // welcome screen can render instead of a bogus "local" row.
   const hasOpenClaw = ocStatus.connected || ocConfig != null;
-  const instances: Array<typeof localInstance> = hasOpenClaw ? [localInstance] : [];
+  const instances: FleetApiInstance[] = hasOpenClaw ? [localInstance] : [];
   try {
     const gateways = queryAll<GatewayRow>(
       "SELECT * FROM config_gateways WHERE is_active = 1 ORDER BY is_primary DESC, name ASC",
@@ -262,16 +324,28 @@ export async function GET(request: NextRequest) {
         client: gw.client_name || gw.name,
         version: "--",
         status: gw.status === "connected" ? "healthy" : gw.status === "error" ? "critical" : "degraded",
-        uptime: 0, cpu: 0, mem: 0, disk: 0, threats: 0, alerts: 0,
+        uptime: 0, cpu: null, mem: null, disk: null, threats: null, alerts: null,
         region: "Remote",
         heartbeat: gw.last_connected_at ? new Date(gw.last_connected_at).getTime() : 0,
-        agents: 0, sessions: 0, p95: 0, cost: 0,
+        agents: null, sessions: null, storedSessions: null, p95: null, cost: null,
         posture: gw.status === "connected" ? 80 : 30,
         isLive: gw.status === "connected",
         services: {
           openclaw: gw.status === "connected" ? "online" : "offline",
           paperclip: "offline" as const,
           autensa: "offline" as const,
+        },
+        telemetry: {
+          configuredAgents: unavailable("remote-gateway", "Remote agent inventory is not implemented"),
+          activeSessions: unavailable("remote-gateway", "Remote session telemetry is not implemented"),
+          storedSessions: unavailable("remote-gateway", "Remote session inventory is not implemented"),
+          cpu: unavailable("remote-gateway", "Remote host metrics are not implemented"),
+          memory: unavailable("remote-gateway", "Remote host metrics are not implemented"),
+          disk: unavailable("remote-gateway", "Remote host metrics are not implemented"),
+          threats: unavailable("remote-gateway", "Remote threat telemetry is not implemented"),
+          alerts: unavailable("remote-gateway", "Remote alert telemetry is not implemented"),
+          p95LatencyMs: unavailable("remote-gateway", "Remote latency telemetry is not implemented"),
+          costUsd: unavailable("remote-gateway", "Remote cost telemetry is not implemented"),
         },
       });
     }
@@ -283,6 +357,12 @@ export async function GET(request: NextRequest) {
   try {
     const hermes = diagnoseHermes();
     if (config.hermes.enabled && hermes.installed) {
+      const hermesObservedAt = hermes.lastActivity;
+      const hermesFreshness = 7 * 24 * 60 * 60 * 1000;
+      const hermesSessions = hermes.available
+        ? measured(hermes.sessions.last24h, "hermes.state.db:sessions", { observedAt: hermesObservedAt, staleAfterMs: hermesFreshness })
+        : unavailable<number>("hermes.state.db:sessions", hermes.statusDetail || "Hermes state database is unavailable");
+      const hermesAgents = notApplicable<number>("hermes.state.db", "Hermes exposes channels and sessions, not an agent inventory");
       instances.push({
         id: "hermes-local",
         client: "Hermes Agent",
@@ -291,16 +371,31 @@ export async function GET(request: NextRequest) {
           ? hermes.status === "live" ? "healthy" : "degraded"
           : "critical",
         uptime: hermes.lastActivityAgeSeconds ?? 0,
-        cpu: 0, mem: 0, disk: 0, threats: 0, alerts: 0,
+        cpu: null, mem: null, disk: null, threats: null, alerts: null,
         region: "Local",
         heartbeat: hermes.lastActivity ? new Date(hermes.lastActivity).getTime() : 0,
-        agents: Math.max(hermes.channels.observed.length, hermes.channels.configured.length),
-        sessions: hermes.sessions.last24h,
-        p95: 0,
-        cost: 0,
+        agents: null,
+        sessions: hermesSessions.value,
+        storedSessions: hermes.available ? hermes.sessions.total : null,
+        p95: null,
+        cost: null,
         posture: null as number | null,
         isLive: hermes.status === "live",
         services: { openclaw: "offline" as const, paperclip: "offline" as const, autensa: "offline" as const },
+        telemetry: {
+          configuredAgents: hermesAgents,
+          activeSessions: hermesSessions,
+          storedSessions: hermes.available
+            ? measured(hermes.sessions.total, "hermes.state.db:sessions", { observedAt: hermesObservedAt, staleAfterMs: hermesFreshness })
+            : unavailable("hermes.state.db:sessions", hermes.statusDetail || "Hermes state database is unavailable"),
+          cpu: notApplicable("hermes.state.db", "Hermes does not expose host CPU telemetry"),
+          memory: notApplicable("hermes.state.db", "Hermes does not expose host memory telemetry"),
+          disk: notApplicable("hermes.state.db", "Hermes does not expose host disk telemetry"),
+          threats: unavailable("hermes.state.db", "Hermes threat totals are not available from state.db"),
+          alerts: unavailable("hermes.state.db", "Hermes alert totals are not available from state.db"),
+          p95LatencyMs: notApplicable("hermes.state.db", "Hermes does not expose request latency in state.db"),
+          costUsd: unavailable("hermes.state.db", "No usable Hermes cost rows were observed"),
+        },
       });
     }
   } catch {}
@@ -321,8 +416,14 @@ export async function GET(request: NextRequest) {
     openclaw: {
       connected: ocStatus.connected,
       authenticated: ocStatus.authenticated,
-      sessions: ocStatus.sessions,
-      agents: ocStatus.agents,
+      sessions: activeSessionsTelemetry.value,
+      agents: configuredAgentsTelemetry.value,
+      storedSessions: storedSessionsTelemetry.value,
+      telemetry: {
+        configuredAgents: configuredAgentsTelemetry,
+        activeSessions: activeSessionsTelemetry,
+        storedSessions: storedSessionsTelemetry,
+      },
       lastEvent: ocStatus.lastEvent,
       lastError: ocStatus.lastError,
     },
