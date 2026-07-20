@@ -196,7 +196,8 @@ export function TokenCostPanel({ filters, demoMode, health, incomingFromMissionC
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
             {SOURCE_ORDER.map(src => {
               const t = tokenData.perSource?.[src];
-              const total = t?.totalUsd ?? 0;
+              const hasCostObservations = (t?.count ?? 0) > 0;
+              const total = hasCostObservations ? t?.totalUsd ?? null : null;
               const count = t?.count ?? 0;
               // Source-specific tooltip content — pasted verbatim per operator
               // 2026-05-04 spec. Wrap each per-source tile with a compact
@@ -211,9 +212,9 @@ export function TokenCostPanel({ filters, demoMode, health, incomingFromMissionC
                 <Tooltip key={src} as="div" placement="bottom" variant="compact" content={sourceTip[src]}>
                   <Stat
                     label={SOURCE_LABEL[src]}
-                    value={`$${total.toFixed(4)}`}
-                    sub={`${count} rows`}
-                    color={SOURCE_COLOR[src]}
+                    value={total == null ? "Unavailable" : `$${total.toFixed(4)}`}
+                    sub={total == null ? "No cost observations" : `${count} rows`}
+                    color={total == null ? C.txT : SOURCE_COLOR[src]}
                   />
                 </Tooltip>
               );

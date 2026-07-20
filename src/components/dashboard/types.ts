@@ -108,6 +108,15 @@ export interface InfraData {
     url: string;
     status: string;
     latency: number;
+    version?: string;
+    transport?: string;
+    ingestion_summary?: string;
+    observed_at?: string | null;
+    stale_after_ms?: number | null;
+    last_seen_ms_ago?: number | null;
+    activity_state?: "measured" | "stale" | "unavailable";
+    detail?: string;
+    error?: string;
   }>;
 }
 

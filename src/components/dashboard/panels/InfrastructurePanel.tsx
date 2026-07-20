@@ -201,7 +201,7 @@ export function InfrastructurePanel({ infra: liveInfra, onNavigate, filters, dem
                 // Status badge column widened from 90px to 150px so "NOT_CONFIGURED"
                 // (the longest label) fits cleanly without clipping. Also nudges latency
                 // (now 60px) and bar (70px) to keep the row visually balanced.
-                display: "grid", gridTemplateColumns: "20px 180px 1fr 150px 60px 70px 120px", alignItems: "center", gap: 6, padding: "8px 12px", marginBottom: 4,
+                display: "grid", gridTemplateColumns: "20px 180px minmax(220px, 1fr) 150px 60px 70px 120px", alignItems: "center", gap: 6, padding: "8px 12px", marginBottom: 4,
                 background: clickable ? `${C.brand}22` : isDegraded ? `${C.warn}22` : isOffline ? `${C.danger}22` : C.glassSurfTrans,
                 border: `1px solid ${C.glassSurfBorder}`,
                 borderLeft: `3px solid ${clickable ? C.brand : sc}`,
@@ -214,7 +214,14 @@ export function InfrastructurePanel({ infra: liveInfra, onNavigate, filters, dem
             >
               <Dot color={sc} size={8} glow={s.status === "online"} />
               <span style={{ fontWeight: 600, fontSize: 13, color: C.tx }}>{s.name}</span>
-              <span style={{ fontSize: 11, color: C.txT, fontFamily: F.mono, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{s.url}</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: C.txT, fontFamily: F.mono, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{s.url}</div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 3, minWidth: 0, flexWrap: "wrap" }}>
+                  {s.transport && <span style={{ fontSize: 10, color: C.cyan, fontFamily: F.mono }}>Transport: {s.transport}</span>}
+                  {s.version && <span style={{ fontSize: 10, color: C.txS, fontFamily: F.mono }}>Version: {s.version}</span>}
+                  {s.ingestion_summary && <span style={{ fontSize: 10, color: C.txS, fontFamily: F.mono }}>{s.ingestion_summary}</span>}
+                </div>
+              </div>
               {(() => {
                 const upper = s.status.toUpperCase();
                 // Status-specific tooltip — every state gets an explanation so the

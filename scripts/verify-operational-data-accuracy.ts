@@ -40,6 +40,14 @@ const infrastructure = read("src/app/api/infrastructure/route.ts");
 assert.doesNotMatch(infrastructure, /return\s+["'](?:WS|HTTP|state\.db)["']/, "transport labels must not be reported as versions");
 assert.match(infrastructure, /proxy_traffic[\s\S]*session-watcher/, "OpenClaw ingestion must use the traffic stream");
 
+const infrastructurePanel = read("src/components/dashboard/panels/InfrastructurePanel.tsx");
+assert.match(infrastructurePanel, /Transport:\s*\{s\.transport\}/, "Infrastructure must render transport metadata");
+assert.match(infrastructurePanel, /s\.ingestion_summary/, "Infrastructure must render ingestion evidence");
+
+const tokenPanel = read("src/components/dashboard/panels/TokenCostPanel.tsx");
+assert.doesNotMatch(tokenPanel, /const total = t\?\.totalUsd \?\? 0/, "missing cost totals must not become measured zeroes");
+assert.match(tokenPanel, /No cost observations/, "Token Intel must explain unavailable cost totals");
+
 const fleet = read("src/app/api/fleet/route.ts");
 assert.match(fleet, /telemetry:/, "fleet responses must expose telemetry provenance");
 assert.match(fleet, /storedSessions/, "stored and active sessions must remain distinct");
