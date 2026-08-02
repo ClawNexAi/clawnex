@@ -92,21 +92,54 @@ async function main() {
     "new message visible to ClawNex shield",
     now + 1,
   );
+  // A message can outlive its session row after Hermes cleanup. It must still
+  // be ingested with honest unavailable metadata instead of being dropped by
+  // an inner join.
+  hdb2.prepare("INSERT INTO messages (id, session_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)").run(
+    3,
+    "session-pruned-by-hermes",
+    "assistant",
+    "message remains observable after session metadata cleanup",
+    now + 2,
+  );
   hdb2.close();
 
   watcher.pollHermesMessages();
 
   const cursor = queryOne<{ last_message_id: number }>("SELECT last_message_id FROM hermes_ingest_cursors LIMIT 1");
-  assert.equal(cursor?.last_message_id, 2);
+  assert.equal(cursor?.last_message_id, 3);
 
   const event = queryOne<{ source_id: string; message_id: number; content_hash: string; shield_verdict: string; traffic_id: string }>(
     "SELECT source_id, message_id, content_hash, shield_verdict, traffic_id FROM hermes_events WHERE message_id = 2",
   );
-  assert.equal(event?.source_id, "hermes:profile:prod:channel:discord");
+  assert.match(event?.source_id ?? "", /^hermes:home:[a-f0-9]{12}:profile:prod:channel:discord$/);
   assert.equal(event?.message_id, 2);
   assert.equal(event?.content_hash.length, 16);
   assert.equal(event?.shield_verdict, "ALLOW");
   assert.ok(event?.traffic_id);
+
+  const orphanEvent = queryOne<{ source_id: string; message_id: number; traffic_id: string }>(
+    "SELECT source_id, message_id, traffic_id FROM hermes_events WHERE message_id = 3",
+  );
+  assert.match(orphanEvent?.source_id ?? "", /^hermes:home:[a-f0-9]{12}:profile:prod:channel:unknown-channel$/);
+  assert.equal(orphanEvent?.message_id, 3);
+  assert.ok(orphanEvent?.traffic_id);
+
+  const trafficAfterFirstPoll = queryOne<{ count: number }>(
+    "SELECT COUNT(*) AS count FROM proxy_traffic WHERE source = 'hermes-watcher'",
+  );
+  assert.equal(trafficAfterFirstPoll?.count, 2);
+
+  // Re-polling the same high-water range must not duplicate traffic or
+  // evidence, even if the cursor is repaired or the process is restarted.
+  watcher.pollHermesMessages();
+  const trafficAfterDuplicatePoll = queryOne<{ count: number }>(
+    "SELECT COUNT(*) AS count FROM proxy_traffic WHERE source = 'hermes-watcher'",
+  );
+  assert.equal(trafficAfterDuplicatePoll?.count, 2);
+
+  const cursorAfterPoll = queryOne<{ last_message_id: number }>("SELECT last_message_id FROM hermes_ingest_cursors LIMIT 1");
+  assert.equal(cursorAfterPoll?.last_message_id, 3);
 
   const rawLeak = queryOne<{ cnt: number }>(
     "SELECT COUNT(*) AS cnt FROM hermes_events WHERE content_hash LIKE '%new message visible%'",
