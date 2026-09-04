@@ -41,7 +41,7 @@
   "dependencies": {
     "@heygen/liveavatar-web-sdk": "0.0.12",
     "@simplewebauthn/browser": "13.3.0",
-    "@simplewebauthn/server": "13.3.0",
+    "@simplewebauthn/server": "13.3.2",
     "bcryptjs": "2.4.3",
     "better-sqlite3": "12.8.0",
     "bufferutil": "4.1.0",
