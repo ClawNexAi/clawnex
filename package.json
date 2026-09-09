@@ -40,6 +40,7 @@
     "verify:coding-agent-connectors": "tsx scripts/verify-coding-agent-connectors.ts",
     "verify:coding-agent-routing-visibility": "tsx scripts/verify-coding-agent-routing-visibility.ts",
     "verify:opencode-routing": "tsx scripts/verify-opencode-routing.ts",
+    "verify:routing-provider-label": "tsx scripts/verify-routing-provider-label.tsx",
     "verify:hermes-routing-credentials": "tsx scripts/verify-hermes-routing-credentials.ts",
     "verify:security-remediation": "tsx scripts/verify-github-security-remediation.ts",
     "sbom": "npm sbom --sbom-format=cyclonedx --omit=dev > sbom.json"

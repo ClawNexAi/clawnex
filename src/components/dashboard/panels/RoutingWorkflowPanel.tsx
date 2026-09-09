@@ -16,6 +16,15 @@ const connectorPresentation: Record<ConnectorId, { title: string; accent: string
   opencode: { title: 'OpenCode', accent: C.cyan, focusKey: 'opencodeRouting' },
 };
 
+export function RoutingProviderLabel({ providerId, displayName }: { providerId: string; displayName: string }) {
+  const friendlyName = displayName.trim() || providerId;
+  const showConfigId = friendlyName.toLocaleLowerCase() !== providerId.toLocaleLowerCase();
+  return <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: 2 }}>
+    <strong>{friendlyName}</strong>
+    {showConfigId && <span style={{ color: C.txS, fontSize: 10 }}>Config ID: <span style={{ fontFamily: F.mono }}>{providerId}</span></span>}
+  </span>;
+}
+
 async function command(body: Record<string, unknown>) {
   const response = await fetch('/api/connector-routing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const result = await response.json();
@@ -107,6 +116,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
       {groups.map(([providerId, rows]) => {
         const writable = rows.filter(row => ['provider-routing', 'model-inventory'].includes(row.capability));
         const models = [...new Set(rows.map(row => row.modelId).filter(Boolean))];
+        const providerDisplayName = rows.find(row => row.itemType === 'provider')?.displayName || providerId;
         return <div key={providerId} style={{ padding: '10px 12px', border: `1px solid ${C.brd}`, borderRadius: 6, marginBottom: 8 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, color: C.tx }}>
             <input type="checkbox" aria-label={`Route ${providerId} through ClawNex for ${title} ${sourceId}`} disabled={busy || !writable.length} checked={writable.some(row => row.desiredRoute === 'routed')}
@@ -114,7 +124,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
                 await command({ action: 'select', connector, itemIds: writable.map(row => row.id), desiredRoute: checked ? 'routed' : 'direct' });
                 await refresh();
               }); }} />
-            <strong>{providerId}</strong>
+            <RoutingProviderLabel providerId={providerId} displayName={providerDisplayName} />
             <span style={{ marginLeft: 'auto', color: C.txS, fontSize: 11 }}>{!writable.length ? 'Not supported · unchanged' : rows.some(row => row.currentRoute === 'routed') ? 'Configured' : 'Direct'}</span>
           </label>
           <details style={{ marginTop: 8, color: C.txS, fontSize: 12 }}><summary>{models.length} affected model(s)</summary>
