@@ -225,6 +225,21 @@ CREATE TABLE IF NOT EXISTS hermes_instances (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Coding-agent connectors. Connector-specific adapters validate and manage
+-- their configuration; this registry is shared by OpenCode and future agents.
+CREATE TABLE IF NOT EXISTS coding_agent_connectors (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  name TEXT NOT NULL,
+  config_path TEXT NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'unknown',
+  last_error TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(type, config_path)
+);
+
 -- Hermes Agent normalized ingestion cursors
 CREATE TABLE IF NOT EXISTS hermes_ingest_cursors (
   source_id TEXT PRIMARY KEY,
@@ -916,6 +931,19 @@ export const MIGRATIONS: string[] = [
   )`,
   "CREATE INDEX IF NOT EXISTS idx_connector_routing_connector ON connector_routing_items(connector, present)",
   "CREATE INDEX IF NOT EXISTS idx_connector_routing_desired ON connector_routing_items(connector, desired_route)",
+
+  `CREATE TABLE IF NOT EXISTS coding_agent_connectors (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    config_path TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'unknown',
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(type, config_path)
+  )`,
 
   // 2026-08-04: durable, secret-free routing reconciliation history.
   `CREATE TABLE IF NOT EXISTS connector_routing_snapshots (

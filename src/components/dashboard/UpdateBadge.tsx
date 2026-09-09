@@ -44,9 +44,10 @@ interface UpdateSource {
   updateAvailable: boolean;
   openclawChanges?: number;
   hermesChanges?: number;
+  opencodeChanges?: number;
   reconciliationEvents?: Array<{
     id: string;
-    connector: "openclaw" | "hermes";
+    connector: "openclaw" | "hermes" | 'opencode';
     changeType: string;
     protectionState: string;
     actionRequired: boolean;
@@ -158,10 +159,12 @@ export function UpdateBadge({ navigate }: Props) {
   //                      "never touch OpenClaw" rule).
   //                    - ClawNex Shield Rules ship bundled with ClawNex
   //                      releases; only changing on a ClawNex version bump.
-  const connectorRoutingFocusKey =
-    data.connectorRouting?.hermesChanges && !data.connectorRouting?.openclawChanges
-      ? "hermesRouting"
-      : "openclawRouting";
+  const connectorRoutingFocusKey = data.connectorRouting?.opencodeChanges &&
+    !data.connectorRouting?.openclawChanges && !data.connectorRouting?.hermesChanges
+    ? 'opencodeRouting'
+    : data.connectorRouting?.hermesChanges && !data.connectorRouting?.openclawChanges
+      ? 'hermesRouting'
+      : 'openclawRouting';
   const routingEvents = data.connectorRouting?.reconciliationEvents || [];
   const actionableRoutingEvents = routingEvents.filter((event) => event.actionRequired);
 

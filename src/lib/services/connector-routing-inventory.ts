@@ -28,8 +28,9 @@ import { getDb } from "@/lib/db/index";
 import { commitRoutingFile, publishRoutingFile, removeRoutingJournal, withRoutingOperationLock } from './routing-file-transaction';
 import { ROUTING_IDENTITY_HEADER, prepareIdentityHeader, identityHeaderMatches, routingIdentityHash, type RoutingIdentityOwnership } from './routing-identity';
 import { sealRoutingCredential, openRoutingCredential, type EncryptedRoutingCredential } from './routing-credential-recovery';
+import { discoverOpenCodeItems, openCodeRoutingOwnershipFingerprint, OPENCODE_SIDECAR_PATH } from './opencode-routing';
 
-export type ConnectorId = "openclaw" | "hermes";
+export type ConnectorId = "openclaw" | "hermes" | "opencode";
 export type RoutingItemType = "provider" | "model";
 export type RoutingCapability = "provider-routing" | "model-inventory" | "read-only" | "unsupported";
 export type RoutingState = "routed" | "direct" | "unknown" | "unsupported";
@@ -81,6 +82,7 @@ export interface ConnectorRoutingResponse {
   litellmTarget: string;
   openclaw: ConnectorRoutingSummary;
   hermes: ConnectorRoutingSummary;
+  opencode: ConnectorRoutingSummary;
   driftTotal: number;
   scannedAt: string;
   reconciliation: {
@@ -110,7 +112,7 @@ interface DbRoutingRow {
   updated_at: string;
 }
 
-interface DiscoveredRoutingItem {
+export interface DiscoveredRoutingItem {
   connector: ConnectorId;
   sourceId: string;
   itemType: RoutingItemType;
@@ -265,6 +267,14 @@ function providerCapability(baseUrl: string | null, protocol?: unknown): Routing
 function isProxyBridgeProvider(connector: ConnectorId, providerId: string): boolean {
   return (connector === "openclaw" && providerId === "litellm")
     || (connector === "hermes" && providerId === HERMES_LITELLM_PROVIDER_NAME);
+}
+
+function discoverConnectorItems(connector: ConnectorId): {
+  status: ConnectorRoutingSummary['status']; detail: string; sourceId: string; items: DiscoveredRoutingItem[];
+} {
+  if (connector === 'openclaw') return discoverOpenClawItems();
+  if (connector === 'hermes') return discoverHermesItems();
+  return discoverOpenCodeItems();
 }
 
 function expandHomePath(input: string): string {
@@ -978,6 +988,7 @@ function persistDiscovery(
 export function syncConnectorRoutingInventory(trigger = "sync"): ConnectorRoutingResponse {
   const openclaw = persistDiscovery("openclaw", discoverOpenClawItems());
   const hermes = persistDiscovery("hermes", discoverHermesItems());
+  const opencode = persistDiscovery('opencode', discoverOpenCodeItems());
   const snapshots = (summary: ConnectorRoutingSummary) => {
     const sources = [...new Set([summary.sourceId, ...summary.items.map(item => item.sourceId)])];
     return sources.map(sourceId => recordRoutingSnapshot(summary.connector,
@@ -985,16 +996,18 @@ export function syncConnectorRoutingInventory(trigger = "sync"): ConnectorRoutin
   };
   const openclawSnapshot = snapshots(openclaw)[0];
   const hermesSnapshot = snapshots(hermes)[0];
+  const opencodeSnapshot = snapshots(opencode)[0];
   const scannedAt = nowIso();
   return {
     litellmTarget: litellmTarget(),
     openclaw,
     hermes,
-    driftTotal: openclaw.drift.total + hermes.drift.total,
+    opencode,
+    driftTotal: openclaw.drift.total + hermes.drift.total + opencode.drift.total,
     scannedAt,
     reconciliation: {
       events: listUnresolvedRoutingEvents(),
-      lastSnapshotIds: { openclaw: openclawSnapshot.snapshotId, hermes: hermesSnapshot.snapshotId },
+      lastSnapshotIds: { openclaw: openclawSnapshot.snapshotId, hermes: hermesSnapshot.snapshotId, opencode: opencodeSnapshot.snapshotId },
     },
   };
 }
@@ -1003,7 +1016,7 @@ export function setConnectorRoutingSelections(connector: ConnectorId, itemIds: s
   const now = nowIso();
   const ids = [...new Set(itemIds)];
   if (ids.length === 0) {
-    return persistDiscovery(connector, connector === "openclaw" ? discoverOpenClawItems() : discoverHermesItems());
+    return persistDiscovery(connector, discoverConnectorItems(connector));
   }
   const placeholders = ids.map(() => "?").join(",");
   const rows = queryAll<{ id: string; provider_id: string; capability: RoutingCapability }>(
@@ -1028,12 +1041,12 @@ export function setConnectorRoutingSelections(connector: ConnectorId, itemIds: s
      WHERE connector = ? AND id IN (${placeholders})`,
     [desiredRoute, now, connector, ...ids],
   );
-  return persistDiscovery(connector, connector === "openclaw" ? discoverOpenClawItems() : discoverHermesItems());
+  return persistDiscovery(connector, discoverConnectorItems(connector));
 }
 
 export function setAllConnectorRoutingSelections(connector: ConnectorId, desiredRoute: DesiredRoutingState): ConnectorRoutingSummary {
   const now = nowIso();
-  const excludedProvider = connector === "openclaw" ? "litellm" : HERMES_LITELLM_PROVIDER_NAME;
+  const excludedProvider = connector === "openclaw" ? "litellm" : connector === 'hermes' ? HERMES_LITELLM_PROVIDER_NAME : '__none__';
   run(
     `UPDATE connector_routing_items
      SET desired_route = ?, updated_at = ?
@@ -1042,7 +1055,7 @@ export function setAllConnectorRoutingSelections(connector: ConnectorId, desired
        AND provider_id != ?`,
     [desiredRoute, now, connector, excludedProvider],
   );
-  return persistDiscovery(connector, connector === "openclaw" ? discoverOpenClawItems() : discoverHermesItems());
+  return persistDiscovery(connector, discoverConnectorItems(connector));
 }
 
 function readSelectiveSidecar(): SelectiveRoutingSidecar | null {
@@ -1272,10 +1285,12 @@ export interface ApplyOpenClawRoutingResult {
 export interface RoutingApplyScope { sourceId?: string; expectedFiles?: Record<string, string>; restore?: boolean }
 
 export async function withConnectorRoutingLock<T>(connector: ConnectorId, task: () => T | Promise<T>): Promise<T> {
-  return await withRoutingOperationLock(connector === 'openclaw' ? SELECTIVE_SIDECAR_PATH : HERMES_SIDECAR_PATH, task);
+  const journal = connector === 'openclaw' ? SELECTIVE_SIDECAR_PATH : connector === 'hermes' ? HERMES_SIDECAR_PATH : OPENCODE_SIDECAR_PATH;
+  return await withRoutingOperationLock(journal, task);
 }
 
 export function routingOwnershipFingerprint(connector: ConnectorId): string {
+  if (connector === 'opencode') return openCodeRoutingOwnershipFingerprint();
   const file = connector === 'openclaw' ? SELECTIVE_SIDECAR_PATH : HERMES_SIDECAR_PATH;
   return stableHash(fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null);
 }
@@ -1657,7 +1672,11 @@ export function applyHermesDesiredRouting(scope: RoutingApplyScope = {}): ApplyH
       const currentApiMode = getYamlString(primaryMap, "api_mode") || getYamlString(primaryMap, "apiMode");
       if (primarySelected) {
         const upstreamProvider = primaryRecord?.originalProvider || currentProvider;
-        const upstreamBaseUrl = primaryRecord?.originalBaseUrl || currentBaseUrl;
+        const configuredProvider = providerMaps.find(provider => provider.providerId === upstreamProvider);
+        const configuredProviderBaseUrl = configuredProvider
+          ? getYamlString(configuredProvider.map, configuredProvider.baseUrlKey)
+          : null;
+        const upstreamBaseUrl = primaryRecord?.originalBaseUrl || currentBaseUrl || configuredProviderBaseUrl;
         const proxyModel = resolveConfiguredProxyModel(primaryModelId, { providerId: upstreamProvider, baseUrl: upstreamBaseUrl });
         if (!proxyModel) {
           skippedProviders.push({ providerId: primaryModelId, reason: "no unique configured LiteLLM model alias matches this Hermes model" });
@@ -2003,7 +2022,7 @@ export function revertHermesRouting(scope: RoutingApplyScope = {}): RevertHermes
   };
 }
 
-export function getConnectorRoutingDriftSnapshot(): { total: number; openclaw: number; hermes: number; lastChecked: string | null } {
+export function getConnectorRoutingDriftSnapshot(): { total: number; openclaw: number; hermes: number; opencode: number; lastChecked: string | null } {
   const rows = queryAll<{ connector: ConnectorId; count: number }>(
     `SELECT connector, COUNT(*) AS count
      FROM connector_routing_items
@@ -2013,6 +2032,7 @@ export function getConnectorRoutingDriftSnapshot(): { total: number; openclaw: n
   );
   const openclaw = rows.find((row) => row.connector === "openclaw")?.count || 0;
   const hermes = rows.find((row) => row.connector === "hermes")?.count || 0;
+  const opencode = rows.find((row) => row.connector === 'opencode')?.count || 0;
   const last = queryOne<{ ts: string }>("SELECT MAX(updated_at) AS ts FROM connector_routing_items");
-  return { total: openclaw + hermes, openclaw, hermes, lastChecked: last?.ts || null };
+  return { total: openclaw + hermes + opencode, openclaw, hermes, opencode, lastChecked: last?.ts || null };
 }

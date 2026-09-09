@@ -10,6 +10,11 @@ import type { RoutingVerification } from '@/lib/services/routing-reconciliation'
 
 const button = { padding: '8px 12px', borderRadius: 6, border: `1px solid ${C.brand}66`, background: `${C.brand}16`, color: C.brand, fontFamily: F.disp, fontSize: 12, cursor: 'pointer' };
 const primaryButton = { ...button, background: C.brand, color: C.bg, borderColor: C.brand, fontWeight: 700 };
+const connectorPresentation: Record<ConnectorId, { title: string; accent: string; focusKey: string }> = {
+  openclaw: { title: 'OpenClaw', accent: C.brand, focusKey: 'openclawRouting' },
+  hermes: { title: 'Hermes', accent: C.purp, focusKey: 'hermesRouting' },
+  opencode: { title: 'OpenCode', accent: C.cyan, focusKey: 'opencodeRouting' },
+};
 
 async function command(body: Record<string, unknown>) {
   const response = await fetch('/api/connector-routing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -31,7 +36,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   const [plan, setPlan] = useState<RoutingPlan | null>(null);
   const reviewOrigin = useRef<HTMLElement | null>(null);
   const [verification, setVerification] = useState<{ key: string; result: RoutingVerification } | null>(null);
-  const title = connector === 'openclaw' ? 'OpenClaw' : 'Hermes';
+  const { title, accent, focusKey } = connectorPresentation[connector];
   const items = summary.items.filter(item => item.present && item.sourceId === sourceId && !['litellm', 'clawnex-litellm'].includes(item.providerId));
   const providers = new Map<string, ConnectorRoutingItem[]>();
   for (const item of items) providers.set(item.providerId, [...(providers.get(item.providerId) || []), item]);
@@ -69,8 +74,8 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
     });
   };
 
-  return <CollapsibleCard title={`${title.toUpperCase()} ROUTING`} accent={connector === 'openclaw' ? C.brand : C.purp}
-    defaultOpen={false} focusKey={connector === 'openclaw' ? 'openclawRouting' : 'hermesRouting'} focusedCard={focusedCard}>
+  return <CollapsibleCard title={`${title.toUpperCase()} ROUTING`} accent={accent}
+    defaultOpen={false} focusKey={focusKey} focusedCard={focusedCard}>
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
       <strong style={{ color: C.tx }}>{currentVerification?.status === 'verified' ? 'Routed models verified' : routed ? 'Configured · verification required' : 'Direct connection'}</strong>
       <select aria-label={`${title} instance`} disabled={busy || sources.length === 0} value={sourceId}
@@ -130,7 +135,10 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   </CollapsibleCard>;
 }
 
-export function RoutingWorkflowPanel({ focusedCard }: { focusedCard?: string | null }) {
+export function RoutingWorkflowPanel({ focusedCard, connectors = ['openclaw', 'hermes'] }: {
+  focusedCard?: string | null;
+  connectors?: readonly ConnectorId[];
+}) {
   const [data, setData] = useState<ConnectorRoutingResponse | null>(null);
   const [error, setError] = useState('');
   const refresh = useCallback(async () => {
@@ -141,6 +149,7 @@ export function RoutingWorkflowPanel({ focusedCard }: { focusedCard?: string | n
   }, []);
   useEffect(() => { void refresh().catch(reason => setError(String(reason.message || reason))); }, [refresh]);
   return <>{error && <p role="alert" style={{ color: C.warn }}>{error}</p>}
-    {data ? <>{(['openclaw', 'hermes'] as const).map(connector => <InstanceRouting key={connector} connector={connector} data={data} refresh={refresh} focusedCard={focusedCard} />)}</>
+    {data ? <>{connectors.filter(connector => data[connector].status !== 'missing').map(connector =>
+      <InstanceRouting key={connector} connector={connector} data={data} refresh={refresh} focusedCard={focusedCard} />)}</>
       : error ? <button style={button} onClick={() => { setError(''); void refresh().catch(reason => setError(String(reason.message || reason))); }}>Retry reading configuration</button> : <p style={{ color: C.txS }}>Reading routing configuration…</p>}</>;
 }

@@ -9,9 +9,9 @@ async function main() {
   const { NextRequest } = await import('next/server');
   const { getDb, queryOne } = await import('../src/lib/db');
   const { POST } = await import('../src/app/api/proxy/ingest/route');
-  const body = { direction: 'outbound', model: 'fixture-model', routing_connector: 'hermes', routing_source_id: 'instance-a', proxy_request_id: 'request-a' };
-  const request = (secret?: string) => new NextRequest('http://127.0.0.1:15001/api/proxy/ingest', {
-    method: 'POST', headers: { origin: 'http://127.0.0.1:15001', 'content-type': 'application/json', ...(secret ? { 'x-clawnex-ingest-secret': secret } : {}) }, body: JSON.stringify(body),
+  const body = (connector: 'hermes' | 'opencode') => ({ direction: 'outbound', model: 'fixture-model', routing_connector: connector, routing_source_id: connector === 'opencode' ? 'opencode:global' : 'instance-a', proxy_request_id: `request-${connector}` });
+  const request = (secret?: string, connector: 'hermes' | 'opencode' = 'hermes') => new NextRequest('http://127.0.0.1:15001/api/proxy/ingest', {
+    method: 'POST', headers: { origin: 'http://127.0.0.1:15001', 'content-type': 'application/json', ...(secret ? { 'x-clawnex-ingest-secret': secret } : {}) }, body: JSON.stringify(body(connector)),
   });
   try {
     delete process.env.CLAWNEX_INGEST_SECRET;
@@ -25,6 +25,10 @@ async function main() {
     assert.equal(authenticated.status, 200);
     const id = (await authenticated.json()).id;
     assert.equal(queryOne<{ trusted: number }>('SELECT routing_identity_verified AS trusted FROM proxy_traffic WHERE id = ?', [id])?.trusted, 1);
+    const openCode = await POST(request('fixture-ingest-secret', 'opencode'));
+    assert.equal(openCode.status, 200);
+    const openCodeId = (await openCode.json()).id;
+    assert.equal(queryOne<{ connector: string }>('SELECT routing_connector AS connector FROM proxy_traffic WHERE id = ?', [openCodeId])?.connector, 'opencode');
     console.log('PASS: localhost labels cannot attest identity; authenticated proxy callback can record exact-instance evidence');
   } finally { getDb().close(); }
 }

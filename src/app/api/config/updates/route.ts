@@ -246,11 +246,12 @@ export async function GET(request: NextRequest) {
       },
       connectorRouting: {
         name: "Connector Routing",
-        currentVersion: `${routingInventory.openclaw.items.length + routingInventory.hermes.items.length} items`,
+        currentVersion: `${routingInventory.openclaw.items.length + routingInventory.hermes.items.length + routingInventory.opencode.items.length} items`,
         latestVersion: routingInventory.driftTotal > 0 ? `${routingInventory.driftTotal} change${routingInventory.driftTotal === 1 ? "" : "s"}` : null,
         updateAvailable: routingInventory.driftTotal > 0,
         openclawChanges: routingInventory.openclaw.drift.total,
         hermesChanges: routingInventory.hermes.drift.total,
+        opencodeChanges: routingInventory.opencode.drift.total,
         reconciliationEvents: routingInventory.reconciliation.events
           .filter((event) => event.actionRequired)
           .slice(0, 20),

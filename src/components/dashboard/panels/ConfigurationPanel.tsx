@@ -93,6 +93,16 @@ interface HermesInstanceConfig {
   diagnostics?: HermesDiagnostics | null;
 }
 
+interface CodingAgentConnectorConfig {
+  id: string;
+  type: 'opencode';
+  name: string;
+  configPath: string;
+  available: boolean;
+  status: string;
+  error: string | null;
+}
+
 function normalizeHermesPathKey(value?: string | null): string {
   return (value || "").trim().replace(/\/+$/, "");
 }
@@ -2282,7 +2292,7 @@ interface RoutingSidecar {
 
 interface ConnectorRoutingItem {
   id: string;
-  connector: 'openclaw' | 'hermes';
+  connector: 'openclaw' | 'hermes' | 'opencode';
   sourceId: string;
   itemType: 'provider' | 'model';
   providerId: string;
@@ -2311,7 +2321,7 @@ interface ConnectorRoutingSummary {
 
 interface RoutingDriftEventView {
   id: string;
-  connector: "openclaw" | "hermes";
+  connector: "openclaw" | "hermes" | 'opencode';
   itemKey: string;
   changeType: string;
   protectionState: string;
@@ -2327,11 +2337,12 @@ interface ConnectorRoutingResponse {
   litellmTarget: string;
   openclaw: ConnectorRoutingSummary;
   hermes: ConnectorRoutingSummary;
+  opencode: ConnectorRoutingSummary;
   driftTotal: number;
   scannedAt: string;
   reconciliation?: {
     events: RoutingDriftEventView[];
-    lastSnapshotIds: Partial<Record<"openclaw" | "hermes", string>>;
+    lastSnapshotIds: Partial<Record<"openclaw" | "hermes" | 'opencode', string>>;
   };
 }
 
@@ -2352,7 +2363,7 @@ interface ConnectorVerificationView {
 }
 
 function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) {
-  return <RoutingWorkflowPanel focusedCard={focusedCard} />;
+  return <RoutingWorkflowPanel focusedCard={focusedCard} connectors={['openclaw', 'hermes']} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -3609,6 +3620,10 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   // 2026-05-01: "I never use Hermes, hide it."
   const [fcOpenClaw, setFcOpenClaw] = useStickyBoolean("clawnex_fc_openclaw", true);
   const [fcHermes, setFcHermes] = useStickyBoolean("clawnex_fc_hermes", true);
+  const [fcOpenCode, setFcOpenCode] = useStickyBoolean('clawnex_fc_opencode', true);
+  const [codingAgentConnectors, setCodingAgentConnectors] = useState<CodingAgentConnectorConfig[]>([]);
+  const [newOpenCodeName, setNewOpenCodeName] = useState('OpenCode Local');
+  const [openCodeResult, setOpenCodeResult] = useState<string | null>(null);
 
   // Operator management state (RBAC)
   const [rbacOperators, setRbacOperators] = useState<Array<{
@@ -3658,11 +3673,12 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   // Fetch all config from API — fully parallelized
   const fetchConfig = useCallback(async () => {
     try {
-      const [provRes, gwRes, defRes, hermesRes, healthRes, meRes] = await Promise.allSettled([
+      const [provRes, gwRes, defRes, hermesRes, codingAgentRes, healthRes, meRes] = await Promise.allSettled([
         fetch("/api/config/providers"),
         fetch("/api/config/gateways"),
         fetch("/api/config/defaults"),
         fetch("/api/config/hermes-instances"),
+        fetch('/api/config/coding-agent-connectors'),
         // /api/health/detailed — authenticated endpoint carrying the
         // hermesWatcher fields this panel surfaces. Public /api/health
         // deliberately omits them per review finding #A4.
@@ -3705,6 +3721,11 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
       if (hermesRes.status === "fulfilled" && hermesRes.value.ok) {
         const data = await hermesRes.value.json();
         setHermesInstances(data.instances || []);
+      }
+
+      if (codingAgentRes.status === 'fulfilled' && codingAgentRes.value.ok) {
+        const data = await codingAgentRes.value.json();
+        setCodingAgentConnectors(data.connectors || []);
       }
 
       // Hermes status from health
@@ -3973,6 +3994,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   const autoHermesSaved = !!hermesStatus && hermesInstances.some(inst => hermesInstanceMatchesDiagnostics(inst, hermesStatus));
   const showAutoDetectedHermes = !!hermesStatus?.available && !autoHermesSaved;
   const hermesConnectorCount = hermesInstances.length + (showAutoDetectedHermes ? 1 : 0);
+  const openCodeConnectors = codingAgentConnectors.filter(connector => connector.type === 'opencode');
   const renderHermesChecks = (diag: HermesDiagnostics | null | undefined) => {
     if (!diag) return null;
     const checks = [
@@ -4539,7 +4561,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   );
 
   const fleetConnectorsCard = (
-      <CollapsibleCard title={<span style={{ display: "flex", alignItems: "center", gap: 8 }}>FLEET CONNECTORS <span style={{ fontSize: 10, color: C.txT, fontFamily: F.mono }}>4 frameworks &middot; {(gateways.length > 0 ? 1 : 0) + hermesConnectorCount} connected</span></span>} accent={C.brand} defaultOpen={false}>
+      <CollapsibleCard title={<span style={{ display: "flex", alignItems: "center", gap: 8 }}>FLEET CONNECTORS <span style={{ fontSize: 10, color: C.txT, fontFamily: F.mono }}>5 frameworks &middot; {(gateways.length > 0 ? 1 : 0) + hermesConnectorCount + openCodeConnectors.length} connected</span></span>} accent={C.brand} defaultOpen={false}>
         <div style={{ fontSize: 13, color: C.txS, marginBottom: 16 }}>Manage connections to agent frameworks. Each connector enables ClawNex to monitor, scan, and protect traffic from that framework.</div>
 
         {/* --- OpenClaw --- */}
@@ -4650,6 +4672,50 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
             <button onClick={async () => { if (!newHermesName.trim() || !newHermesPath.trim()) return; try { await fetch("/api/config/hermes-instances", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newHermesName.trim(), homePath: newHermesPath.trim() }) }); setNewHermesName(""); setNewHermesPath(""); fetchConfig(); } catch {} }} disabled={!newHermesName.trim() || !newHermesPath.trim()} style={{ padding: "8px 16px", background: !newHermesName.trim() || !newHermesPath.trim() ? C.glassSurfTrans : C.purp, color: "#fff", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: !newHermesName.trim() || !newHermesPath.trim() ? "not-allowed" : "pointer", width: "100%" }}>+ Add Hermes Instance</button>
           </div>
         </div>}
+        </div>
+
+        {/* --- OpenCode (global configuration only) --- */}
+        <div style={{ marginBottom: 20 }}>
+          <div onClick={() => setFcOpenCode(!fcOpenCode)} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: fcOpenCode ? 10 : 0, paddingBottom: 6, borderBottom: `1px solid ${C.glassBorderSubtle}`, cursor: 'pointer' }}>
+            <span style={{ fontSize: 10, color: C.txT, display: 'inline-block', transform: fcOpenCode ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>{'▶'}</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: C.cyan, letterSpacing: '0.04em' }}>OPENCODE</span>
+            <Badge color={openCodeConnectors.some(connector => connector.available) ? C.green : C.txT}
+              label={openCodeConnectors.some(connector => connector.available) ? 'LIVE' : 'NOT CONFIGURED'} />
+          </div>
+          {fcOpenCode && <div>
+            {openCodeConnectors.map(connector => <div key={connector.id} style={{ padding: '12px 14px', marginBottom: 8, background: C.glassSurfTrans, borderRadius: 8, border: `1px solid ${C.glassBorderSubtle}`, borderLeft: `3px solid ${connector.available ? C.green : C.danger}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Dot color={connector.available ? C.green : C.danger} glow={connector.available} size={8} />
+                  <span style={{ fontSize: 14, fontWeight: 700, color: C.tx }}>{connector.name}</span>
+                  <Badge color={connector.available ? C.green : C.danger} label={connector.available ? 'CONNECTED' : 'ERROR'} />
+                  <Badge color={C.cyan} label="GLOBAL CONFIG" />
+                </div>
+                <button onClick={async () => { setOpenCodeResult(null); try {
+                  const response = await fetch(`/api/config/coding-agent-connectors?id=${encodeURIComponent(connector.id)}`, { method: 'DELETE' });
+                  const result = await response.json();
+                  if (!response.ok) setOpenCodeResult(result.error || 'OpenCode connector could not be removed.');
+                  else await fetchConfig();
+                } catch { setOpenCodeResult('OpenCode connector could not be removed.'); } }}
+                  style={{ ...btnStyle, background: C.danger, color: '#fff', padding: '4px 10px', fontSize: 12 }}>Remove</button>
+              </div>
+              <div style={{ fontSize: 12, color: C.txT, fontFamily: F.mono, overflowWrap: 'anywhere' }}>{connector.configPath}</div>
+              {connector.error && <div role="alert" style={{ fontSize: 11, color: C.danger, fontFamily: F.mono, marginTop: 4 }}>{connector.error}</div>}
+            </div>)}
+            {openCodeConnectors.length === 0 && <div style={{ padding: 14, background: `${C.cyan}06`, borderRadius: 8, border: `1px dashed ${C.cyan}33`, marginTop: 8 }}>
+              <div style={{ fontSize: 11, color: C.txT, marginBottom: 3 }}>NAME</div>
+              <input value={newOpenCodeName} onChange={event => setNewOpenCodeName(event.target.value)} placeholder="OpenCode Local" style={{ ...inputStyle, marginBottom: 8 }} />
+              <div style={{ fontSize: 11, color: C.txS, marginBottom: 8 }}>Uses only the global <span style={{ fontFamily: F.mono }}>~/.config/opencode/opencode.json</span>. Project configurations are not changed.</div>
+              <button onClick={async () => { if (!newOpenCodeName.trim()) return; setOpenCodeResult(null); try {
+                const response = await fetch('/api/config/coding-agent-connectors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'opencode', name: newOpenCodeName.trim() }) });
+                const result = await response.json();
+                if (!response.ok) setOpenCodeResult(result.error || 'OpenCode connector could not be added.');
+                else await fetchConfig();
+              } catch { setOpenCodeResult('OpenCode connector could not be added.'); } }} disabled={!newOpenCodeName.trim()}
+                style={{ ...btnStyle, width: '100%', background: newOpenCodeName.trim() ? C.cyan : C.glassSurfTrans, color: '#fff' }}>+ Add OpenCode</button>
+            </div>}
+            {openCodeResult && <div role="alert" style={{ color: C.danger, fontSize: 11, marginTop: 6 }}>{openCodeResult}</div>}
+          </div>}
         </div>
 
         <div style={{ fontSize: 12, color: C.txT, lineHeight: 1.5 }}>
@@ -5010,8 +5076,9 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
 
       {/* ── FLEET & ROUTING ──────────────────────────────────────────── */}
       <CategorySection title="FLEET & ROUTING" accent={C.cyan} storageKey="fleetRouting" focusCard={focusCard}
-        focusKeys={["openclawRouting", "hermesRouting"]}>
+        focusKeys={["openclawRouting", "hermesRouting", "opencodeRouting"]}>
         {fleetConnectorsCard}
+        <RoutingWorkflowPanel focusedCard={focusCard} connectors={['opencode']} />
         <OpenClawRoutingGuide focusedCard={focusCard} />
         <McpServerCard />
       </CategorySection>

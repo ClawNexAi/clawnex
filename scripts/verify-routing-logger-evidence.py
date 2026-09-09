@@ -43,8 +43,8 @@ async def main():
         assert row.get('proxy_request_id') == (response.id if trusted else None), row
     assert not logger._completed_routing_identity(data, response), 'A consumed/forged identity cannot be replayed'
     os.environ['CLAWNEX_INGEST_SECRET'] = 'fixture-only-routing-identity-secret-32-bytes'
-    for source in ['signed-instance-a', 'signed-instance-b']:
-        payload = base64.urlsafe_b64encode(json.dumps({'v': 1, 'connector': 'hermes', 'sourceId': source, 'nonce': 'fixture'}).encode()).decode().rstrip('=')
+    for connector, source in [('hermes', 'signed-instance-a'), ('hermes', 'signed-instance-b'), ('opencode', 'opencode:global')]:
+        payload = base64.urlsafe_b64encode(json.dumps({'v': 1, 'connector': connector, 'sourceId': source, 'nonce': 'fixture'}).encode()).decode().rstrip('=')
         signature = base64.urlsafe_b64encode(hmac.new(os.environ['CLAWNEX_INGEST_SECRET'].encode(), ('clawnex-routing-v1:' + payload).encode(), hashlib.sha256).digest()).decode().rstrip('=')
         token = payload + '.' + signature
         data = {'model': 'shared-model', 'messages': [{'role': 'user', 'content': 'Fixture hello'}], 'proxy_server_request': {'headers': {'x-clawnex-routing-identity': token}}}
@@ -52,6 +52,7 @@ async def main():
         assert 'x-clawnex-routing-identity' not in data['proxy_server_request']['headers'], 'Identity token must not remain in logging metadata'
         response = types.SimpleNamespace(id=source, choices=[types.SimpleNamespace(message=types.SimpleNamespace(content='OK'))], usage=None)
         callback.log_success_event(data, response, datetime.now(), datetime.now())
+        assert rows[-1]['routing_connector'] == connector
         assert rows[-1]['routing_source_id'] == source
         forged = {'proxy_server_request': {'headers': {'x-clawnex-routing-identity': token + 'forged'}}}
         assert logger._signed_routing_identity(forged) is None

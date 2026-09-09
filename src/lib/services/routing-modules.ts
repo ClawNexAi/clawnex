@@ -4,6 +4,7 @@ import {
   type ConnectorId, type ConnectorRoutingSummary, type RoutingApplyScope,
 } from './connector-routing-inventory';
 import { inspectLitellmRouting, revertLitellmRouting } from './openclaw-routing-wire';
+import { applyOpenCodeDesiredRouting } from './opencode-routing';
 
 /** Tool-specific parsing/writes stay behind this interface; approval and ordering
  * belong to the coordinator. A source ID is mandatory, never an all-instances write.
@@ -47,6 +48,16 @@ const modules: Record<ConnectorId, RoutingModule> = {
     id: 'hermes', inspect: sourceId => inspect('hermes', sourceId),
     apply: scope => applyHermesDesiredRouting({ ...scope, restore: false }),
     restore: scope => revertHermesRouting(scope),
+  },
+  opencode: {
+    id: 'opencode', inspect: sourceId => inspect('opencode', sourceId),
+    apply: scope => applyOpenCodeDesiredRouting({ ...scope, restore: false }),
+    restore: scope => {
+      const summary = inspect('opencode', scope.sourceId);
+      setConnectorRoutingSelections('opencode', summary.items.filter(item => item.present &&
+        ['provider-routing', 'model-inventory'].includes(item.capability)).map(item => item.id), 'direct');
+      return applyOpenCodeDesiredRouting({ ...scope, restore: true });
+    },
   },
 };
 

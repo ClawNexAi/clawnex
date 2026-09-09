@@ -2,15 +2,15 @@
  * Connector Routing API
  *
  * GET  /api/connector-routing
- *   Discover OpenClaw/Hermes routing inventory, persist drift state, and
+ *   Discover OpenClaw, Hermes, and OpenCode routing inventory, persist drift state, and
  *   return operator-selectable rows.
  *
  * POST /api/connector-routing
  *   Body:
  *     { action: "select", connector, itemIds, desiredRoute }
  *     { action: "select-all", connector, desiredRoute }
- *     { action: "apply-openclaw" }
- *     { action: "apply-hermes" }
+ *     { action: "prepare", connector, sourceId, operation }
+ *     { action: "execute-plan", planId, approved }
  *     { action: "wire-hermes-model", itemId }
  *     { action: "revert-hermes" }
  *     { action: "sync" }
@@ -56,8 +56,8 @@ function writeGuard(request: NextRequest): NextResponse | null {
 }
 
 function parseConnector(value: unknown): ConnectorId {
-  if (value === "openclaw" || value === "hermes") return value;
-  throw new Error("connector must be openclaw or hermes");
+  if (value === "openclaw" || value === "hermes" || value === 'opencode') return value;
+  throw new Error("connector must be openclaw, hermes, or opencode");
 }
 
 function parseDesiredRoute(value: unknown): DesiredRoutingState {

@@ -103,7 +103,7 @@ with tempfile.TemporaryDirectory(prefix='clawnex-native-routing-') as temp:
                     time.sleep(0.25)
             info = get_json(f'http://127.0.0.1:{proxy_port}/model/info')
             assert info['data'][0]['model_info']['x_clawnex_revision'] == 'fixture-revision'
-            for connector in ['openclaw', 'hermes']:
+            for connector in ['openclaw', 'hermes', 'opencode']:
                 for source in ['instance-a', 'instance-b']:
                     expression = "import {createRoutingIdentity} from './src/lib/services/routing-identity'; console.log(createRoutingIdentity(process.argv[1] as any, process.argv[2])!.token)"
                     token_env = dict(env)
@@ -112,21 +112,22 @@ with tempfile.TemporaryDirectory(prefix='clawnex-native-routing-') as temp:
                         {'model': 'fixture-model', 'messages': [{'role': 'user', 'content': 'Fixture hello'}]}, {'x-clawnex-routing-identity': token})
                     assert result['choices'][0]['message']['content'] == 'Fixture OK'
             deadline = time.monotonic() + 10
-            while len(records) < 4 and time.monotonic() < deadline:
+            while len(records) < 6 and time.monotonic() < deadline:
                 time.sleep(0.1)
             assert {(row.get('routing_connector'), row.get('routing_source_id')) for row in records} == {
-                ('openclaw', 'instance-a'), ('openclaw', 'instance-b'), ('hermes', 'instance-a'), ('hermes', 'instance-b')}, records
+                ('openclaw', 'instance-a'), ('openclaw', 'instance-b'), ('hermes', 'instance-a'), ('hermes', 'instance-b'),
+                ('opencode', 'instance-a'), ('opencode', 'instance-b')}, records
             assert all(row.get('routing_identity_hash') and row.get('proxy_request_id') for row in records)
-            print('PASS: native LiteLLM preserves loaded revision and signed identities for both tools/two instances using one model')
+            print('PASS: native LiteLLM preserves loaded revision and signed identities for three tools/two instances using one model')
             stream_request = urllib.request.Request(f'http://127.0.0.1:{proxy_port}/v1/chat/completions',
                 data=json.dumps({'model': 'fixture-model', 'stream': True, 'messages': [{'role': 'user', 'content': 'Fixture stream'}]}).encode(),
                 headers={'Content-Type': 'application/json', 'x-clawnex-routing-identity': token})
             with urllib.request.urlopen(stream_request, timeout=10) as streamed:
                 assert b'Fixture OK' in streamed.read()
             deadline = time.monotonic() + 10
-            while len(records) < 5 and time.monotonic() < deadline:
+            while len(records) < 7 and time.monotonic() < deadline:
                 time.sleep(0.1)
-            assert len(records) == 5 and records[-1].get('routing_source_id') == 'instance-b' and records[-1].get('proxy_request_id'), 'A completed stream must retain attributable evidence'
+            assert len(records) == 7 and records[-1].get('routing_source_id') == 'instance-b' and records[-1].get('proxy_request_id'), 'A completed stream must retain attributable evidence'
             print('PASS: streamed completion retains instance evidence; signed headers never reach the upstream')
             before = policy['upstream_calls']
             for failure in ['block', 'scanner_failure']:
