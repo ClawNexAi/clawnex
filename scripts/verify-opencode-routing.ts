@@ -26,15 +26,17 @@ fs.writeFileSync(liteLlmConfigPath, 'model_list: []\n');
 const configDirectory = path.join(root, '.config', 'opencode');
 const configPath = path.join(configDirectory, 'opencode.json');
 fs.mkdirSync(configDirectory, { recursive: true });
-fs.writeFileSync(configPath, JSON.stringify({
-  provider: {
-    openrouter: {
-      npm: '@ai-sdk/openai-compatible',
-      options: { baseURL: 'https://openrouter.ai/api/v1', apiKey: '{env:OPENROUTER_API_KEY}' },
-      models: { 'openai/gpt-5.4': { name: 'GPT-5.4' } },
+fs.writeFileSync(configPath, `{
+  // OpenCode accepts JSONC in its global configuration.
+  "provider": {
+    "openrouter": {
+      "name": "OpenRouter Friendly",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": { "baseURL": "https://openrouter.ai/api/v1", "apiKey": "{env:OPENROUTER_API_KEY}" },
+      "models": { "openai/gpt-5.4": { "name": "GPT-5.4" } },
     },
   },
-}, null, 2));
+}\n`);
 
 async function main(): Promise<void> {
   const { NextRequest } = await import('next/server');
@@ -66,6 +68,8 @@ async function main(): Promise<void> {
     const inventory = await response.json();
     assert.equal(response.status, 200);
     assert.equal(inventory.opencode.status, 'ok', 'shared routing inventory includes OpenCode');
+    const provider = inventory.opencode.items.find((item: { itemType: string }) => item.itemType === 'provider');
+    assert.equal(provider.displayName, 'OpenRouter Friendly', 'JSONC provider display name reaches routing inventory');
     const model = inventory.opencode.items.find((item: { modelId: string }) => item.modelId === 'openrouter/openai/gpt-5.4');
     assert.equal(model.capability, 'model-inventory', 'OpenCode provider model is selectable');
 

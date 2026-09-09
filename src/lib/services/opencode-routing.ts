@@ -7,6 +7,7 @@ import { commitRoutingFile, removeRoutingJournal } from './routing-file-transact
 import { identityHeaderMatches, prepareIdentityHeader, routingIdentityHash, ROUTING_IDENTITY_HEADER, type RoutingIdentityOwnership } from './routing-identity';
 import { stableRoutingFingerprint } from './routing-reconciliation';
 import { openRoutingCredential, sealRoutingCredential, type EncryptedRoutingCredential } from './routing-credential-recovery';
+import { parseOpenCodeConfig } from './opencode-config';
 import type { ApplyOpenClawRoutingResult, ConnectorRoutingSummary, DiscoveredRoutingItem, RoutingApplyScope } from './connector-routing-inventory';
 
 interface OpenCodeConnectorRow {
@@ -98,7 +99,7 @@ export function discoverOpenCodeItems(): {
   const check = resolveOpenCodeGlobalConfig();
   if (!check.available) return { status: 'error', detail: check.error || 'Global OpenCode configuration is unavailable.', sourceId: 'opencode:global', items: [] };
 
-  const config = asRecord(JSON.parse(fs.readFileSync(check.configPath, 'utf8'))) || {};
+  const config = parseOpenCodeConfig(fs.readFileSync(check.configPath, 'utf8'));
   const providers = asRecord(config.provider) || {};
   const ownership = new Map((readSidecar()?.providers || []).map(record => [record.providerId, record]));
   const items: DiscoveredRoutingItem[] = [];
@@ -152,7 +153,7 @@ export function applyOpenCodeDesiredRouting(scope: RoutingApplyScope = {}): Appl
   if (scope.expectedFiles && scope.expectedFiles[check.configPath] !== stableRoutingFingerprint(expectedRaw)) {
     throw new Error('Agent configuration changed after review. Refresh and approve again.');
   }
-  const config = asRecord(JSON.parse(expectedRaw)) || {};
+  const config = parseOpenCodeConfig(expectedRaw);
   const providers = asRecord(config.provider) || {};
   const previousSidecar = readSidecar();
   const sidecar: OpenCodeRoutingSidecar = previousSidecar || { version: 1, managedAt: new Date().toISOString(), providers: [] };

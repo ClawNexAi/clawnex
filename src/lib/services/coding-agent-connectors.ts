@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { parseOpenCodeConfig } from './opencode-config';
 
 export type CodingAgentConnectorType = 'opencode';
 
@@ -36,11 +37,10 @@ export function resolveOpenCodeGlobalConfig(): CodingAgentConfigCheck {
     if (!inside(homeRealPath, realPath)) {
       return { available: false, configPath, error: 'OpenCode global configuration resolves outside this user\'s home directory.' };
     }
-    const parsed = JSON.parse(fs.readFileSync(realPath, 'utf8'));
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new SyntaxError('not an object');
+    parseOpenCodeConfig(fs.readFileSync(realPath, 'utf8'));
     return { available: true, configPath: realPath, error: null };
   } catch (error) {
-    const detail = error instanceof SyntaxError ? 'OpenCode global configuration is not valid JSON.' : 'OpenCode global configuration was not found or could not be read.';
+    const detail = error instanceof SyntaxError ? 'OpenCode global configuration is not valid JSON or JSONC.' : 'OpenCode global configuration was not found or could not be read.';
     return { available: false, configPath, error: detail };
   }
 }
