@@ -8,6 +8,7 @@ import { identityHeaderMatches, prepareIdentityHeader, routingIdentityHash, ROUT
 import { stableRoutingFingerprint } from './routing-reconciliation';
 import { openRoutingCredential, sealRoutingCredential, type EncryptedRoutingCredential } from './routing-credential-recovery';
 import { parseOpenCodeConfig } from './opencode-config';
+import { resolveConfiguredProxyModel } from './configured-proxy-model';
 import type { ApplyOpenClawRoutingResult, ConnectorRoutingSummary, DiscoveredRoutingItem, RoutingApplyScope } from './connector-routing-inventory';
 
 interface OpenCodeConnectorRow {
@@ -123,12 +124,13 @@ export function discoverOpenCodeItems(): {
     for (const [modelKey, modelValue] of Object.entries(models)) {
       const model = asRecord(modelValue) || {};
       const modelId = modelKey.startsWith(`${providerId}/`) ? modelKey : `${providerId}/${modelKey}`;
+      const proxyModel = resolveConfiguredProxyModel(modelId, { providerId, baseUrl });
       items.push({
         connector: 'opencode', sourceId: 'opencode:global', itemType: 'model', providerId, modelId,
         displayName: typeof model.name === 'string' ? model.name : modelId, baseUrl,
         capability: capability === 'provider-routing' ? 'model-inventory' : capability,
         currentRoute: route, defaultDesiredRoute: route === 'routed' ? 'routed' : 'direct',
-        metadata: { ...metadata, enforcedAt: 'provider', proxyModelAlias: modelId, note: 'OpenCode global routing changes this provider endpoint for all of its configured models.' },
+        metadata: { ...metadata, enforcedAt: 'provider', proxyModelAlias: proxyModel?.modelAlias || modelId, note: 'OpenCode global routing changes this provider endpoint for all of its configured models.' },
       });
     }
   }
@@ -190,8 +192,11 @@ export function applyOpenCodeDesiredRouting(scope: RoutingApplyScope = {}): Appl
         const models = Object.entries(modelMap).map(([key, value]) => {
           const model = asRecord(value);
           if (!model || (model.id !== undefined && typeof model.id !== 'string')) throw new Error('OpenCode model entries must be objects with optional string ids.');
+          const modelId = key.startsWith(`${providerId}/`) ? key : `${providerId}/${key}`;
+          const proxyModel = resolveConfiguredProxyModel(modelId, { providerId, baseUrl });
+          if (!proxyModel) throw new Error('An OpenCode model has no unique configured LiteLLM alias. Refresh configuration and test the exact model.');
           return { key, hadId: Object.hasOwn(model, 'id'), ...(typeof model.id === 'string' ? { originalId: model.id } : {}),
-            routedId: key.startsWith(`${providerId}/`) ? key : `${providerId}/${key}` };
+            routedId: proxyModel.modelAlias };
         });
         const record: OpenCodeProviderRecord = {
           providerId, configPath: check.configPath, originalBaseUrl: baseUrl, routedBaseUrl: target,
