@@ -31,6 +31,18 @@ logger._ingest = rows.append
 
 async def main():
     callback = logger.ClawNexLogger()
+    scanned = []
+    logger._scan = lambda text, direction: scanned.append((direction, text)) or {'verdict': 'ALLOW', 'score': 0, 'detections': []}
+    role_data = {'model': 'shared-model', 'messages': [
+        {'role': 'system', 'content': 'Trusted agent instructions mention jailbreak, CLAUDE.md, and sudo.'},
+        {'role': 'developer', 'content': 'Trusted developer instructions.'},
+        {'role': 'assistant', 'content': 'Previously scanned assistant response.'},
+        {'role': 'user', 'content': 'Benign user request.'},
+        {'role': 'tool', 'content': 'Untrusted tool result.'},
+    ]}
+    await callback.async_pre_call_hook(types.SimpleNamespace(metadata={}), None, role_data, 'completion')
+    assert scanned == [('inbound', 'Benign user request.\nUntrusted tool result.')], scanned
+    logger._scan = lambda *args: {'verdict': 'ALLOW', 'score': 0, 'detections': []}
     for source, trusted in [('instance-a', True), ('instance-b', True), ('forged-client', False)]:
         data = {'model': 'shared-model', 'messages': [{'role': 'user', 'content': 'Fixture hello'}],
                 'metadata': {'clawnex_connector': 'hermes', 'clawnex_routing_source_id': source, 'clawnex_evidence_handle': 'forged'}}

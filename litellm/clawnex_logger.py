@@ -37,6 +37,7 @@ _ON_SCAN_ERROR = os.environ.get("CLAWNEX_ON_SCAN_ERROR", "block").lower()
 _HERMES_MODEL_ALIASES = None
 _RECENT_EVENT_IDS = {}
 _ROUTING_IDENTITIES = {}
+_TRUSTED_CONTEXT_ROLES = {"system", "developer", "assistant"}
 
 
 def _signed_routing_identity(data):
@@ -126,11 +127,13 @@ def _scan_error_verdict(err: Exception) -> dict:
     }
 
 
-def _extract_text(messages):
+def _extract_text(messages, excluded_roles=None):
     parts = []
     if not messages:
         return ""
     for msg in messages:
+        if isinstance(msg, dict) and msg.get("role") in (excluded_roles or set()):
+            continue
         content = msg.get("content", "") if isinstance(msg, dict) else ""
         if isinstance(content, str):
             parts.append(content)
@@ -393,7 +396,7 @@ class ClawNexLogger(CustomLogger):
                 print(f"[ClawNex Logger] BREAK-GLASS: {model} — bypassed shield scan")
                 return None
 
-            inbound_text = _extract_text(messages)
+            inbound_text = _extract_text(messages, _TRUSTED_CONTEXT_ROLES)
             if not inbound_text.strip():
                 return None
 
@@ -489,7 +492,7 @@ class ClawNexLogger(CustomLogger):
             bypassed = _is_break_glass_active()
 
             # Scan inbound
-            inbound_text = _extract_text(messages)
+            inbound_text = _extract_text(messages, _TRUSTED_CONTEXT_ROLES)
             inbound_result = _scan(inbound_text, "inbound") if inbound_text.strip() and not bypassed else {"verdict": "ALLOW", "score": 0, "detections": []}
 
             # Extract response
