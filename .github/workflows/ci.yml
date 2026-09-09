@@ -32,6 +32,9 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      - name: Verify provider onboarding contract
+        run: npm run verify:provider-onboarding
+
       - name: Build
         run: npm run build
         env:

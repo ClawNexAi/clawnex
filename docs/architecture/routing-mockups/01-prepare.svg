@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="820" viewBox="0 0 1200 820" role="img" aria-label="OpenClaw · Development VPS">
+<defs><style>text{font-family:Arial,Helvetica,sans-serif;fill:#e4edf4}.muted{fill:#97adbf;font-size:16px}.small{font-size:14px}.label{fill:#80d8ca;font-size:13px;font-weight:700;letter-spacing:1.2px}.title{font-size:30px;font-weight:700}.button{font-size:16px;font-weight:700}</style></defs>
+<rect width="1200" height="820" fill="#07111b"/>
+<rect width="1200" height="58" fill="#0c1b28"/><text x="32" y="37" fill="#00dcb0" font-size="22" font-weight="700">ClawNex</text><text x="170" y="36" class="muted">Configuration / Fleet &amp; Routing</text><text x="946" y="36" class="small muted">PROPOSED UI · SAMPLE DATA</text>
+<rect x="30" y="86" width="1140" height="698" rx="16" fill="#0d1f2e" stroke="#294657"/>
+<text x="62" y="134" class="label">TOOL CONNECTION</text><text x="62" y="178" class="title">OpenClaw · Development VPS</text><text x="62" y="209" class="muted">Connection: Direct   •   Configured policy: Blocking (direct routes are not protected)</text>
+<rect x="903" y="117" width="231" height="44" rx="7" fill="#152e40" stroke="#355467"/><text x="923" y="145" font-size="16">Choose instance ▾</text>
+<rect x="62" y="240" width="254" height="45" rx="6" fill="#16483f" stroke="#00dcb0"/><text x="82" y="269" font-size="16" fill="#00efbd">1  Prepare</text><rect x="334" y="240" width="254" height="45" rx="6" fill="#132b3c" stroke="#294657"/><text x="354" y="269" font-size="16" fill="#9bb2c3">2  Review</text><rect x="606" y="240" width="254" height="45" rx="6" fill="#132b3c" stroke="#294657"/><text x="626" y="269" font-size="16" fill="#9bb2c3">3  Apply</text><rect x="878" y="240" width="254" height="45" rx="6" fill="#132b3c" stroke="#294657"/><text x="898" y="269" font-size="16" fill="#9bb2c3">4  Verify</text>
+
+<text x="62" y="334" font-size="24" font-weight="700">Prepare the provider before connecting OpenClaw</text>
+<text x="62" y="366" class="muted">Keep the existing connection working until the replacement path is ready.</text>
+<rect x="62" y="397" width="1072" height="120" rx="9" fill="#172f40" stroke="#355467"/>
+<text x="86" y="432" font-size="20" font-weight="700">OpenRouter</text><text x="86" y="465" class="muted">Provider configured · Proxy inference test still required</text>
+<rect x="884" y="421" width="222" height="39" rx="6" fill="#453b21"/><text x="906" y="446" font-size="15" style="fill:#ffd37b">READINESS PENDING</text>
+<text x="86" y="495" class="small muted">The existing provider check discovers models; it does not prove this proxy route works.</text>
+<text x="62" y="556" font-size="18" style="fill:#82e3c4">No agent configuration has changed.</text>
+<text x="62" y="589" class="muted">External test requests require approval before they are sent.</text>
+<text x="62" y="628" class="muted">▸ Providers and affected models</text>
+<line x1="62" y1="658" x2="1135" y2="658" stroke="#294657"/>
+<rect x="62" y="684" width="292" height="48" rx="7" fill="#00dcb0"/><text x="82" y="715" class="button" style="fill:#06231f">Configure / test provider</text>
+<rect x="372" y="684" width="252" height="48" rx="7" fill="#152e40" stroke="#466073"/><text x="392" y="715" class="button">Refresh configuration</text>
+<text x="651" y="714" class="muted">▸ Technical details</text>
+<text x="62" y="761" class="small muted">Shared layout for OpenClaw and Hermes · No configuration changes from this mockup</text>
+</svg>

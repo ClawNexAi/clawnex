@@ -26,7 +26,14 @@ fi
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/venv/bin/activate"
 
-# Source secrets from .env.local if present; do NOT hardcode keys in start.sh
+# Source secrets from the runtime env files; do NOT hardcode keys in start.sh.
+# Local installs may keep the durable LiteLLM key in .env rather than .env.local.
+if [ -f "$SCRIPT_DIR/../.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$SCRIPT_DIR/../.env"
+  set +a
+fi
 if [ -f "$SCRIPT_DIR/../.env.local" ]; then
   set -a
   # shellcheck disable=SC1091
@@ -39,8 +46,9 @@ export PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}"
 export CLAWNEX_LITELLM_CONFIG="$SCRIPT_DIR/config.yaml"
 export LITELLM_NUM_WORKERS=1
 
-# Start LiteLLM in-process so the success/failure callbacks we register below
-# survive into the serving worker. Guards:
+# Start LiteLLM in-process. config.yaml registers the ClawNex logger through
+# LiteLLM's supported callback loader, so registration survives config reloads
+# and applies to proxy hooks plus async success/failure dispatch. Guards:
 #   - num_workers enforced three ways (CLI, env var, this script)
 #   - port-bind check inside python catches races the lsof check above misses
 exec python3 -c "
@@ -64,13 +72,7 @@ try:
 finally:
     _s.close()
 
-# Register ClawNex callback in the litellm module BEFORE server starts
 import litellm
-from clawnex_logger import ClawNexLogger
-_logger = ClawNexLogger()
-litellm.success_callback.append(_logger)
-litellm.failure_callback.append(_logger)
-print(f'[ClawNex] Callbacks injected: success={len(litellm.success_callback)} failure={len(litellm.failure_callback)}')
 
 config_path = os.environ.get('CLAWNEX_LITELLM_CONFIG', 'config.yaml')
 sys.argv = [

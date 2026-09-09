@@ -18,7 +18,12 @@
  *   npx tsx scripts/verify-litellm-health-checks.ts
  */
 
-import { checkLiteLLM } from "../src/lib/health/litellm-check";
+import { checkLiteLLM as checkApprovedLiteLLM, type CheckLiteLLMOpts } from "../src/lib/health/litellm-check";
+
+// These historical cases exercise approved deep checks with a fake transport.
+// The no-approval default is covered by verify-litellm-probe-consent.ts.
+const checkLiteLLM = (port: number, opts: CheckLiteLLMOpts) =>
+  checkApprovedLiteLLM(port, { ...opts, deepHealthApproved: true });
 
 let assertionCount = 0;
 let failedCount = 0;

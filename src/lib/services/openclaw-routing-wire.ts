@@ -44,6 +44,7 @@ import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { resolveOpenClawPaths } from '../openclaw-paths';
 import { CLAWNEX_VERSION_SHORT } from '../version';
+import { commitRoutingFile, publishRoutingFile, removeRoutingJournal } from './routing-file-transaction';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -60,7 +61,7 @@ const PROVIDER_ID = 'litellm';
  *  AND outside the ClawNex install dir (which gets wiped on clean
  *  redeploys). Stable across both. Single flat file at $HOME for easy
  *  inspection (`cat ~/.clawnex-routing-managed.json`). */
-const SIDECAR_PATH = path.join(os.homedir(), '.clawnex-routing-managed.json');
+const SIDECAR_PATH = process.env.CLAWNEX_LEGACY_ROUTING_SIDECAR || path.join(os.homedir(), '.clawnex-routing-managed.json');
 
 /** Schema version for the sidecar. Bump when sidecar shape changes so
  *  older sidecars can be detected and migrated. */
@@ -164,9 +165,7 @@ function deleteAtPath(obj: Record<string, unknown>, keys: string[]): void {
 }
 
 function atomicWriteJson(targetPath: string, data: unknown): void {
-  const tmp = `${targetPath}.tmp.${process.pid}.${Date.now()}`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { encoding: 'utf-8', mode: 0o600 });
-  fs.renameSync(tmp, targetPath);
+  publishRoutingFile(targetPath, JSON.stringify(data, null, 2), 0o600);
 }
 
 function readSidecar(): SidecarV1 | null {
@@ -176,10 +175,9 @@ function readSidecar(): SidecarV1 | null {
     if (raw && typeof raw === 'object' && raw.version === SIDECAR_VERSION) {
       return raw as SidecarV1;
     }
-    // Older sidecar version → caller decides whether to migrate or refuse.
-    return null;
+    throw new Error('Unsupported legacy routing ownership version.');
   } catch {
-    return null;
+    throw new Error('Legacy routing ownership is unreadable or corrupt. Preserve the sidecar for recovery review.');
   }
 }
 
@@ -354,8 +352,10 @@ export function revertLitellmRouting(): RevertResult {
   }
 
   let config: Record<string, unknown>;
+  let expectedRaw: string;
   try {
-    config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    expectedRaw = fs.readFileSync(configPath, 'utf-8');
+    config = JSON.parse(expectedRaw);
   } catch (err) {
     return { ok: false, status: 'error', detail: `Failed to read openclaw.json: ${err instanceof Error ? err.message : String(err)}` };
   }
@@ -364,7 +364,13 @@ export function revertLitellmRouting(): RevertResult {
   const reclaimedDespiteEditPaths: string[][] = [];
   let anyDeleted = false;
 
-  for (const record of sidecar.paths) {
+  // Remove matching defaults first; never remove a bridge still referenced by
+  // an operator-owned agent/default/fallback selection elsewhere in the file.
+  const isBridge = (keys: string[]) => keys.join('.') === 'models.providers.litellm';
+  const referencesBridge = (value: unknown): boolean => typeof value === 'string' ? value.startsWith('litellm/')
+    : Array.isArray(value) ? value.some(referencesBridge)
+    : Boolean(value && typeof value === 'object' && Object.values(value).some(referencesBridge));
+  for (const record of [...sidecar.paths].sort((a, b) => Number(isBridge(a.path)) - Number(isBridge(b.path)))) {
     const current = getAtPath(config, record.path);
     if (current === undefined) {
       // Already absent — nothing to do; not a conflict.
@@ -372,21 +378,9 @@ export function revertLitellmRouting(): RevertResult {
     }
     const currentSha = sha256(current);
     const operatorEdited = currentSha !== record.valueSha256;
-    if (operatorEdited) {
-      // Operator edited after wire. `set` paths still get removed
-      // (we own them); `set-if-missing` paths are preserved.
-      if (record.operation === 'set-if-missing') {
-        preservedPaths.push(record.path);
-        continue;
-      }
-      // For `set` paths: fall through and delete. We owned the slot,
-      // so even an edited value is ours to clean up. The sidecar
-      // recorded our intent at write time; mid-flight edits to a
-      // ClawNex-owned slot are operator territory only if they used
-      // a different provider id, which our conflict-guard would have
-      // caught at wire time anyway. Track the edit for transparent
-      // reporting (internal reviewer M-01 followup item D).
-      reclaimedDespiteEditPaths.push(record.path);
+    if (operatorEdited || (isBridge(record.path) && referencesBridge(config.agents))) {
+      preservedPaths.push(record.path);
+      continue;
     }
     deleteAtPath(config, record.path);
     anyDeleted = true;
@@ -411,7 +405,8 @@ export function revertLitellmRouting(): RevertResult {
 
   if (anyDeleted) {
     try {
-      atomicWriteJson(configPath, config);
+      commitRoutingFile({ configPath, expectedRaw, updatedRaw: JSON.stringify(config, null, 2),
+        journalPath: SIDECAR_PATH, expectedJournal: sidecar, recoveryJournal: sidecar });
     } catch (err) {
       return { ok: false, status: 'error', detail: `Failed to write openclaw.json during revert: ${err instanceof Error ? err.message : String(err)}` };
     }
@@ -420,14 +415,17 @@ export function revertLitellmRouting(): RevertResult {
   // Remove sidecar last — once openclaw.json is clean, the sidecar's
   // job is done.
   try {
-    if (fs.existsSync(SIDECAR_PATH)) fs.unlinkSync(SIDECAR_PATH);
+    if (preservedPaths.length) {
+      atomicWriteJson(SIDECAR_PATH, { ...sidecar, paths: sidecar.paths.filter(record =>
+        preservedPaths.some(keys => JSON.stringify(keys) === JSON.stringify(record.path))) });
+    } else removeRoutingJournal(SIDECAR_PATH);
   } catch (err) {
     return { ok: false, status: 'error', detail: `openclaw.json reverted but sidecar removal failed: ${err instanceof Error ? err.message : String(err)}` };
   }
 
   const detailParts: string[] = ['Reverted.'];
   if (preservedPaths.length > 0) {
-    detailParts.push(`${preservedPaths.length} set-if-missing path(s) preserved due to operator edits after wire.`);
+    detailParts.push(`${preservedPaths.length} path(s) and their recovery ownership preserved due to operator edits after wire.`);
   }
   if (reclaimedDespiteEditPaths.length > 0) {
     detailParts.push(`${reclaimedDespiteEditPaths.length} ClawNex-owned slot(s) reclaimed despite operator edits (set policy).`);
@@ -437,8 +435,8 @@ export function revertLitellmRouting(): RevertResult {
   }
   detailParts.push('Restart openclaw-gateway for changes to take effect.');
   return {
-    ok: true,
-    status: anyDeleted || preservedPaths.length === 0 ? 'reverted' : 'nothing-to-revert',
+    ok: preservedPaths.length === 0,
+    status: preservedPaths.length ? 'conflict' : 'reverted',
     detail: detailParts.join(' '),
     preservedPaths: preservedPaths.length > 0 ? preservedPaths : undefined,
     reclaimedDespiteEditPaths: reclaimedDespiteEditPaths.length > 0 ? reclaimedDespiteEditPaths : undefined,

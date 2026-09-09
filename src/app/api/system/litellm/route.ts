@@ -10,6 +10,7 @@ import { requireLocalhost } from "@/lib/middleware/localhost-guard";
 import { execFileSync, execSync, spawn } from "node:child_process";
 import * as path from "node:path";
 import * as fs from "node:fs";
+import { resolveLiteLLMConfigPath } from '@/lib/litellm/paths';
 import { run, getDb } from "@/lib/db/index";
 import { syncProvidersToYaml as syncProvidersToYamlImpl } from "@/lib/litellm/sync";
 
@@ -58,6 +59,46 @@ function runLiteLLMSystemdAction(systemctlPath: string, action: "start" | "stop"
   });
 }
 
+interface LaunchdService {
+  label: string;
+  domain: string;
+  plistPath: string;
+  registered: boolean;
+}
+
+function getLiteLLMLaunchdService(): LaunchdService | null {
+  const uid = typeof process.getuid === 'function' ? process.getuid() : null;
+  const forcedLabel = process.env.CLAWNEX_LITELLM_LAUNCHD_LABEL?.trim();
+  if (!forcedLabel && (process.platform !== 'darwin' || uid === null)) return null;
+  const label = forcedLabel || `gui/${uid}/io.clawnex.litellm`;
+  const separator = label.lastIndexOf('/');
+  if (separator < 1) return null;
+  const domain = label.slice(0, separator);
+  const plistPath = process.env.CLAWNEX_LITELLM_LAUNCHD_PLIST?.trim() ||
+    path.join(process.env.HOME || '', 'Library', 'LaunchAgents', 'io.clawnex.litellm.plist');
+  let registered = false;
+  try {
+    execFileSync('/bin/launchctl', ['print', label], { timeout: 3000, stdio: 'ignore' });
+    registered = true;
+  } catch {}
+  if (!registered && !fs.existsSync(plistPath)) return null;
+  return { label, domain, plistPath, registered };
+}
+
+function runLiteLLMLaunchdAction(service: LaunchdService, action: "start" | "stop" | "restart"): void {
+  if (action === 'stop') {
+    if (service.registered) execFileSync('/bin/launchctl', ['bootout', service.domain, service.plistPath], { timeout: 15000, stdio: 'ignore' });
+    return;
+  }
+  if (!service.registered) {
+    execFileSync('/bin/launchctl', ['bootstrap', service.domain, service.plistPath], { timeout: 15000, stdio: 'ignore' });
+    return;
+  }
+  execFileSync('/bin/launchctl', action === 'restart' ? ['kickstart', '-k', service.label] : ['kickstart', service.label], {
+    timeout: 15000, stdio: 'ignore',
+  });
+}
+
 function sudoSystemdUnavailable(action: "start" | "stop" | "restart") {
   return NextResponse.json({
     ok: false,
@@ -98,8 +139,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { action } = body as { action: string };
-    const installDir = process.cwd();
-    const configPath = path.join(installDir, "litellm", "config.yaml");
+    const installDir = process.env.CLAWNEX_INSTALL_DIR?.trim() || process.cwd();
     const port = parseInt(String(process.env.LITELLM_PORT || "4001"), 10);
     if (isNaN(port) || port < 1 || port > 65535) {
       return NextResponse.json({ error: "Invalid LiteLLM port configuration" }, { status: 500 });
@@ -109,6 +149,7 @@ export async function POST(request: NextRequest) {
     const actor = operator?.username || 'operator';
     const systemctlPath = getSystemctlPath();
     const systemdEnabled = isLiteLLMSystemdEnabled(systemctlPath);
+    const launchdService = systemdEnabled ? null : getLiteLLMLaunchdService();
 
     if (action === "stop") {
       if (systemdEnabled) {
@@ -116,6 +157,11 @@ export async function POST(request: NextRequest) {
           runLiteLLMSystemdAction(systemctlPath, "stop");
         } catch {
           return sudoSystemdUnavailable("stop");
+        }
+      } else if (launchdService) {
+        try { runLiteLLMLaunchdAction(launchdService, 'stop'); }
+        catch {
+          return NextResponse.json({ ok: false, error: 'LiteLLM is managed by launchd, but the dashboard could not stop its registered service.' }, { status: 503 });
         }
       } else {
         try {
@@ -127,14 +173,19 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "start" || action === "restart") {
+      let configPath: string;
       // Sync providers from DB to YAML before starting (whichever path runs).
       try {
+        configPath = resolveLiteLLMConfigPath();
         const syncResult = syncProvidersToYamlImpl({ db: getDb(), configPath });
         if (syncResult.provider_count > 0) {
           console.log(`[LiteLLM Control] Synced ${syncResult.provider_count} provider(s) to config.yaml: ${syncResult.model_names.join(", ")}`);
         }
-      } catch (syncErr) {
-        console.error("[LiteLLM Control] Sync error:", syncErr);
+      } catch {
+        console.error("[LiteLLM Control] Configuration preparation failed; service left unchanged.");
+        return NextResponse.json({ ok: false, configSynced: false,
+          error: 'LiteLLM configuration could not be prepared. No service restart was attempted. Resolve the configuration path or provider sync failure and retry.',
+        }, { status: 503 });
       }
 
       if (!fs.existsSync(configPath)) {
@@ -155,6 +206,7 @@ export async function POST(request: NextRequest) {
       // shadow LiteLLM process that races Restart=always and leaves :4001 in
       // an address-in-use loop.
       let usedSystemd = false;
+      let usedLaunchd = false;
       if (systemdEnabled) {
         const systemdAction = action === "start" ? "start" : "restart";
         try {
@@ -165,7 +217,18 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (!usedSystemd) {
+      if (!usedSystemd && launchdService) {
+        try {
+          runLiteLLMLaunchdAction(launchdService, action);
+          usedLaunchd = true;
+        } catch {
+          return NextResponse.json({ ok: false, configSynced: true,
+            error: `LiteLLM configuration was saved, but launchd could not ${action} its registered service.`,
+          }, { status: 503 });
+        }
+      }
+
+      if (!usedSystemd && !usedLaunchd) {
         // Stop first if restarting
         if (action === "restart") {
           stopPortListener(port);
@@ -207,7 +270,7 @@ export async function POST(request: NextRequest) {
               : [litellmCmd];
             const child = spawn(command, [
               ...args,
-              "--config", "litellm/config.yaml",
+              "--config", configPath,
               "--host", "127.0.0.1",
               "--port", String(port),
             ], {
@@ -215,16 +278,26 @@ export async function POST(request: NextRequest) {
               detached: true,
               stdio: ["ignore", logFd, logFd],
             });
+            await new Promise<void>((resolve, reject) => {
+              child.once('error', reject);
+              child.once('spawn', resolve);
+            });
             child.unref();
           } finally {
             try { fs.closeSync(logFd); } catch {}
           }
-        } catch {}
+        } catch {
+          return NextResponse.json({ ok: false, configSynced: true,
+            error: 'LiteLLM configuration was saved, but the local proxy could not be launched. Review the service logs and retry.',
+          }, { status: 503 });
+        }
       }
 
-      try { run(`INSERT INTO audit_log (id, actor, action, resource_type, resource_id, detail, source, created_at) VALUES (?, ?, ?, 'system', NULL, ?, 'dashboard', datetime('now'))`, [require("crypto").randomUUID(), actor, `litellm_${action}`, `LiteLLM proxy ${action}ed on port ${port}${usedSystemd ? " via systemctl" : " via nohup"}`]); } catch {}
+      const supervisor = usedSystemd ? 'systemctl' : usedLaunchd ? 'launchd' : 'nohup';
+      try { run(`INSERT INTO audit_log (id, actor, action, resource_type, resource_id, detail, source, created_at) VALUES (?, ?, ?, 'system', NULL, ?, 'dashboard', datetime('now'))`, [require("crypto").randomUUID(), actor, `litellm_${action}`, `LiteLLM proxy ${action}ed on port ${port} via ${supervisor}`]); } catch {}
 
-      return NextResponse.json({ ok: true, action: action === "restart" ? "restarted" : "started", port, configSynced: true, usedSystemd });
+      return NextResponse.json({ ok: true, action: action === "restart" ? "restart-requested" : "start-requested", readiness: 'pending',
+        detail: 'Service command accepted. Test the selected model through the proxy before applying agent routing.', port, configSynced: true, usedSystemd, usedLaunchd });
     }
 
     return NextResponse.json({ error: "Invalid action. Use: start, stop, restart" }, { status: 400 });

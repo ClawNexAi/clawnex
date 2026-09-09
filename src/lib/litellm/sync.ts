@@ -21,6 +21,8 @@
  */
 
 import * as fs from "node:fs";
+import { randomUUID } from 'node:crypto';
+import { deploymentRevision } from './deployment-revision';
 import type Database from "better-sqlite3";
 
 /**
@@ -60,6 +62,7 @@ interface DbProvider {
   type: string;
   base_url: string;
   api_key: string;
+  api_key_env: string;
   is_active: number;
 }
 
@@ -90,8 +93,12 @@ function modelPrefixForProviderType(providerType: string): string {
   return "openai";
 }
 
-function litellmModelForConfiguredModel(providerType: string, modelId: string): string {
+export function litellmModelForConfiguredModel(providerType: string, modelId: string): string {
   const prefix = modelPrefixForProviderType(providerType);
+  if (!modelId.trim() || modelId !== modelId.trim() || modelId.includes('*') ||
+      modelId.startsWith(`${prefix}/${prefix}/`)) {
+    throw new Error('Invalid model alias: select an exact model without wildcards or repeated provider prefixes.');
+  }
   if (modelId.startsWith(`${prefix}/`)) return modelId;
   return `${prefix}/${modelId}`;
 }
@@ -115,7 +122,7 @@ export function syncProvidersToYaml(opts: SyncOptions): SyncResult {
 
   const providers = db
     .prepare(
-      "SELECT id, name, type, base_url, api_key, is_active FROM config_providers WHERE is_active = 1",
+      "SELECT id, name, type, base_url, api_key, api_key_env, is_active FROM config_providers WHERE is_active = 1",
     )
     .all() as DbProvider[];
 
@@ -127,65 +134,15 @@ export function syncProvidersToYaml(opts: SyncOptions): SyncResult {
     const t = (p.type || "").toLowerCase();
     if (t === "openclaw") continue;
     if (p.base_url.startsWith("ws://") || p.base_url.startsWith("wss://")) continue;
-    if (!p.base_url && !p.api_key) continue;
+    if (!p.base_url && !p.api_key && !p.api_key_env) continue;
     realProviderCount++;
   }
 
   const modelEntries: string[] = [];
   const modelNames: string[] = [];
 
-  for (const p of providers) {
-    if (!p.base_url && !p.api_key) continue;
-
-    const t = (p.type || "").toLowerCase();
-    if (t === "openclaw" || p.base_url.startsWith("ws://") || p.base_url.startsWith("wss://")) continue;
-
-    try {
-      if (p.base_url) assertSafeYamlValue(p.base_url, `provider[${p.id}].base_url`);
-      if (p.api_key) assertSafeYamlValue(p.api_key, `provider[${p.id}].api_key`);
-    } catch (err) {
-      console.error(`[LiteLLM Sync] Skipping provider ${p.id}: ${err instanceof Error ? err.message : String(err)}`);
-      continue;
-    }
-
-    const modelPrefix = modelPrefixForProviderType(t);
-
-    const safeName = p.name.toLowerCase().replace(/[^a-z0-9_/-]/g, "-");
-    const modelName = t.includes("openrouter") ? "openrouter/auto" : safeName;
-    const wildcardName = t.includes("openrouter") ? "openrouter/*" : `${safeName}/*`;
-
-    const entry = [
-      `  - model_name: "${modelName}"`,
-      `    litellm_params:`,
-      `      model: "${modelPrefix}/${t.includes("openrouter") ? "auto" : "*"}"`,
-    ];
-    if (p.base_url) entry.push(`      api_base: "${p.base_url}"`);
-    if (p.api_key) entry.push(`      api_key: "${p.api_key}"`);
-
-    modelEntries.push(entry.join("\n"));
-    modelNames.push(modelName);
-
-    if (!t.includes("openrouter") && modelName !== wildcardName) {
-      const wcEntry = [
-        `  - model_name: "${wildcardName}"`,
-        `    litellm_params:`,
-        `      model: "${modelPrefix}/*"`,
-      ];
-      if (p.base_url) wcEntry.push(`      api_base: "${p.base_url}"`);
-      if (p.api_key) wcEntry.push(`      api_key: "${p.api_key}"`);
-      modelEntries.push(wcEntry.join("\n"));
-      modelNames.push(wildcardName);
-    } else if (t.includes("openrouter")) {
-      const wcEntry = [
-        `  - model_name: "${wildcardName}"`,
-        `    litellm_params:`,
-        `      model: "openrouter/*"`,
-      ];
-      if (p.api_key) wcEntry.push(`      api_key: "${p.api_key}"`);
-      modelEntries.push(wcEntry.join("\n"));
-      modelNames.push(wildcardName);
-    }
-  }
+  // Provider discovery does not authorize arbitrary model routes. Publish only
+  // the models explicitly configured below, never synthetic wildcard targets.
 
   const configuredModels = db
     .prepare(
@@ -203,13 +160,9 @@ export function syncProvidersToYaml(opts: SyncOptions): SyncResult {
       assertSafeYamlValue(m.model_id, `model[${m.model_id}].model_id`);
       if (provider.base_url) assertSafeYamlValue(provider.base_url, `provider[${provider.id}].base_url`);
       if (provider.api_key) assertSafeYamlValue(provider.api_key, `provider[${provider.id}].api_key`);
-    } catch (err) {
-      console.error(`[LiteLLM Sync] Skipping model ${m.model_id}: ${err instanceof Error ? err.message : String(err)}`);
-      continue;
+    } catch {
+      throw new Error('Invalid model or provider configuration. Correct the selected model and provider values before syncing.');
     }
-
-    const safeName = provider.name.toLowerCase().replace(/[^a-z0-9_/-]/g, "-");
-    if (m.model_id.startsWith(safeName + "/") || m.model_id === safeName) continue;
 
     const entry = [
       `  - model_name: "${m.model_id}"`,
@@ -218,7 +171,14 @@ export function syncProvidersToYaml(opts: SyncOptions): SyncResult {
     ];
     if (provider.base_url) entry.push(`      api_base: "${provider.base_url}"`);
     if (provider.api_key) entry.push(`      api_key: "${provider.api_key}"`);
+    else if (provider.api_key_env) entry.push(`      api_key: "os.environ/${assertSafeYamlValue(provider.api_key_env, `provider[${provider.id}].api_key_env`)}"`);
     else entry.push(`      api_key: "not-needed"`);
+    const revision = deploymentRevision(configPath, m.model_id, {
+      model: litellmModelForConfiguredModel(t, m.model_id),
+      ...(provider.base_url ? { api_base: provider.base_url } : {}),
+      api_key: provider.api_key || (provider.api_key_env ? `os.environ/${provider.api_key_env}` : 'not-needed'),
+    });
+    entry.push('    model_info:', `      x_clawnex_revision: "${revision}"`);
 
     modelEntries.push(entry.join("\n"));
     modelNames.push(m.model_id);
@@ -232,6 +192,13 @@ export function syncProvidersToYaml(opts: SyncOptions): SyncResult {
     modelEntries.push(placeholderModelEntry());
     modelNames.push(PLACEHOLDER_MODEL_NAME);
     placeholder_only = true;
+  }
+
+  // A repeated alias can make LiteLLM choose a different provider than the
+  // operator intended. Refuse the entire update before touching working YAML.
+  // Do not include aliases or credential-bearing configuration in the error.
+  if (new Set(modelNames).size !== modelNames.length) {
+    throw new Error("Duplicate model alias: assign distinct model aliases before syncing provider configuration.");
   }
 
   const yamlContent = [
@@ -254,7 +221,24 @@ export function syncProvidersToYaml(opts: SyncOptions): SyncResult {
     "",
   ].join("\n");
 
-  fs.writeFileSync(configPath, yamlContent, "utf-8");
+  // Publish a complete, owner-only file. A failed write must not truncate the
+  // previous working configuration or expose provider credentials to other users.
+  if (fs.existsSync(configPath) && !fs.lstatSync(configPath).isFile()) {
+    throw new Error('LiteLLM configuration target must be a regular file.');
+  }
+  const temporaryPath = `${configPath}.${randomUUID()}.tmp`;
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(temporaryPath, 'wx', 0o600);
+    fs.writeFileSync(descriptor, yamlContent, 'utf8');
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    fs.renameSync(temporaryPath, configPath);
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+    if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath);
+  }
 
   return {
     provider_count: realProviderCount,

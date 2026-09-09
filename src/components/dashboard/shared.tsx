@@ -368,6 +368,7 @@ export function Card({ title, accent, children, actions, glow, dimGlow }: { titl
       ...G.card,
       position: "relative",
       overflow: "hidden",
+      isolation: "isolate",
       borderRadius: 14,
       padding: "16px 18px",
       marginBottom: 12,
@@ -390,12 +391,13 @@ export function Card({ title, accent, children, actions, glow, dimGlow }: { titl
           style={{
             position: "absolute",
             inset: 0,
+            zIndex: 0,
             background: `radial-gradient(circle at 10% 0%, rgba(34,211,238,${dimGlow ? ".05" : ".10"}), transparent 36%)`,
             pointerEvents: "none",
           }}
         />
       )}
-      <div style={{ position: "relative" }}>
+      <div style={{ position: "relative", zIndex: 1 }}>
         {accent && <div style={{ height: 2, width: 40, background: accent, borderRadius: 1, marginBottom: 12, boxShadow: `0 0 8px ${accent}${dimGlow ? "22" : "44"}` }} />}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <h3 style={{ margin: 0, fontSize: 12, fontWeight: 700, color: C.tx, fontFamily: F.sans, textTransform: "uppercase", letterSpacing: "0.08em" }}>{title}</h3>
@@ -487,8 +489,10 @@ export function CollapsibleCard({ title, accent, children, actions, glow, defaul
       )}
       <div style={{ position: "relative" }}>
         {accent && <div style={{ height: 2, width: 40, background: accent, borderRadius: 1, marginBottom: open ? 10 : 6, boxShadow: `0 0 8px ${accent}${dimGlow ? "22" : "44"}` }} />}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: open ? 12 : 0, cursor: "pointer" }} onClick={() => setOpen(!open)}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: open ? 12 : 0 }}>
+          <div role="button" tabIndex={0} aria-expanded={open} onClick={() => setOpen(!open)}
+            onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setOpen(!open); } }}
+            style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, cursor: 'pointer' }}>
             <span style={{ fontSize: 10, color: C.txT, transition: springT("transform", 300), display: "inline-block", transform: open ? "rotate(90deg)" : "rotate(0deg)" }}>{"\u25B6"}</span>
             <h3 style={{ margin: 0, fontSize: 12, fontWeight: 700, color: C.tx, fontFamily: F.sans, textTransform: "uppercase", letterSpacing: "0.08em" }}>{title}</h3>
             {/* internal reviewer 2026-05-06 contrast: card-row count is dense metadata
@@ -570,6 +574,10 @@ export function CategorySection({
     <div className="cn-category-section" style={{ marginBottom: open ? 4 : 0 }}>
       <div
         onClick={toggle}
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); } }}
         style={{
           cursor: "pointer",
           padding: "12px 16px",

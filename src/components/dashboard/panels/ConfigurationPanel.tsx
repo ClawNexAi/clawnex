@@ -9,6 +9,7 @@ import { timeAgo } from "../utils";
 import type { TabId } from "../types";
 import { CORRELATION_STARTER_TEMPLATES } from "@/lib/correlation-templates";
 import { AuthDevicesCard } from "./AuthDevicesCard";
+import { RoutingWorkflowPanel } from "./RoutingWorkflowPanel";
 import { AuthMethodsCard } from "./AuthMethodsCard";
 import { PoliciesAndRulesCard } from "./PoliciesAndRulesCard";
 import { ConfirmDialog } from "../ConfirmDialog";
@@ -2304,7 +2305,22 @@ interface ConnectorRoutingSummary {
   items: ConnectorRoutingItem[];
   drift: { new: number; removed: number; changed: number; total: number };
   selected: number;
+  pendingChanges: number;
   scannedAt: string;
+}
+
+interface RoutingDriftEventView {
+  id: string;
+  connector: "openclaw" | "hermes";
+  itemKey: string;
+  changeType: string;
+  protectionState: string;
+  actionRequired: boolean;
+  writable: boolean;
+  consequence: string;
+  current: { profileName?: string | null; providerId?: string; modelId?: string; effectiveRoute?: string } | null;
+  previous: { profileName?: string | null; providerId?: string; modelId?: string; effectiveRoute?: string } | null;
+  detectedAt: string;
 }
 
 interface ConnectorRoutingResponse {
@@ -2313,969 +2329,30 @@ interface ConnectorRoutingResponse {
   hermes: ConnectorRoutingSummary;
   driftTotal: number;
   scannedAt: string;
+  reconciliation?: {
+    events: RoutingDriftEventView[];
+    lastSnapshotIds: Partial<Record<"openclaw" | "hermes", string>>;
+  };
+}
+
+interface ConnectorVerificationView {
+  status: string;
+  routingState: string;
+  configured: number;
+  routed: number;
+  direct: number;
+  observedThroughClawNex: number;
+  observedTokens: number;
+  observedCostUsd: number | null;
+  costStatus: string;
+  verificationSince: string | null;
+  lastObservedAt: string | null;
+  checkedAt: string;
+  detail: string;
 }
 
 function OpenClawRoutingGuide({ focusedCard }: { focusedCard?: string | null }) {
-  const [routingData, setRoutingData] = useState<{ providers: Array<{ id: string; name: string; baseUrl: string; routed: boolean }> } | null>(null);
-  const [connectorRouting, setConnectorRouting] = useState<ConnectorRoutingResponse | null>(null);
-  const [sidecar, setSidecar] = useState<RoutingSidecar | null>(null);
-  const [openclawVersion, setOpenClawVersion] = useState<string | null>(null);
-  const [configMissing, setConfigMissing] = useState(false);
-  const [loading, setLoading] = useState(false);
-  // Wire/revert/restart action state. `working` blocks repeat clicks;
-  // `lastResult` surfaces the API's status + detail so the operator
-  // sees exactly what happened (wired / already-wired / conflict /
-  // reverted / preserved paths / restartRequired / gateway restarted
-  // / supervisor detected).
-  const [working, setWorking] = useState<'wire' | 'revert' | 'force-wire' | 'restart' | null>(null);
-  const [lastResult, setLastResult] = useState<{ ok: boolean; status: string; detail: string; preservedPaths?: string[][]; reclaimedDespiteEditPaths?: string[][]; restartRequired?: boolean; output?: string; elapsedMs?: number; supervisor?: string; manualCommand?: string } | null>(null);
-  const [connectorWorking, setConnectorWorking] = useState<'sync' | 'select' | 'apply-openclaw' | 'apply-hermes' | 'revert-hermes' | 'restart-hermes' | null>(null);
-  const [connectorResult, setConnectorResult] = useState<{ ok: boolean; status: string; detail: string; restartRequired?: boolean; connector?: 'openclaw' | 'hermes' | 'all' } | null>(null);
-  // Gateway supervisor probe -- determines whether we render an active
-  // Restart button or a "manual command" hint. Probed once on mount;
-  // re-probed after any wire/revert/restart so the button stays honest.
-  const [supervisor, setSupervisor] = useState<{ kind: string; label: string; manualCommand: string } | null>(null);
-  const [hermesSupervisor, setHermesSupervisor] = useState<{ kind: string; label: string; manualCommand: string; targets?: string[] } | null>(null);
-
-  const fetchRouting = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/openclaw/routing");
-      if (res.ok) {
-        const d = await res.json();
-        if (d.found) {
-          setRoutingData({ providers: d.providers });
-          setSidecar(d.managed?.sidecar ?? null);
-          setOpenClawVersion(d.openclawVersion ?? null);
-          setConfigMissing(false);
-        } else {
-          setConfigMissing(true);
-          setRoutingData(null);
-          setSidecar(null);
-        }
-      } else {
-        setConfigMissing(true);
-      }
-    } catch {
-      setConfigMissing(true);
-    }
-    setLoading(false);
-  }, []);
-
-  const fetchConnectorRouting = useCallback(async () => {
-    try {
-      const res = await fetch("/api/connector-routing");
-      if (res.ok) {
-        setConnectorRouting(await res.json());
-      }
-    } catch { /* inventory is advisory; keep the OpenClaw routing card usable */ }
-  }, []);
-
-  const fetchSupervisor = useCallback(async () => {
-    try {
-      const res = await fetch("/api/openclaw/gateway/restart");
-      if (res.ok) {
-        const d = await res.json();
-        if (d.ok && d.supervisor) setSupervisor(d.supervisor);
-      }
-    } catch { /* silent -- the manual hint is the fallback */ }
-  }, []);
-
-  const fetchHermesSupervisor = useCallback(async () => {
-    try {
-      const res = await fetch("/api/hermes/gateway/restart");
-      if (res.ok) {
-        const d = await res.json();
-        if (d.ok && d.supervisor) setHermesSupervisor(d.supervisor);
-      }
-    } catch { /* silent -- Hermes restart falls back to manual guidance */ }
-  }, []);
-
-  useEffect(() => { fetchRouting(); fetchSupervisor(); fetchHermesSupervisor(); fetchConnectorRouting(); }, [fetchRouting, fetchSupervisor, fetchHermesSupervisor, fetchConnectorRouting]);
-
-  const performRestart = useCallback(async () => {
-    setWorking('restart');
-    setLastResult(null);
-    try {
-      const res = await fetch("/api/openclaw/gateway/restart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
-      const d = await res.json();
-      setLastResult({
-        ok: Boolean(d.ok),
-        status: d.status || (res.ok ? 'ok' : 'error'),
-        detail: d.detail || d.error || 'No detail returned.',
-        output: d.output,
-        elapsedMs: d.elapsedMs,
-        supervisor: d.supervisor,
-        manualCommand: d.manualCommand,
-      });
-    } catch (err) {
-      setLastResult({
-        ok: false,
-        status: 'error',
-        detail: err instanceof Error ? err.message : String(err),
-      });
-    }
-    setWorking(null);
-  }, []);
-
-  const performAction = useCallback(async (action: 'wire' | 'revert' | 'force-wire') => {
-    setWorking(action);
-    setLastResult(null);
-    try {
-      const body = action === 'force-wire' ? { action: 'wire', force: true } : { action };
-      const res = await fetch("/api/openclaw/routing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const d = await res.json();
-      setLastResult({
-        ok: Boolean(d.ok),
-        status: d.status || (res.ok ? 'ok' : 'error'),
-        detail: d.detail || d.error || 'No detail returned.',
-        preservedPaths: d.preservedPaths,
-        reclaimedDespiteEditPaths: d.reclaimedDespiteEditPaths,
-        restartRequired: d.restartRequired,
-      });
-      // Re-read state so the badges refresh (ROUTED indicator, sidecar block).
-      await fetchRouting();
-      await fetchConnectorRouting();
-    } catch (err) {
-      setLastResult({
-        ok: false,
-        status: 'error',
-        detail: err instanceof Error ? err.message : String(err),
-      });
-    }
-    setWorking(null);
-  }, [fetchRouting, fetchConnectorRouting]);
-
-  const selectConnectorItem = useCallback(async (item: ConnectorRoutingItem, desiredRoute: 'routed' | 'direct') => {
-    setConnectorWorking('select');
-    setConnectorResult(null);
-    try {
-      const res = await fetch("/api/connector-routing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "select",
-          connector: item.connector,
-          itemIds: [item.id],
-          desiredRoute,
-        }),
-      });
-      const d = await res.json();
-      if (!res.ok || !d.ok) throw new Error(d.error || "Failed to update selection");
-      await fetchConnectorRouting();
-    } catch (err) {
-      setConnectorResult({
-        ok: false,
-        status: "selection_error",
-        detail: err instanceof Error ? err.message : String(err),
-        connector: item.connector,
-      });
-    }
-    setConnectorWorking(null);
-  }, [fetchConnectorRouting]);
-
-  const syncConnectorInventory = useCallback(async () => {
-    setConnectorWorking('sync');
-    setConnectorResult(null);
-    try {
-      const res = await fetch("/api/connector-routing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "sync" }),
-      });
-      const d = await res.json();
-      if (!res.ok || !d.ok) throw new Error(d.error || "Failed to sync routing inventory");
-      setConnectorRouting(d as ConnectorRoutingResponse);
-      setConnectorResult({ ok: true, status: "synced", detail: `Inventory synced. ${d.driftTotal || 0} change(s) need review.`, connector: "all" });
-    } catch (err) {
-      setConnectorResult({ ok: false, status: "sync_error", detail: err instanceof Error ? err.message : String(err), connector: "all" });
-    }
-    setConnectorWorking(null);
-  }, []);
-
-  const applySelectedOpenClawRouting = useCallback(async () => {
-    setConnectorWorking('apply-openclaw');
-    setConnectorResult(null);
-    try {
-      const res = await fetch("/api/connector-routing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "apply-openclaw" }),
-      });
-      const d = await res.json();
-      if (!res.ok || !d.ok) throw new Error(d.error || d.result?.detail || "Failed to apply OpenClaw routing");
-      setConnectorResult({
-        ok: true,
-        status: d.result?.status || "applied",
-        detail: d.result?.detail || "OpenClaw routing applied.",
-        restartRequired: Boolean(d.result?.restartRequired),
-        connector: "openclaw",
-      });
-      await fetchRouting();
-      await fetchConnectorRouting();
-    } catch (err) {
-      setConnectorResult({ ok: false, status: "apply_error", detail: err instanceof Error ? err.message : String(err), connector: "openclaw" });
-    }
-    setConnectorWorking(null);
-  }, [fetchConnectorRouting, fetchRouting]);
-
-  const applySelectedHermesRouting = useCallback(async () => {
-    setConnectorWorking('apply-hermes');
-    setConnectorResult(null);
-    try {
-      const res = await fetch("/api/connector-routing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "apply-hermes" }),
-      });
-      const d = await res.json();
-      if (!res.ok || !d.ok) throw new Error(d.error || d.result?.detail || "Failed to apply Hermes routing");
-      setConnectorResult({
-        ok: true,
-        status: d.result?.status || "applied",
-        detail: d.result?.detail || "Hermes routing applied.",
-        restartRequired: Boolean(d.result?.restartRequired),
-        connector: "hermes",
-      });
-      await fetchConnectorRouting();
-    } catch (err) {
-      setConnectorResult({ ok: false, status: "apply_error", detail: err instanceof Error ? err.message : String(err), connector: "hermes" });
-    }
-    setConnectorWorking(null);
-  }, [fetchConnectorRouting]);
-
-  const revertHermesWire = useCallback(async () => {
-    setConnectorWorking('revert-hermes');
-    setConnectorResult(null);
-    try {
-      const res = await fetch("/api/connector-routing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "revert-hermes" }),
-      });
-      const d = await res.json();
-      if (!res.ok || !d.ok) throw new Error(d.error || d.result?.detail || "Failed to revert Hermes wire");
-      setConnectorResult({
-        ok: true,
-        status: d.result?.status || "reverted",
-        detail: d.result?.detail || "Hermes wire reverted.",
-        restartRequired: Boolean(d.result?.restartRequired),
-        connector: "hermes",
-      });
-      await fetchConnectorRouting();
-    } catch (err) {
-      setConnectorResult({ ok: false, status: "revert_error", detail: err instanceof Error ? err.message : String(err), connector: "hermes" });
-    }
-    setConnectorWorking(null);
-  }, [fetchConnectorRouting]);
-
-  const restartHermesGateway = useCallback(async () => {
-    setConnectorWorking('restart-hermes');
-    setConnectorResult(null);
-    try {
-      const res = await fetch("/api/hermes/gateway/restart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
-      const d = await res.json();
-      if (!res.ok || !d.ok) throw new Error(d.error || d.detail || "Failed to restart Hermes gateway");
-      setConnectorResult({
-        ok: true,
-        status: d.status || "restarted",
-        detail: d.detail || "Hermes gateway restarted.",
-        connector: "hermes",
-      });
-      await fetchHermesSupervisor();
-      await fetchConnectorRouting();
-    } catch (err) {
-      setConnectorResult({ ok: false, status: "restart_error", detail: err instanceof Error ? err.message : String(err), connector: "hermes" });
-    }
-    setConnectorWorking(null);
-  }, [fetchConnectorRouting, fetchHermesSupervisor]);
-
-  const litellmUrl = connectorRouting?.litellmTarget || "http://127.0.0.1:4001/v1";
-  const providerLevelHelp = (
-    <span>
-      OpenClaw and Hermes custom providers route by provider endpoint, not by
-      independent per-model switches. If several models share the same provider,
-      selecting one model routes that provider&apos;s endpoint through LiteLLM, so
-      sibling models on that provider follow the same route.
-    </span>
-  );
-  const connectorActionRowStyle: React.CSSProperties = {
-    display: "flex",
-    gap: 8,
-    flexWrap: "wrap",
-    alignItems: "center",
-    marginBottom: 10,
-  };
-  const connectorRoutingLegend = [
-    {
-      label: "PROVIDER",
-      color: C.info,
-      description: "An upstream endpoint group in OpenClaw or a Hermes custom_provider. Routing is enforced at this provider endpoint.",
-    },
-    {
-      label: "MODEL",
-      color: C.purp,
-      description: <span>An advertised model under a provider. Selecting one model protects that provider&apos;s traffic because connector routing is enforced at provider endpoints.</span>,
-    },
-    {
-      label: "PROXY BRIDGE",
-      color: C.green,
-      description: "The local LiteLLM bridge that ClawNex owns. It is shown for transparency but is not a selectable upstream provider.",
-    },
-    {
-      label: "ROUTED",
-      color: C.green,
-      description: "Traffic currently flows through the ClawNex LiteLLM proxy, so real-time Prompt Shield scanning is active.",
-    },
-    {
-      label: "DIRECT",
-      color: C.warn,
-      description: "Traffic goes directly to the upstream provider. ClawNex may still see it later through the Session Watcher, but real-time shield scanning is bypassed.",
-    },
-    {
-      label: "SELECTED",
-      color: C.brand,
-      description: "The operator has marked this provider/model for routing on the next connector-specific Apply action.",
-    },
-    {
-      label: "READ-ONLY",
-      color: C.txT,
-      description: "Observed inventory only. OAuth/session-bound or watcher-only rows cannot be safely rewritten by ClawNex.",
-    },
-  ];
-
-  // Wire-state classification feeds the button bank below.
-  // - `managed`: sidecar present AND its provider path is currently in
-  //   openclaw.json (the steady-state "ClawNex wired this") condition.
-  // - `conflict`: there's a `litellm` provider in openclaw.json that
-  //   doesn't have a sidecar — operator-owned or stale ClawNex wire.
-  //   Force Wire reclaims it.
-  // - `unwired`: no `litellm` entry, no sidecar — fresh state, primary
-  //   action is Wire.
-  const litellmProvider = routingData?.providers.find(p => p.id === 'litellm');
-  const wireState: 'managed' | 'conflict' | 'unwired' | 'unknown' =
-    sidecar && litellmProvider ? 'managed' :
-    !sidecar && litellmProvider ? 'conflict' :
-    !litellmProvider && !configMissing ? 'unwired' :
-    'unknown';
-
-  const renderConnectorInventory = (summary: ConnectorRoutingSummary, connector: 'openclaw' | 'hermes') => {
-    const presentItems = summary.items.filter(item => item.present);
-    const removedItems = summary.items.filter(item => !item.present).slice(0, 6);
-    if (presentItems.length === 0 && removedItems.length === 0) {
-      return (
-        <div style={{ padding: "8px 10px", border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 4, fontSize: 11, color: C.txS, lineHeight: 1.5 }}>
-          {summary.detail}
-        </div>
-      );
-    }
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {presentItems.map(item => {
-          const isProxyBridge = (connector === 'openclaw' && item.providerId === 'litellm') || (connector === 'hermes' && item.providerId === 'clawnex-litellm');
-          const isReadOnly = item.capability === 'read-only' || item.capability === 'unsupported';
-          const canRoute = !isProxyBridge && !isReadOnly;
-          const checked = item.desiredRoute === 'routed';
-          const selectedForApply = checked && !isProxyBridge;
-          const driftLabel = item.isNew ? "NEW" : item.isChanged ? "CHANGED" : null;
-          const typeBadgeLabel = isProxyBridge ? "PROXY BRIDGE" : item.itemType.toUpperCase();
-          const typeBadgeColor = isProxyBridge ? C.green : item.itemType === 'provider' ? C.info : C.purp;
-          return (
-            <div key={item.id} style={{
-              display: "grid",
-              gridTemplateColumns: "24px minmax(160px, 1fr) minmax(180px, 1.4fr) auto",
-              gap: 8,
-              alignItems: "center",
-              padding: "8px 10px",
-              border: `1px solid ${selectedForApply ? `${C.brand}55` : C.glassBorderSubtle}`,
-              borderLeft: `3px solid ${item.currentRoute === 'routed' ? C.green : item.currentRoute === 'direct' ? C.warn : C.txT}`,
-              borderRadius: 4,
-              background: selectedForApply ? `${C.brand}08` : C.glassSurfTrans,
-            }}>
-              <input
-                type="checkbox"
-                checked={isProxyBridge ? false : checked}
-                disabled={!canRoute || connectorWorking !== null}
-                onChange={(e) => selectConnectorItem(item, e.target.checked ? 'routed' : 'direct')}
-                aria-label={isProxyBridge ? `${item.displayName} is the local proxy bridge and cannot be selected` : `${checked ? "Do not route" : "Route"} ${item.displayName}`}
-                style={{ width: 15, height: 15, accentColor: C.brand, cursor: canRoute ? "pointer" : "not-allowed" }}
-              />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: C.tx }}>
-                    {item.itemType === 'model' ? `${item.providerId}/${item.modelId}` : item.displayName}
-                  </span>
-                  <Badge label={typeBadgeLabel} color={typeBadgeColor} tip={null} />
-                  {driftLabel && <Badge label={driftLabel} color={C.warn} tip={null} />}
-                  {isReadOnly && !isProxyBridge && <Badge label="READ-ONLY" color={C.txT} tip={null} />}
-                </div>
-                {item.itemType === 'model' && item.displayName !== item.modelId && (
-                  <div style={{ fontSize: 10, color: C.txT, marginTop: 2 }}>{item.displayName}</div>
-                )}
-              </div>
-              <div style={{ minWidth: 0, fontSize: 10, fontFamily: F.mono, color: C.txT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {item.baseUrl || (connector === 'hermes' ? "observed-only / no writable endpoint" : "no endpoint")}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, flexWrap: "wrap" }}>
-                <Badge label={item.currentRoute.toUpperCase()} color={item.currentRoute === 'routed' ? C.green : item.currentRoute === 'direct' ? C.warn : C.txT} tip={null} />
-                {selectedForApply && <Badge label="SELECTED" color={C.brand} tip={null} />}
-              </div>
-            </div>
-          );
-        })}
-        {removedItems.length > 0 && (
-          <div style={{ marginTop: 4, padding: "8px 10px", border: `1px solid ${C.warn}33`, borderRadius: 4, background: `${C.warn}08`, fontSize: 11, color: C.txS }}>
-            <strong style={{ color: C.warn }}>Removed since last scan:</strong>{" "}
-            {removedItems.map(item => item.itemType === 'model' ? `${item.providerId}/${item.modelId}` : item.providerId).join(", ")}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderConnectorResult = (connector: 'openclaw' | 'hermes') => {
-    if (!connectorResult) return null;
-    if (connectorResult.connector && connectorResult.connector !== "all" && connectorResult.connector !== connector) return null;
-    return (
-      <div style={{
-        marginTop: 10, padding: "8px 10px", borderRadius: 4,
-        background: connectorResult.ok ? `${C.green}08` : `${C.danger}08`,
-        border: `1px solid ${connectorResult.ok ? C.green : C.danger}33`,
-      }}>
-        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: connectorResult.ok ? C.green : C.danger, marginBottom: 4 }}>
-          {connectorResult.status}
-        </div>
-        <div style={{ fontSize: 11, color: C.txS, lineHeight: 1.5 }}>{connectorResult.detail}</div>
-        {connectorResult.restartRequired && (
-          <div style={{ marginTop: 6, color: C.warn, fontSize: 11 }}>
-            Restart the affected {connector === "openclaw" ? "OpenClaw gateway" : "Hermes runtime"} to apply the selected routing changes.
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  return (
-    <>
-    <CollapsibleCard title="OPENCLAW ROUTING" accent={C.info} defaultOpen={false} focusKey="openclawRouting" focusedCard={focusedCard}>
-      <div style={{ fontSize: 12, color: C.txS, marginBottom: 10, lineHeight: 1.5 }}>
-        For ClawNex to scan LLM traffic, OpenClaw providers must route through the LiteLLM proxy (port 4001).
-        Providers not routing through LiteLLM will bypass the Prompt Shield — traffic won't be scanned.
-      </div>
-
-      {loading && <LoadingSpinner />}
-
-      {configMissing && !loading && (
-        <span style={{ fontSize: 12, color: C.warn }}>Could not read openclaw.json. Ensure OpenClaw is installed.</span>
-      )}
-
-      {!configMissing && routingData && routingData.providers.length === 0 && !loading && (
-        <div style={{ padding: "10px 12px", background: `${C.info}08`, border: `1px solid ${C.info}22`, borderRadius: 6, fontSize: 12, color: C.txS, lineHeight: 1.5 }}>
-          OpenClaw config found, but no LLM providers are registered in <span style={{ fontFamily: F.mono, color: C.cyan }}>openclaw.json</span> yet.
-          Add a provider in OpenClaw first — ClawNex will then show its routing status here.
-        </div>
-      )}
-
-      {routingData && routingData.providers.length > 0 ? (
-        <div>
-          {routingData.providers.map(p => (
-            <div key={p.id} style={{
-              display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", marginBottom: 4,
-              background: p.routed ? `${C.green}06` : `${C.warn}06`,
-              borderLeft: `3px solid ${p.routed ? C.green : C.warn}`,
-              borderRadius: 4,
-            }}>
-              <Dot color={p.routed ? C.green : C.warn} size={6} />
-              <span style={{ fontSize: 12, fontWeight: 600, color: C.tx, minWidth: 120 }}>{p.name || p.id}</span>
-              <span style={{ fontSize: 10, fontFamily: F.mono, color: C.txT, flex: 1 }}>{p.baseUrl}</span>
-              {p.routed ? (
-                <Tooltip placement="left" variant="detail" content={
-                  <span>
-                    Traffic from this provider goes through the local safety proxy first, so the <strong style={{ color: C.brand }}>Prompt Shield</strong> scans every request before it reaches the model.
-                  </span>
-                }>
-                  <span><Badge label="ROUTED" color={C.green} /></span>
-                </Tooltip>
-              ) : (
-                <Tooltip placement="left" variant="detail" content={
-                  <span>
-                    Provider traffic <strong>bypasses</strong> LiteLLM and goes directly to the upstream (often because OAuth or subscription auth can&apos;t be proxied). Real-time scanning is off, but traffic is still visible <em>retroactively</em> through the <strong style={{ color: C.cyan }}>Session Watcher</strong>, which tails each agent&apos;s session files on disk.
-                  </span>
-                }>
-                  <span><Badge label="DIRECT" color={C.warn} /></span>
-                </Tooltip>
-              )}
-            </div>
-          ))}
-
-          {routingData.providers.some(p => !p.routed) && (
-            <div style={{ marginTop: 10, padding: "10px 12px", background: `${C.info}08`, border: `1px solid ${C.info}22`, borderRadius: 6 }}>
-              <div style={{ fontSize: 10, color: C.info, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Heads Up — DIRECT Providers</div>
-              <div style={{ fontSize: 11, color: C.txS, lineHeight: 1.6 }}>
-                Providers marked <span style={{ fontFamily: F.mono, color: C.warn, fontWeight: 700 }}>DIRECT</span> bypass the Prompt Shield&apos;s real-time scanning. This is often intentional:
-                OAuth and subscription-based providers (Claude.ai, ChatGPT Pro, Gemini, etc.) can&apos;t be proxied because their auth is bound to the client session. Their traffic
-                is still visible <em>retroactively</em> through the <span style={{ fontFamily: F.mono, color: C.cyan }}>Session Watcher</span>, which tails each agent&apos;s session files on disk.
-              </div>
-              <div style={{ marginTop: 8, fontSize: 11, color: C.txS, lineHeight: 1.6 }}>
-                If you want <strong>real-time</strong> scanning for an API-based provider instead, use the <strong>OpenClaw Selective Routing</strong> section below: tick the provider/model, apply routing, then restart the gateway.
-              </div>
-              <div style={{ marginTop: 6, padding: "6px 10px", background: C.bg, borderRadius: 4, fontFamily: F.mono, fontSize: 12, color: C.brand }}>{litellmUrl}</div>
-              <div style={{ fontSize: 10, color: C.txT, marginTop: 6 }}>
-                OpenClaw enforces routing at{" "}
-                <Tooltip placement="top" variant="detail" content={providerLevelHelp}>
-                  <span style={{ color: C.warn, cursor: "help", borderBottom: `1px dotted ${C.warn}` }}>provider endpoint level</span>
-                </Tooltip>
-                , so selected models route through their provider.
-              </div>
-            </div>
-          )}
-
-          {routingData.providers.every(p => p.routed) && (
-            <div style={{ marginTop: 8, fontSize: 11, color: C.green, fontWeight: 600 }}>{"\u2713"} All providers routed through ClawNex shield</div>
-          )}
-        </div>
-      ) : null}
-
-      {connectorRouting && (
-        <div style={{ marginTop: 12, padding: "10px 12px", background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 10, color: C.txT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-              OpenClaw Selective Routing
-            </span>
-            {connectorRouting.openclaw.drift.total > 0 ? <Badge label={`${connectorRouting.openclaw.drift.total} CHANGE${connectorRouting.openclaw.drift.total === 1 ? "" : "S"}`} color={C.warn} /> : <Badge label="IN SYNC" color={C.green} />}
-            <span style={{ marginLeft: "auto", fontSize: 10, color: C.txT, fontFamily: F.mono }}>
-              target {connectorRouting.litellmTarget}
-            </span>
-          </div>
-
-          {connectorRouting.openclaw.drift.total > 0 && (
-            <div style={{ marginBottom: 10, padding: "8px 10px", border: `1px solid ${C.warn}44`, borderRadius: 4, background: `${C.warn}10`, fontSize: 11, color: C.txS, lineHeight: 1.5 }}>
-              OpenClaw inventory changed. Review new or removed providers/models before assuming traffic is protected.
-            </div>
-          )}
-
-          <div style={connectorActionRowStyle}>
-            <button
-              onClick={syncConnectorInventory}
-              disabled={connectorWorking !== null}
-              style={{
-                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                background: connectorWorking === 'sync' ? `${C.info}33` : `${C.info}14`,
-                border: `1px solid ${C.info}66`, color: C.info,
-                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
-              }}
-            >
-              {connectorWorking === 'sync' ? "Syncing..." : "Sync Inventory"}
-            </button>
-            <button
-              onClick={applySelectedOpenClawRouting}
-              disabled={connectorWorking !== null || connectorRouting.openclaw.selected === 0}
-              style={{
-                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                background: connectorWorking === 'apply-openclaw' ? `${C.brand}33` : `${C.brand}18`,
-                border: `1px solid ${C.brand}66`, color: C.brand,
-                cursor: connectorWorking || connectorRouting.openclaw.selected === 0 ? "not-allowed" : "pointer", fontFamily: F.sans,
-                opacity: connectorRouting.openclaw.selected === 0 ? 0.55 : 1,
-              }}
-            >
-              {connectorWorking === 'apply-openclaw' ? "Applying..." : `Apply OpenClaw Routing (${connectorRouting.openclaw.selected})`}
-            </button>
-            {wireState === 'unwired' && (
-              <button
-                onClick={() => performAction('wire')}
-                disabled={working !== null}
-                style={{
-                  padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                  background: working === 'wire' ? `${C.brand}33` : `${C.brand}22`,
-                  border: `1px solid ${C.brand}66`, color: C.brand,
-                  cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-                }}
-              >
-                {working === 'wire' ? "Wiring..." : "Wire LiteLLM"}
-              </button>
-            )}
-
-              {wireState === 'conflict' && (
-                <button
-                  onClick={() => performAction('force-wire')}
-                  disabled={working !== null}
-                  style={{
-                    padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                    background: working === 'force-wire' ? `${C.warn}33` : `${C.warn}22`,
-                    border: `1px solid ${C.warn}66`, color: C.warn,
-                    cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-                  }}
-                >
-                  {working === 'force-wire' ? "Force-Wiring..." : "Force Wire (overwrite)"}
-                </button>
-              )}
-
-              {wireState === 'managed' && (
-                <button
-                  onClick={() => performAction('revert')}
-                  disabled={working !== null}
-                  style={{
-                    padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                    background: working === 'revert' ? `${C.warn}33` : `${C.warn}14`,
-                    border: `1px solid ${C.warn}66`, color: C.warn,
-                    cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-                  }}
-                >
-                  {working === 'revert' ? "Reverting..." : "Revert ClawNex Wire"}
-                </button>
-              )}
-
-              {supervisor && supervisor.kind !== 'unsupported' && (
-                <Tooltip placement="top" variant="detail" content={
-                  <span>
-                    Restarts the long-running <span style={{ fontFamily: F.mono, color: C.cyan }}>openclaw-gateway</span> daemon
-                    via <strong>{supervisor.label}</strong> so it picks up routing changes from <span style={{ fontFamily: F.mono, color: C.cyan }}>openclaw.json</span>.
-                    No SSH required.
-                  </span>
-                }>
-                  <button
-                    onClick={performRestart}
-                    disabled={working !== null}
-                    style={{
-                      padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                      background: working === 'restart' ? `${C.cyan}33` : `${C.cyan}14`,
-                      border: `1px solid ${C.cyan}66`, color: C.cyan,
-                      cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-                    }}
-                  >
-                    {working === 'restart' ? "Restarting..." : "Restart Gateway"}
-                  </button>
-                </Tooltip>
-              )}
-
-              {supervisor && supervisor.kind === 'unsupported' && (
-                <Tooltip placement="top" variant="detail" content={
-                  <span>
-                    Auto-restart is not supported on this host. Manual fallback:
-                    <span style={{ fontFamily: F.mono, color: C.cyan }}> {supervisor.manualCommand}</span>
-                  </span>
-                }>
-                  <button
-                    disabled
-                    style={{
-                      padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                      background: `${C.txT}10`, border: `1px solid ${C.glassBorderSubtle}`,
-                      color: C.txT, cursor: "not-allowed", fontFamily: F.sans,
-                    }}
-                  >
-                    Restart Gateway
-                  </button>
-                </Tooltip>
-              )}
-
-            <button
-              onClick={() => { fetchRouting(); fetchSupervisor(); fetchConnectorRouting(); }}
-              disabled={working !== null}
-              style={{
-                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 600,
-                background: "transparent", border: `1px solid ${C.glassBorderSubtle}`, color: C.txS,
-                cursor: working ? "wait" : "pointer", fontFamily: F.sans,
-              }}
-            >
-              Refresh
-            </button>
-          </div>
-
-          <div style={{ fontSize: 11, color: C.txS, lineHeight: 1.5, marginBottom: 10 }}>
-            OpenClaw enforces routing by{" "}
-            <Tooltip placement="top" variant="detail" content={providerLevelHelp}>
-              <span style={{ color: C.warn, cursor: "help", borderBottom: `1px dotted ${C.warn}` }}>provider endpoint</span>
-            </Tooltip>
-            . Selecting an individual model marks it for protection and routes that model&apos;s provider through LiteLLM when applied.
-          </div>
-
-          <BadgeLegend items={connectorRoutingLegend} title="OpenClaw routing labels" style={{ marginBottom: 10 }} />
-
-          {renderConnectorInventory(connectorRouting.openclaw, 'openclaw')}
-          {renderConnectorResult('openclaw')}
-        </div>
-      )}
-
-      {/* ClawNex-managed wire/revert. The engine at
-          src/lib/services/openclaw-routing-wire.ts writes a single
-          `models.providers.litellm` entry and (if unset) a primary
-          model alias, tracking ownership in a sidecar at
-          ~/.clawnex-routing-managed.json so revert can be precise.
-          OpenClaw schema is identical for our use case across 2026.3.x
-          and 2026.4.x -- `meta.lastTouchedVersion` is recorded in the
-          sidecar for audit. */}
-      {!configMissing && (
-        <div style={{ marginTop: 12, padding: "10px 12px", background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <span style={{ fontSize: 10, color: C.txT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-              ClawNex-Managed Routing
-            </span>
-            {wireState === 'managed' && <Badge label="WIRED" color={C.green} />}
-            {wireState === 'conflict' && <Badge label="OPERATOR-OWNED" color={C.warn} />}
-            {wireState === 'unwired' && <Badge label="NOT WIRED" color={C.txT} />}
-            {openclawVersion && (
-              <span style={{ fontSize: 10, fontFamily: F.mono, color: C.txT, marginLeft: "auto" }}>
-                OpenClaw {openclawVersion}
-              </span>
-            )}
-          </div>
-
-          {wireState === 'managed' && sidecar && (
-            <div style={{ fontSize: 11, color: C.txS, lineHeight: 1.5, marginBottom: 8 }}>
-              ClawNex wrote {sidecar.paths.length} path(s) on{" "}
-              <span style={{ fontFamily: F.mono, color: C.txS }}>
-                {new Date(sidecar.managedAt).toLocaleString()}
-              </span>
-              . Revert removes only paths whose values still match the recorded fingerprints
-              -- operator edits made after the wire are preserved automatically.
-            </div>
-          )}
-
-          {wireState === 'conflict' && (
-            <div style={{ fontSize: 11, color: C.txS, lineHeight: 1.5, marginBottom: 8 }}>
-              <span style={{ fontFamily: F.mono, color: C.cyan }}>models.providers.litellm</span> already exists in openclaw.json
-              but ClawNex doesn&apos;t have a sidecar for it. <strong>Force Wire</strong> overwrites the existing entry with
-              ClawNex&apos;s canonical values and starts tracking ownership.
-              <div style={{ marginTop: 6, padding: "6px 10px", background: `${C.warn}10`, border: `1px solid ${C.warn}33`, borderRadius: 4, color: C.warn }}>
-                <strong>Blast radius:</strong> the existing values for <span style={{ fontFamily: F.mono }}>models.providers.litellm</span> will be replaced. From this point ClawNex owns the slot &mdash; a future <strong>Revert ClawNex Wire</strong> will reclaim it (remove the entry) regardless of any operator edits made afterwards. <span style={{ fontFamily: F.mono }}>agents.defaults.model.primary</span> is only set if currently unset; operator edits to it after the wire are preserved on revert.
-              </div>
-            </div>
-          )}
-
-          {wireState === 'unwired' && (
-            <div style={{ fontSize: 11, color: C.txS, lineHeight: 1.5, marginBottom: 8 }}>
-              OpenClaw has no <span style={{ fontFamily: F.mono, color: C.cyan }}>litellm</span> provider entry yet, so its agent traffic
-              bypasses the LiteLLM proxy and the Prompt Shield. <strong>Wire LiteLLM</strong> adds the
-              entry pointing at <span style={{ fontFamily: F.mono, color: C.brand }}>{litellmUrl}</span>.
-            </div>
-          )}
-
-          {lastResult && (
-            <div style={{
-              marginTop: 10, padding: "8px 10px", borderRadius: 4,
-              background: lastResult.ok ? `${C.green}08` : `${C.danger}08`,
-              border: `1px solid ${lastResult.ok ? C.green : C.danger}33`,
-            }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: lastResult.ok ? C.green : C.danger, marginBottom: 4 }}>
-                {lastResult.status}
-              </div>
-              <div style={{ fontSize: 11, color: C.txS, lineHeight: 1.5 }}>{lastResult.detail}</div>
-              {lastResult.restartRequired && (
-                <div style={{ marginTop: 6, padding: "4px 8px", background: `${C.warn}10`, border: `1px solid ${C.warn}33`, borderRadius: 3, fontSize: 11, color: C.warn }}>
-                  Restart required -- run <span style={{ fontFamily: F.mono }}>sudo systemctl restart openclaw-gateway</span> on the host for OpenClaw to pick up the new routing.
-                </div>
-              )}
-              {lastResult.preservedPaths && lastResult.preservedPaths.length > 0 && (
-                <div style={{ marginTop: 6, fontSize: 11, color: C.txS }}>
-                  <strong>Preserved</strong> (set-if-missing paths the operator edited after wire): <span style={{ fontFamily: F.mono }}>
-                    {lastResult.preservedPaths.map(p => p.join(".")).join(", ")}
-                  </span>
-                </div>
-              )}
-              {lastResult.reclaimedDespiteEditPaths && lastResult.reclaimedDespiteEditPaths.length > 0 && (
-                <div style={{ marginTop: 6, padding: "4px 8px", background: `${C.warn}10`, border: `1px solid ${C.warn}33`, borderRadius: 3, fontSize: 11, color: C.warn }}>
-                  <strong>Reclaimed despite edit</strong> (ClawNex-owned <em>set</em> slots; any operator changes here were removed): <span style={{ fontFamily: F.mono }}>
-                    {lastResult.reclaimedDespiteEditPaths.map(p => p.join(".")).join(", ")}
-                  </span>
-                </div>
-              )}
-              {lastResult.supervisor && lastResult.elapsedMs !== undefined && (
-                <div style={{ marginTop: 6, fontSize: 10, color: C.txT, fontFamily: F.mono }}>
-                  via {lastResult.supervisor} in {lastResult.elapsedMs}ms
-                </div>
-              )}
-              {lastResult.output && (
-                <details style={{ marginTop: 6 }}>
-                  <summary style={{ cursor: "pointer", fontSize: 10, color: C.txT, fontFamily: F.mono, userSelect: "none" }}>
-                    Supervisor output
-                  </summary>
-                  <pre style={{
-                    marginTop: 4, padding: "4px 8px", borderRadius: 3,
-                    background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`,
-                    fontSize: 10, lineHeight: 1.4, color: C.txS,
-                    fontFamily: F.mono, maxHeight: 160, overflow: "auto",
-                    whiteSpace: "pre-wrap", wordBreak: "break-word",
-                  }}>{lastResult.output}</pre>
-                </details>
-              )}
-              {!lastResult.ok && lastResult.manualCommand && (
-                <div style={{ marginTop: 6, fontSize: 11, color: C.txS }}>
-                  Manual fallback: <span style={{ fontFamily: F.mono, color: C.brand }}>{lastResult.manualCommand}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Full transparency: surface the raw sidecar JSON inline so
-              the operator can audit exactly what ClawNex is tracking
-              without SSH. Native <details> handles the disclosure
-              with no extra React state. Only renders when a sidecar
-              exists, so a fresh fleet doesn't show an empty pane. */}
-          {sidecar && (
-            <details style={{ marginTop: 10 }}>
-              <summary style={{
-                cursor: "pointer", fontSize: 11, color: C.cyan, fontWeight: 600,
-                userSelect: "none", padding: "4px 0",
-              }}>
-                View raw sidecar (~/.clawnex-routing-managed.json)
-              </summary>
-              <pre style={{
-                marginTop: 6, padding: "8px 10px", borderRadius: 4,
-                background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`,
-                fontSize: 10, lineHeight: 1.45, color: C.txS,
-                fontFamily: F.mono, maxHeight: 320, overflow: "auto",
-                whiteSpace: "pre-wrap", wordBreak: "break-word",
-              }}>{JSON.stringify(sidecar, null, 2)}</pre>
-            </details>
-          )}
-        </div>
-      )}
-    </CollapsibleCard>
-
-    {connectorRouting && (
-      <CollapsibleCard title="HERMES ROUTING" accent={C.purp} defaultOpen={false} focusKey="hermesRouting" focusedCard={focusedCard}>
-        <div style={{ fontSize: 12, color: C.txS, marginBottom: 10, lineHeight: 1.5 }}>
-          Hermes routing is managed separately from OpenClaw. Writable Hermes custom providers can be routed through the LiteLLM proxy for real-time Prompt Shield scanning.
-          OAuth/session-bound and watcher-only Hermes rows stay read-only because ClawNex cannot safely rewrite those client-owned paths.
-        </div>
-
-        <div style={{ padding: "10px 12px", background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 10, color: C.txT, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-              Hermes Provider Routing
-            </span>
-            {connectorRouting.hermes.drift.total > 0 ? <Badge label={`${connectorRouting.hermes.drift.total} CHANGE${connectorRouting.hermes.drift.total === 1 ? "" : "S"}`} color={C.warn} /> : <Badge label="IN SYNC" color={C.green} />}
-            <span style={{ marginLeft: "auto", fontSize: 10, color: C.txT, fontFamily: F.mono }}>
-              target {connectorRouting.litellmTarget}
-            </span>
-          </div>
-
-          {connectorRouting.hermes.drift.total > 0 && (
-            <div style={{ marginBottom: 10, padding: "8px 10px", border: `1px solid ${C.warn}44`, borderRadius: 4, background: `${C.warn}10`, fontSize: 11, color: C.txS, lineHeight: 1.5 }}>
-              Hermes inventory changed. Review new or removed custom providers/models before assuming traffic is protected.
-            </div>
-          )}
-
-          <div style={connectorActionRowStyle}>
-            <button
-              onClick={syncConnectorInventory}
-              disabled={connectorWorking !== null}
-              style={{
-                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                background: connectorWorking === 'sync' ? `${C.info}33` : `${C.info}14`,
-                border: `1px solid ${C.info}66`, color: C.info,
-                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
-              }}
-            >
-              {connectorWorking === 'sync' ? "Syncing..." : "Sync Inventory"}
-            </button>
-            <button
-              onClick={applySelectedHermesRouting}
-              disabled={connectorWorking !== null || connectorRouting.hermes.selected === 0}
-              style={{
-                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                background: connectorWorking === 'apply-hermes' ? `${C.purp}33` : `${C.purp}18`,
-                border: `1px solid ${C.purp}66`, color: C.purp,
-                cursor: connectorWorking || connectorRouting.hermes.selected === 0 ? "not-allowed" : "pointer", fontFamily: F.sans,
-                opacity: connectorRouting.hermes.selected === 0 ? 0.55 : 1,
-              }}
-            >
-              {connectorWorking === 'apply-hermes' ? "Saving..." : `Save Hermes Wire (${connectorRouting.hermes.selected})`}
-            </button>
-            <button
-              onClick={revertHermesWire}
-              disabled={connectorWorking !== null}
-              style={{
-                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                background: connectorWorking === 'revert-hermes' ? `${C.warn}33` : `${C.warn}14`,
-                border: `1px solid ${C.warn}66`, color: C.warn,
-                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
-              }}
-            >
-              {connectorWorking === 'revert-hermes' ? "Reverting..." : "Revert Hermes Wire"}
-            </button>
-              {hermesSupervisor && hermesSupervisor.kind !== 'unsupported' && (
-                <Tooltip placement="top" variant="detail" content={
-                  <span>
-                    Restarts the detected Hermes gateway supervisor so Hermes reloads provider changes from
-                    <span style={{ fontFamily: F.mono, color: C.cyan }}> config.yaml</span>.
-                    {hermesSupervisor.targets?.length ? <> Targets: <span style={{ fontFamily: F.mono, color: C.cyan }}>{hermesSupervisor.targets.join(", ")}</span>.</> : null}
-                  </span>
-                }>
-                  <button
-                    onClick={restartHermesGateway}
-                    disabled={connectorWorking !== null}
-                    style={{
-                      padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                      background: connectorWorking === 'restart-hermes' ? `${C.cyan}33` : `${C.cyan}14`,
-                      border: `1px solid ${C.cyan}66`, color: C.cyan,
-                      cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
-                    }}
-                  >
-                    {connectorWorking === 'restart-hermes' ? "Restarting..." : "Restart Gateway"}
-                  </button>
-                </Tooltip>
-              )}
-              {hermesSupervisor && hermesSupervisor.kind === 'unsupported' && (
-                <Tooltip placement="top" variant="detail" content={
-                  <span>
-                    ClawNex did not detect a known Hermes gateway supervisor on this host. Manual fallback:
-                    <span style={{ fontFamily: F.mono, color: C.cyan }}> {hermesSupervisor.manualCommand}</span>
-                  </span>
-                }>
-                  <button
-                    disabled
-                    style={{
-                      padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                      background: `${C.txT}10`, border: `1px solid ${C.glassBorderSubtle}`,
-                      color: C.txT, cursor: "not-allowed", fontFamily: F.sans,
-                    }}
-                  >
-                    Restart Gateway
-                  </button>
-                </Tooltip>
-              )}
-            <button
-              onClick={fetchHermesSupervisor}
-              disabled={connectorWorking !== null}
-              style={{
-                padding: "6px 12px", borderRadius: 4, fontSize: 11, fontWeight: 600,
-                background: "transparent", border: `1px solid ${C.glassBorderSubtle}`, color: C.txS,
-                cursor: connectorWorking ? "wait" : "pointer", fontFamily: F.sans,
-              }}
-            >
-              Detect Gateway
-            </button>
-          </div>
-
-          <div style={{ fontSize: 11, color: C.txS, lineHeight: 1.5, marginBottom: 10 }}>
-            Hermes custom providers enforce routing by{" "}
-            <Tooltip placement="top" variant="detail" content={providerLevelHelp}>
-              <span style={{ color: C.warn, cursor: "help", borderBottom: `1px dotted ${C.warn}` }}>provider endpoint</span>
-            </Tooltip>
-            . Selecting an individual model marks it for protection and routes that model&apos;s writable custom provider through LiteLLM when applied.
-          </div>
-
-          <BadgeLegend items={connectorRoutingLegend} title="Hermes routing labels" style={{ marginBottom: 10 }} />
-          {renderConnectorInventory(connectorRouting.hermes, 'hermes')}
-          {renderConnectorResult('hermes')}
-        </div>
-      </CollapsibleCard>
-    )}
-    </>
-  );
+  return <RoutingWorkflowPanel focusedCard={focusedCard} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -4463,6 +3540,15 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   // the old config until manual Restart. Surface that contract explicitly
   // via this banner — the reviewer's required pre-Docker condition.
   const [restartHintVisible, setRestartHintVisible] = useState(false);
+  const [providerSaveError, setProviderSaveError] = useState<string | null>(null);
+  const [proxyTestModel, setProxyTestModel] = useState<Record<string, string>>({});
+  const [proxyTestBusy, setProxyTestBusy] = useState<string | null>(null);
+  const [proxyTestMessage, setProxyTestMessage] = useState<Record<string, {
+    tone: "pending" | "success" | "warning" | "error";
+    title: string;
+    detail: string;
+    expiresAt?: string;
+  }>>({});
   const [newProviderName, setNewProviderName] = useState("");
   const [newProviderUrl, setNewProviderUrl] = useState("");
   const [newProviderType, setNewProviderType] = useState<string>("lmstudio");
@@ -4471,6 +3557,30 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   // models down to matches. Empty string = default top-25 view.
   const [modelSearch, setModelSearch] = useState("");
   const [newProviderKey, setNewProviderKey] = useState("");
+  const [editingProvider, setEditingProvider] = useState<{
+    id: string;
+    name: string;
+    baseUrl: string;
+    apiKey: string;
+  } | null>(null);
+  const [providerEditBusy, setProviderEditBusy] = useState(false);
+
+  useEffect(() => {
+    const expirations = Object.values(proxyTestMessage)
+      .filter(message => message.tone === 'success' && message.expiresAt)
+      .map(message => Date.parse(message.expiresAt!))
+      .filter(Number.isFinite);
+    if (!expirations.length) return;
+    const timer = window.setTimeout(() => {
+      const now = Date.now();
+      setProxyTestMessage(previous => Object.fromEntries(Object.entries(previous).map(([providerId, message]) =>
+        message.tone === 'success' && message.expiresAt && Date.parse(message.expiresAt) <= now
+          ? [providerId, { tone: 'warning' as const, title: 'Readiness expired', detail: 'Test this model again before reviewing routing changes.' }]
+          : [providerId, message]
+      )));
+    }, Math.max(0, Math.min(...expirations) - Date.now()) + 50);
+    return () => window.clearTimeout(timer);
+  }, [proxyTestMessage]);
   const [newGatewayName, setNewGatewayName] = useState("");
   const [newGatewayUrl, setNewGatewayUrl] = useState("");
   const [newGatewayToken, setNewGatewayToken] = useState("");
@@ -4669,24 +3779,122 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
     }
   }, [fetchConfig]);
 
+  const testProxyModel = (provider: ModelProvider) => {
+    const modelAlias = proxyTestModel[provider.id] || provider.models[0];
+    if (!modelAlias) return;
+    setPendingConfirm({
+      title: 'Test connection through ClawNex',
+      confirmLabel: 'Approve test',
+      body: <>Send the harmless prompt “Reply with OK.” through ClawNex to <b>{modelAlias}</b> using <b>{provider.name}</b>? This makes one inference request and may incur provider charges. It does not change agent routing.</>,
+      onConfirm: async () => {
+        setProxyTestBusy(provider.id);
+        setProxyTestMessage(previous => ({ ...previous, [provider.id]: {
+          tone: 'pending', title: 'Testing proxy connection',
+          detail: `Sending the approved test to ${modelAlias} through ClawNex…`,
+        } }));
+        try {
+          const response = await fetch(`/api/config/providers/${encodeURIComponent(provider.id)}/test`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'inference', modelAlias, approved: true }),
+          });
+          const result = await response.json();
+          const messages: Record<string, { tone: "warning" | "error"; title: string; detail: string }> = {
+            'reload-required': { tone: 'warning', title: 'Request not sent', detail: 'LiteLLM has not loaded this configuration. Sync and reload LiteLLM, then test again.' },
+            'not-configured': { tone: 'warning', title: 'Request not sent', detail: 'Add this model to the provider and sync its configuration first.' },
+            'invalid-configuration': { tone: 'error', title: 'Proxy test failed', detail: 'The proxy configuration is missing or invalid. Correct it before testing.' },
+            'proxy-unavailable': { tone: 'error', title: 'Proxy test failed', detail: 'Cannot inspect the running proxy. Check LiteLLM service status and its management credential.' },
+            'inference-failed': { tone: 'error', title: 'Proxy test failed', detail: 'The selected model did not return a successful response. Check its provider credentials and availability.' },
+            'inference-timeout': { tone: 'error', title: 'Proxy test timed out', detail: 'The provider did not complete the test within 125 seconds. It may be overloaded, cold-starting, or temporarily unavailable.' },
+            'invalid-response': { tone: 'error', title: 'Proxy test failed', detail: 'The provider returned an incomplete response. The connection is not confirmed.' },
+            'configuration-changed': { tone: 'warning', title: 'Result not retained', detail: 'Configuration changed during the test. Review the changes and test again.' },
+          };
+          setProxyTestMessage(previous => ({ ...previous, [provider.id]: response.ok && result.ready
+            ? { tone: 'success', title: 'Proxy test passed', detail: `${modelAlias} returned a successful response through ClawNex. This readiness result is valid for 30 minutes unless configuration changes.`, expiresAt: result.expiresAt }
+            : messages[result.status] || { tone: 'error', title: 'Proxy test failed', detail: 'The connection test was not completed. Review configuration and try again.' } }));
+        } catch {
+          setProxyTestMessage(previous => ({ ...previous, [provider.id]: {
+            tone: 'error', title: 'Test result unavailable',
+            detail: 'Could not confirm the test result. No agent routing was changed.',
+          } }));
+        } finally { setProxyTestBusy(null); }
+      },
+    });
+  };
+
+  const changeConfiguredModel = async (providerId: string, modelId: string, remove: boolean) => {
+    setProviderSaveError(null);
+    setRestartHintVisible(false);
+    try {
+      const response = await fetch(remove
+        ? `/api/config/models?providerId=${encodeURIComponent(providerId)}&modelId=${encodeURIComponent(modelId)}`
+        : '/api/config/models', remove ? { method: 'DELETE' } : {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider_id: providerId, model_id: modelId }),
+        });
+      const result = await response.json();
+      if (response.ok || result.saved || result.removed) await fetchConfig();
+      if (response.ok && result.synced === true) setRestartHintVisible(true);
+      else setProviderSaveError(result.error || 'Model change could not be synchronized. Refresh configuration before retrying.');
+    } catch {
+      setProviderSaveError('Could not confirm the model change. Refresh configuration before retrying.');
+    }
+  };
+
   const addProvider = useCallback(async () => {
     if (!newProviderName.trim() || !newProviderUrl.trim()) return;
+    setProviderSaveError(null);
+    setRestartHintVisible(false);
     try {
       const res = await fetch("/api/config/providers", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newProviderName.trim(), type: newProviderType, baseUrl: newProviderUrl.trim(), apiKey: newProviderKey }),
       });
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok || data.saved === true) {
         setNewProviderName(""); setNewProviderUrl(""); setNewProviderKey("");
         fetchConfig();
+      }
+      if (res.ok && data.configSynced !== false) {
         // Surface the manual-Restart contract — see comment on
         // restartHintVisible state for the full reasoning.
         setRestartHintVisible(true);
-        const data = await res.json();
         if (data.provider) testProvider({ ...data.provider, baseUrl: data.provider.base_url, apiKey: data.provider.api_key || "", models: [] });
+      } else {
+        setProviderSaveError(data.error || 'Provider could not be saved. Check configuration and try again.');
       }
-    } catch { /* silent */ }
+    } catch { setProviderSaveError('Could not confirm the save result. Refresh the provider list before retrying to avoid adding it twice.'); }
   }, [newProviderName, newProviderUrl, newProviderType, newProviderKey, fetchConfig, testProvider]);
+
+  const saveProviderEdit = useCallback(async () => {
+    if (!editingProvider || !editingProvider.name.trim() || !editingProvider.baseUrl.trim()) return;
+    setProviderEditBusy(true);
+    setProviderSaveError(null);
+    setRestartHintVisible(false);
+    try {
+      const body: { name: string; baseUrl: string; apiKey?: string } = {
+        name: editingProvider.name.trim(),
+        baseUrl: editingProvider.baseUrl.trim(),
+      };
+      if (editingProvider.apiKey) body.apiKey = editingProvider.apiKey;
+      const response = await fetch(`/api/config/providers/${encodeURIComponent(editingProvider.id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const result = await response.json();
+      if (response.ok || result.updated === true) {
+        setProxyTestMessage(previous => {
+          const next = { ...previous };
+          delete next[editingProvider.id];
+          return next;
+        });
+        setEditingProvider(null);
+        await fetchConfig();
+      }
+      if (response.ok && result.configSynced === true) setRestartHintVisible(true);
+      else setProviderSaveError(result.error || 'Provider could not be updated. Review the fields and try again.');
+    } catch {
+      setProviderSaveError('Could not confirm the update. Refresh the provider list before retrying.');
+    } finally { setProviderEditBusy(false); }
+  }, [editingProvider, fetchConfig]);
 
   const removeProvider = useCallback((id: string) => {
     // v0.7.3: confirm before removing — single accidental click would drop
@@ -4702,18 +3910,25 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
           Remove provider <b style={{ color: "#fff" }}>&ldquo;{provider.name}&rdquo;</b>{" "}
           ({provider.models.length} model{provider.models.length === 1 ? "" : "s"})?
           <br /><br />
-          This updates <code style={{ fontFamily: F.mono }}>litellm config.yaml</code> immediately and will drop every model under this provider. Any active sessions routed through it will fail until the provider is re-added.
+          This removes the provider and its models from ClawNex and attempts to update <code style={{ fontFamily: F.mono }}>litellm config.yaml</code>. The running proxy may retain the old routes until configuration is successfully synced and reloaded. After reload, sessions using these routes may fail.
         </>
       ),
       onConfirm: async () => {
+        setProviderSaveError(null);
+        setRestartHintVisible(false);
         try {
           const res = await fetch(`/api/config/providers/${id}`, { method: "DELETE" });
-          if (res.ok) {
+          const data = await res.json();
+          if (res.ok || data.removed === true) {
             fetchConfig();
+          }
+          if (res.ok && data.configSynced !== false) {
             // Same restart contract as add — see restartHintVisible comment.
             setRestartHintVisible(true);
+          } else {
+            setProviderSaveError(data.error || 'Provider removal could not be completed. Refresh and review its state.');
           }
-        } catch { /* silent */ }
+        } catch { setProviderSaveError('Could not confirm removal. Refresh the provider list and verify proxy configuration before retrying.'); }
       },
     });
   }, [fetchConfig, providers]);
@@ -4998,6 +4213,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
             sign-off: provider save syncs config.yaml but does NOT auto-
             restart LiteLLM. Operator must click Restart in Infrastructure
             for the new routing to take effect. */}
+        {providerSaveError && <div role="alert" style={{ color: C.warn, padding: 12 }}>{providerSaveError}</div>}
         {restartHintVisible && (
           <div style={{
             display: "flex", alignItems: "center", gap: 12,
@@ -5047,10 +4263,30 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
                 <Badge color={p.type === "openclaw" ? C.brand : p.type === "lmstudio" ? C.cyan : C.purp} label={p.type} />
                 {p.isDefault && <Badge color={C.brand} label="default" />}
               </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <Tooltip placement="left" variant="detail" content={<span>Ask the provider what models it offers, using the saved base URL + key. Discovered models get added to this provider so they show up in the Default AI Model dropdown.</span>}>
-                  <button onClick={() => testProvider(p)} style={{ ...btnStyle, background: C.info, color: "#fff", padding: "4px 10px", fontSize: 12 }}>Test</button>
+              <div style={{ display: "flex", gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <Tooltip placement="left" variant="detail" content={<span>Discover the provider’s model catalog using the saved connection. Choose which models to add. This does not test inference through ClawNex.</span>}>
+                  <button onClick={() => testProvider(p)} style={{ ...btnStyle, background: C.info, color: "#fff", padding: "4px 10px", fontSize: 12 }}>Discover models</button>
                 </Tooltip>
+                {p.type !== 'openclaw' && p.models.length > 0 && <>
+                  <select aria-label={`Model to test through ClawNex for ${p.name}`} value={proxyTestModel[p.id] || p.models[0]}
+                    onChange={event => setProxyTestModel(previous => ({ ...previous, [p.id]: event.target.value }))}
+                    style={{ ...inputStyle, width: 180, maxWidth: '100%' }}>
+                    {p.models.map(model => <option key={model} value={model}>{model}</option>)}
+                  </select>
+                  <button disabled={proxyTestBusy !== null} onClick={() => testProxyModel(p)}
+                    style={{
+                      ...btnStyle, padding: '4px 10px', fontSize: 12, fontWeight: 700,
+                      color: C.cyan, background: `${C.cyan}14`, border: `1px solid ${C.cyan}99`,
+                    }}>{proxyTestBusy === p.id ? 'Testing…' : 'Test proxy connection'}</button>
+                </>}
+                {p.type !== 'openclaw' && (
+                  <button onClick={() => setEditingProvider(current => current?.id === p.id ? null : {
+                    id: p.id, name: p.name, baseUrl: p.baseUrl, apiKey: '',
+                  })} style={{ ...btnStyle, padding: '4px 10px', fontSize: 12, color: C.tx,
+                    background: `${C.tx}0a`, border: `1px solid ${C.glassBorderSubtle}` }}>
+                    {editingProvider?.id === p.id ? 'Cancel edit' : 'Edit provider'}
+                  </button>
+                )}
                 {!p.isDefault && (
                   <Tooltip placement="left" variant="detail" content={<span>Delete this provider and every model under it. A confirm dialog appears first. <strong>Heads-up:</strong> any active session routed through it will fail until you re-add the provider.</span>}>
                     <button onClick={() => removeProvider(p.id)} style={{ ...btnStyle, background: C.danger, color: "#fff", padding: "4px 10px", fontSize: 12 }}>Remove</button>
@@ -5059,6 +4295,53 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
               </div>
             </div>
             <div style={{ fontSize: 12, color: C.txT, fontFamily: F.mono, marginBottom: 4 }}>{p.baseUrl}</div>
+            {editingProvider?.id === p.id && (
+              <div style={{ display: 'grid', gap: 8, margin: '10px 0', padding: 12,
+                background: `${C.cyan}08`, border: `1px solid ${C.cyan}44`, borderRadius: 7 }}>
+                <label style={{ display: 'grid', gap: 3, fontSize: 11, color: C.txT }}>
+                  NAME
+                  <input aria-label={`Provider name for ${p.name}`} value={editingProvider.name}
+                    onChange={event => setEditingProvider(current => current ? { ...current, name: event.target.value } : current)}
+                    style={inputStyle} />
+                </label>
+                <label style={{ display: 'grid', gap: 3, fontSize: 11, color: C.txT }}>
+                  BASE URL
+                  <input aria-label={`Provider base URL for ${p.name}`} value={editingProvider.baseUrl}
+                    onChange={event => setEditingProvider(current => current ? { ...current, baseUrl: event.target.value } : current)}
+                    style={inputStyle} />
+                </label>
+                <label style={{ display: 'grid', gap: 3, fontSize: 11, color: C.txT }}>
+                  REPLACEMENT API KEY
+                  <input aria-label={`Replacement API key for ${p.name}`} type="password" autoComplete="new-password"
+                    value={editingProvider.apiKey} placeholder="Leave blank to keep the saved key"
+                    onChange={event => setEditingProvider(current => current ? { ...current, apiKey: event.target.value } : current)}
+                    style={inputStyle} />
+                </label>
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                  <button disabled={providerEditBusy} onClick={() => setEditingProvider(null)}
+                    style={{ ...btnStyle, padding: '5px 12px', color: C.txS, background: 'transparent', border: `1px solid ${C.glassBorderSubtle}` }}>Cancel</button>
+                  <button disabled={providerEditBusy || !editingProvider.name.trim() || !editingProvider.baseUrl.trim()}
+                    onClick={saveProviderEdit} style={{ ...btnStyle, padding: '5px 12px', color: C.bg,
+                      background: C.cyan, border: `1px solid ${C.cyan}` }}>
+                    {providerEditBusy ? 'Saving…' : 'Save changes'}
+                  </button>
+                </div>
+              </div>
+            )}
+            {proxyTestMessage[p.id] && (() => {
+              const result = proxyTestMessage[p.id];
+              const color = result.tone === 'success' ? C.green : result.tone === 'warning' ? C.warn : result.tone === 'pending' ? C.cyan : C.danger;
+              return (
+                <div role="status" aria-live="polite" style={{
+                  display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap',
+                  color, fontSize: 12, margin: '8px 0', padding: '8px 10px',
+                  borderRadius: 6, border: `1px solid ${color}66`, background: `${color}0c`,
+                }}>
+                  <strong style={{ color, whiteSpace: 'nowrap' }}>{result.title}</strong>
+                  <span style={{ color: C.txS }}>{result.detail}</span>
+                </div>
+              );
+            })()}
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
               {p.models.map(m => (
                 <button key={m} onClick={() => {
@@ -5073,14 +4356,11 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
                         Remove model <b style={{ color: "#fff" }}>&ldquo;{m}&rdquo;</b>{" "}
                         from provider <b style={{ color: "#fff" }}>&ldquo;{p.name}&rdquo;</b>?
                         <br /><br />
-                        This updates <code style={{ fontFamily: F.mono }}>litellm config.yaml</code> immediately. Any active sessions routed through <code style={{ fontFamily: F.mono }}>{p.name}/{m}</code> will fail until the model is re-added or routed elsewhere.
+                        This removes the model from ClawNex and attempts to update the proxy configuration. The running proxy changes only after an approved reload. Requests using this model may fail after reload unless they are routed elsewhere.
                       </>
                     ),
                     onConfirm: async () => {
-                      try {
-                        await fetch(`/api/config/models?providerId=${encodeURIComponent(p.id)}&modelId=${encodeURIComponent(m)}`, { method: "DELETE" });
-                        fetchConfig();
-                      } catch {}
+                      await changeConfiguredModel(p.id, m, true);
                     },
                   });
                 }} title={`Click to remove ${m} (you'll be asked to confirm)`} style={{
@@ -5089,7 +4369,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
                   cursor: "pointer", whiteSpace: "nowrap",
                 }}>{m} ✕</button>
               ))}
-              {p.models.length === 0 && <span style={{ fontSize: 12, color: C.txT }}>No models — click Test to discover</span>}
+              {p.models.length === 0 && <span style={{ fontSize: 12, color: C.txT }}>No models — click Discover models</span>}
             </div>
             {testResult?.id === p.id && (
               <div style={{ marginTop: 6, padding: "6px 10px", borderRadius: 4, background: testResult.status === "connected" ? `${C.brand}0c` : `${C.danger}0c`, border: `1px solid ${testResult.status === "connected" ? C.brand : C.danger}22` }}>
@@ -5143,23 +4423,17 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
                                   Remove model <b style={{ color: "#fff" }}>&ldquo;{m}&rdquo;</b>{" "}
                                   from provider <b style={{ color: "#fff" }}>&ldquo;{p.name}&rdquo;</b>?
                                   <br /><br />
-                                  This updates <code style={{ fontFamily: F.mono }}>litellm config.yaml</code> immediately. Any active sessions routed through <code style={{ fontFamily: F.mono }}>{p.name}/{m}</code> will fail until the model is re-added or routed elsewhere.
+                                  This removes the model from ClawNex and attempts to update the proxy configuration. The running proxy changes only after an approved reload. Requests using this model may fail after reload unless they are routed elsewhere.
                                 </>
                               ),
                               onConfirm: async () => {
-                                try {
-                                  await fetch(`/api/config/models?providerId=${encodeURIComponent(p.id)}&modelId=${encodeURIComponent(m)}`, { method: "DELETE" });
-                                  fetchConfig();
-                                } catch {}
+                                await changeConfiguredModel(p.id, m, true);
                               },
                             });
                             return;
                           }
                           // Additive branch — no confirmation needed.
-                          try {
-                            await fetch("/api/config/models", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider_id: p.id, model_id: m }) });
-                            fetchConfig();
-                          } catch {}
+                          await changeConfiguredModel(p.id, m, false);
                         }} title={isConfigured ? `Click to remove ${m} (you'll be asked to confirm)` : `Click to add ${m}`} style={{
                           display: "inline-block", padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 700, fontFamily: F.mono,
                           background: isConfigured ? `${C.warn}14` : `${C.brand}14`,

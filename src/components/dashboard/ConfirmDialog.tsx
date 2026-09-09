@@ -10,7 +10,8 @@
 // in dense rows. The modal centers attention on the action without disrupting
 // the surrounding layout. operator-approved approach (2026-04-24).
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
+import { createPortal } from 'react-dom';
 import { C, F } from "./constants";
 
 export interface ConfirmDialogProps {
@@ -28,6 +29,8 @@ export interface ConfirmDialogProps {
   danger?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Origin captured before an asynchronous preparation disabled its button. */
+  returnFocusTo?: HTMLElement | null;
 }
 
 export function ConfirmDialog({
@@ -39,35 +42,49 @@ export function ConfirmDialog({
   danger = true,
   onConfirm,
   onCancel,
+  returnFocusTo,
 }: ConfirmDialogProps) {
   const confirmBtnRef = useRef<HTMLButtonElement | null>(null);
+  const cancelBtnRef = useRef<HTMLButtonElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const cancelRef = useRef(onCancel);
+  cancelRef.current = onCancel;
+  const titleId = useId();
 
-  // Auto-focus the confirm button when the dialog opens so keyboard-only
-  // operators can hit Enter to confirm or Escape to cancel without reaching
-  // for the mouse.
+  // Start on Cancel; keep keyboard navigation inside the dialog and restore
+  // the originating control when it closes.
   useEffect(() => {
     if (!open) return;
-    confirmBtnRef.current?.focus();
+    const previousFocus = returnFocusTo || (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    cancelBtnRef.current?.focus();
 
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
-        onCancel();
+        cancelRef.current();
+      }
+      if (e.key === 'Tab') {
+        const controls = [...(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), summary, a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]') || [])].filter(control => control.getClientRects().length > 0);
+        const first = controls[0];
+        const last = controls.at(-1);
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
       }
     }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onCancel]);
+    return () => { window.removeEventListener("keydown", onKey); previousFocus?.focus(); };
+  }, [open, returnFocusTo]);
 
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
 
   const accent = danger ? C.danger : C.brand;
 
-  return (
+  return createPortal(
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
-      aria-labelledby="confirm-dialog-title"
+      aria-labelledby={titleId}
       onClick={onCancel}
       style={{
         position: "fixed",
@@ -90,6 +107,8 @@ export function ConfirmDialog({
         onClick={(e) => e.stopPropagation()}
         style={{
           maxWidth: 460,
+          maxHeight: 'calc(100dvh - 48px)',
+          overflowY: 'auto',
           width: "100%",
           background: C.srf,
           border: `1px solid ${accent}44`,
@@ -100,7 +119,7 @@ export function ConfirmDialog({
         }}
       >
         <div
-          id="confirm-dialog-title"
+          id={titleId}
           style={{
             fontSize: 14,
             fontWeight: 700,
@@ -126,6 +145,7 @@ export function ConfirmDialog({
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button
             type="button"
+            ref={cancelBtnRef}
             onClick={onCancel}
             style={{
               padding: "6px 14px",
@@ -161,6 +181,6 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>, document.body
   );
 }

@@ -249,7 +249,7 @@ function freshDb(): Database.Database {
   db.exec(`
     CREATE TABLE config_providers (
       id TEXT PRIMARY KEY, name TEXT, type TEXT, base_url TEXT,
-      api_key TEXT DEFAULT '', is_default INTEGER DEFAULT 0,
+      api_key TEXT DEFAULT '', api_key_env TEXT DEFAULT '', is_default INTEGER DEFAULT 0,
       is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
@@ -283,6 +283,8 @@ console.log("\n[5b] active OpenRouter provider → real entries + placeholder_on
   const activeApiKey = "redaction-fixture-api-key";
   db.prepare("INSERT INTO config_providers (id,name,type,base_url,api_key,is_active) VALUES (?,?,?,?,?,?)")
     .run("p-or", "OpenRouter", "openrouter", "https://openrouter.ai/api/v1", activeApiKey, 1);
+  db.prepare('INSERT INTO config_models (model_id, provider_id) VALUES (?, ?)')
+    .run('openrouter/auto', 'p-or');
   const result = syncProvidersToYaml({ db, configPath: tmp.file });
   assert(result.provider_count === 1, `provider_count = 1 (got ${result.provider_count})`);
   assert(result.placeholder_only === false, `placeholder_only = false (got ${result.placeholder_only})`);

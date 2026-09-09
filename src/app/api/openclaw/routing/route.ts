@@ -13,11 +13,8 @@ import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/gua
 import { requireLocalhost } from '@/lib/middleware/localhost-guard';
 import { resolveOpenClawPaths, readOpenClawConfig } from "@/lib/openclaw-paths";
 import {
-  wireLitellmRouting,
-  revertLitellmRouting,
   inspectLitellmRouting,
 } from "@/lib/services/openclaw-routing-wire";
-import { logEvent } from "@/lib/services/audit-logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -122,18 +119,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, action, ...result });
     }
 
-    if (action === 'wire') {
-      const result = wireLitellmRouting({ force: Boolean(body.force) });
-      logEvent('config', 'openclaw_routing_wire', 'openclaw', 'litellm', `wire: ${result.status} (${result.detail})`, 'api');
-      const httpStatus = result.ok ? 200 : (result.status === 'conflict' ? 409 : 500);
-      return NextResponse.json({ action, ...result }, { status: httpStatus });
-    }
-
-    // action === 'revert'
-    const result = revertLitellmRouting();
-    logEvent('config', 'openclaw_routing_revert', 'openclaw', 'litellm', `revert: ${result.status} (${result.detail})`, 'api');
-    const httpStatus = result.ok ? 200 : 500;
-    return NextResponse.json({ action, ...result }, { status: httpStatus });
+    return NextResponse.json({ ok: false, error: 'Use Configuration → OpenClaw Routing to review and approve an instance-specific connection or restoration plan. Legacy ownership is included in restoration.' }, { status: 409 });
   } catch (err) {
     console.error('[OpenClaw Routing] POST Error:', err);
     return NextResponse.json(

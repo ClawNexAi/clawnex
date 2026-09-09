@@ -10,6 +10,8 @@ import { isRbacEnabled, requirePermission, requireSession } from "@/lib/rbac/gua
 import { requireLocalhost } from "@/lib/middleware/localhost-guard";
 import { detectHermesSupervisor, restartHermesGateway } from "@/lib/services/hermes-gateway-control";
 import { logEvent } from "@/lib/services/audit-logger";
+import { recordRoutingOperation } from "@/lib/services/routing-reconciliation";
+import { syncConnectorRoutingInventory } from "@/lib/services/connector-routing-inventory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +56,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await restartHermesGateway();
+    const inventory = syncConnectorRoutingInventory("restart-hermes");
     logEvent(
       "config",
       "hermes_gateway_restart",
@@ -62,8 +65,16 @@ export async function POST(request: NextRequest) {
       `restart: ${result.status} via ${result.supervisor} (${result.detail})`,
       "api",
     );
+    recordRoutingOperation({
+      connector: "hermes",
+      operation: "restart",
+      outcome: result.status,
+      restartOutcome: result.status,
+      detail: result.detail,
+      afterSnapshotId: inventory.reconciliation.lastSnapshotIds.hermes,
+    });
     const httpStatus = result.ok ? 200 : result.status === "unsupported" ? 501 : 500;
-    return NextResponse.json(result, { status: httpStatus });
+    return NextResponse.json({ ...result, reconciliation: inventory.reconciliation }, { status: httpStatus });
   } catch (err) {
     console.error("[Hermes Gateway Restart] Error:", err);
     return NextResponse.json(

@@ -10,8 +10,8 @@
  * traffic was unprotected.
  *
  * This verifier proves:
- *   1. addProvider rejects literal private/link-local/metadata IPs.
- *   2. addProvider rejects literal cloud-metadata endpoint (169.254.169.254).
+ *   1. addProvider allows literal private-network IPs used by operator-owned model servers.
+ *   2. addProvider rejects literal cloud-metadata/link-local endpoints.
  *   3. addProvider allows literal loopback IPs (OpenClaw / LM Studio).
  *   4. addProvider allows public hostnames (example.com).
  *   5. addProvider rejects nonexistent hostnames (fail-closed on DNS miss).
@@ -28,6 +28,7 @@ import {
   addProvider,
   assertSafeProviderHttpFetchTarget,
   providerEndpointUrl,
+  testProvider,
   updateProvider,
 } from "../src/lib/services/config-service";
 
@@ -75,10 +76,13 @@ async function expectAllow(baseUrl: string, label: string) {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  section("addProvider rejects literal private / link-local / metadata IPs");
-  await expectReject("http://10.0.0.1:8080", "10.0.0.1 (RFC1918)");
-  await expectReject("https://192.168.1.100", "192.168.1.100 (RFC1918)");
-  await expectReject("http://172.16.0.5", "172.16.0.5 (RFC1918)");
+  section("addProvider allows explicit private-network model servers");
+  await expectAllow("http://10.0.0.1:8080", "10.0.0.1 (RFC1918)");
+  await expectAllow("https://192.168.1.100", "192.168.1.100 (RFC1918)");
+  await expectAllow("http://172.16.0.5", "172.16.0.5 (RFC1918)");
+  await expectAllow("http://100.123.63.73:1234/v1", "100.123.63.73 (Tailscale/CGNAT)");
+
+  section("addProvider rejects literal link-local / metadata IPs");
   await expectReject("http://169.254.169.254", "169.254.169.254 (AWS/GCP cloud metadata)");
 
   section("addProvider allows literal loopback IPs (legitimate for OpenClaw / LM Studio)");
@@ -166,6 +170,40 @@ async function main() {
     "legacy local provider read",
   );
   assert(!localRead.blocked, "read-time guard allows loopback local model servers");
+
+  const lanRead = await assertSafeProviderHttpFetchTarget(
+    "http://192.168.178.162:1234/v1/models",
+    "operator-configured LAN model server",
+  );
+  assert(!lanRead.blocked, "read-time guard allows an explicit LAN model server");
+
+  section("model discovery uses the provider-specific LAN safety policy");
+  const discoveryProvider = await addProvider({
+    id: "lan-discovery-fixture",
+    name: "LAN discovery fixture",
+    type: "lmstudio",
+    baseUrl: "http://192.168.178.162:1234/v1/",
+  });
+  const originalFetch = globalThis.fetch;
+  let requestedDiscoveryUrl = "";
+  globalThis.fetch = async (input) => {
+    requestedDiscoveryUrl = String(input);
+    const payload = requestedDiscoveryUrl.includes("/v1//models")
+      ? { error: "Invalid endpoint" }
+      : { data: [{ id: "fixture/model" }] };
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const discovery = await testProvider(discoveryProvider.id);
+    assert(requestedDiscoveryUrl === "http://192.168.178.162:1234/v1/models" &&
+      discovery.status === "connected" && discovery.models?.includes("fixture/model") === true,
+      "Discover models succeeds for an operator-configured LAN provider");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 
   const providerModelUrl = providerEndpointUrl("https://openrouter.ai/api/v1", "chat/completions");
   assert(providerModelUrl === "https://openrouter.ai/api/v1/chat/completions", "providerEndpointUrl preserves provider base path");

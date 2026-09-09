@@ -39,6 +39,10 @@ const IngestSchema = z.object({
   status_code: z.number().int().min(0).max(999).default(200),
   error: z.string().max(1000).nullable().optional(),
   source: z.string().max(50).default("litellm"),
+  routing_connector: z.enum(['openclaw', 'hermes']).optional(),
+  routing_source_id: z.string().min(1).max(200).optional(),
+  proxy_request_id: z.string().min(1).max(200).optional(),
+  routing_identity_hash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 }).passthrough(); // Allow extra fields from LiteLLM callback without failing
 
 export async function POST(request: NextRequest) {
@@ -80,12 +84,16 @@ export async function POST(request: NextRequest) {
 
     const body = parsed.data;
     const id = uuid();
+    // Only the secret-authenticated proxy callback may attest an identity.
+    // Localhost-only and ordinary source/model labels are not routing proof.
+    const verifiedIdentity = Boolean(ingestSecret && body.routing_connector && body.routing_source_id && body.proxy_request_id);
 
     run(
-      `INSERT INTO proxy_traffic (id, timestamp, direction, model, provider, upstream_url, prompt_hash, messages_count, input_tokens, output_tokens, total_tokens, cost_usd, latency_ms, shield_verdict, shield_score, shield_detections, blocked, block_reason, session_id, status_code, error, source)
-       VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO proxy_traffic (id, timestamp, direction, model, provider, upstream_url, prompt_hash, messages_count, input_tokens, output_tokens, total_tokens, cost_usd, latency_ms, shield_verdict, shield_score, shield_detections, blocked, block_reason, session_id, status_code, error, source, routing_connector, routing_source_id, routing_identity_verified, proxy_request_id, routing_identity_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
+        new Date().toISOString(),
         body.direction,
         body.model || null,
         body.provider || null,
@@ -106,6 +114,11 @@ export async function POST(request: NextRequest) {
         body.status_code,
         body.error || null,
         body.source,
+        verifiedIdentity ? body.routing_connector : null,
+        verifiedIdentity ? body.routing_source_id : null,
+        verifiedIdentity ? 1 : 0,
+        verifiedIdentity ? body.proxy_request_id : null,
+        verifiedIdentity ? body.routing_identity_hash || null : null,
       ]
     );
 

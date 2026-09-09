@@ -19,6 +19,7 @@ import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/gua
 import { requireLocalhost } from '@/lib/middleware/localhost-guard';
 import { restartOpenClawGateway, detectSupervisor } from '@/lib/services/openclaw-gateway-control';
 import { logEvent } from '@/lib/services/audit-logger';
+import { recordRoutingOperation } from '@/lib/services/routing-reconciliation';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -68,6 +69,13 @@ export async function POST(request: NextRequest) {
       `restart: ${result.status} via ${result.supervisor} (${result.detail})`,
       'api',
     );
+    recordRoutingOperation({
+      connector: 'openclaw',
+      operation: 'restart',
+      outcome: result.status,
+      restartOutcome: result.status,
+      detail: result.detail,
+    });
     const httpStatus = result.ok ? 200 : (result.status === 'unsupported' ? 501 : 500);
     return NextResponse.json(result, { status: httpStatus });
   } catch (err) {

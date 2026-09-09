@@ -13,7 +13,7 @@ import { logEvent } from '@/lib/services/audit-logger';
 import { syncProvidersToYaml } from '@/lib/litellm/sync';
 import { getDb } from '@/lib/db/index';
 import { modelRiskLabels } from '@/lib/services/provider-risk-labels';
-import * as path from 'node:path';
+import { resolveLiteLLMConfigPath } from '@/lib/litellm/paths';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,8 +39,7 @@ export const dynamic = 'force-dynamic';
  */
 function syncLiteLLMConfig(label: string): boolean {
   try {
-    const installDir = process.cwd();
-    const configPath = path.join(installDir, 'litellm', 'config.yaml');
+    const configPath = resolveLiteLLMConfigPath();
     syncProvidersToYaml({ db: getDb(), configPath });
     return true;
   } catch (e) {
@@ -106,7 +105,9 @@ export async function POST(request: NextRequest) {
     // we tell the UI so the operator can investigate (was previously hidden).
     const synced = syncLiteLLMConfig('add');
 
-    return NextResponse.json({ ok: true, synced });
+    return NextResponse.json({ ok: synced, saved: true, synced,
+      ...(synced ? {} : { error: 'Model saved, but proxy configuration sync failed. Do not add it again. Correct the configuration and retry syncing before wiring agents.' }),
+    }, { status: synced ? 200 : 503 });
   } catch (err) {
     console.error('[Config API] Error adding model:', err);
     return NextResponse.json({ error: 'Failed to add model' }, { status: 500 });
@@ -144,7 +145,9 @@ export async function DELETE(request: NextRequest) {
     // Sync the LiteLLM YAML so the removal lands on the next restart.
     const synced = syncLiteLLMConfig('delete');
 
-    return NextResponse.json({ ok: true, synced });
+    return NextResponse.json({ ok: synced, removed: true, synced,
+      ...(synced ? {} : { error: 'Model removed from ClawNex, but proxy configuration sync failed. The old route may remain active until sync and reload succeed.' }),
+    }, { status: synced ? 200 : 503 });
   } catch (err) {
     console.error('[Config API] Error removing model:', err);
     return NextResponse.json({ error: 'Failed to remove model' }, { status: 500 });

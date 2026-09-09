@@ -174,6 +174,7 @@ CREATE TABLE IF NOT EXISTS config_providers (
   type TEXT NOT NULL,
   base_url TEXT NOT NULL,
   api_key TEXT DEFAULT '',
+  api_key_env TEXT DEFAULT '',
   is_default INTEGER DEFAULT 0,
   is_active INTEGER DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -322,6 +323,59 @@ CREATE INDEX IF NOT EXISTS idx_hermes_events_session ON hermes_events(session_id
 CREATE INDEX IF NOT EXISTS idx_hermes_events_observed ON hermes_events(observed_at);
 CREATE INDEX IF NOT EXISTS idx_connector_routing_connector ON connector_routing_items(connector, present);
 CREATE INDEX IF NOT EXISTS idx_connector_routing_desired ON connector_routing_items(connector, desired_route);
+
+-- Secret-free routing reconciliation history. These records explain what
+-- changed and what ClawNex did without retaining provider credentials or raw
+-- model traffic.
+CREATE TABLE IF NOT EXISTS connector_routing_snapshots (
+  id TEXT PRIMARY KEY,
+  connector TEXT NOT NULL,
+  source_id TEXT NOT NULL DEFAULT '',
+  fingerprint TEXT NOT NULL,
+  state_json TEXT NOT NULL,
+  trigger TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS connector_routing_events (
+  id TEXT PRIMARY KEY,
+  connector TEXT NOT NULL,
+  source_id TEXT NOT NULL DEFAULT '',
+  item_key TEXT NOT NULL,
+  change_type TEXT NOT NULL,
+  previous_state_json TEXT,
+  current_state_json TEXT,
+  protection_state TEXT NOT NULL,
+  action_required INTEGER NOT NULL DEFAULT 1 CHECK(action_required IN (0,1)),
+  writable INTEGER NOT NULL DEFAULT 0 CHECK(writable IN (0,1)),
+  consequence TEXT NOT NULL,
+  fingerprint TEXT NOT NULL,
+  resolved_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_connector_routing_open_event
+  ON connector_routing_events(connector, source_id, item_key, fingerprint)
+  WHERE resolved_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_connector_routing_events_created
+  ON connector_routing_events(created_at);
+
+CREATE TABLE IF NOT EXISTS connector_routing_operations (
+  id TEXT PRIMARY KEY,
+  connector TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  before_snapshot_id TEXT,
+  after_snapshot_id TEXT,
+  outcome TEXT NOT NULL,
+  restart_outcome TEXT,
+  verification_outcome TEXT,
+  detail TEXT NOT NULL,
+  actor TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_connector_routing_operations_created
+  ON connector_routing_operations(created_at);
 
 -- Security operations workflow: replay lab and human review queue.
 -- Replay cases store redacted snapshots only; raw prompt/session payloads are
@@ -527,6 +581,24 @@ CREATE INDEX IF NOT EXISTS idx_policies_source ON policies(source);
  * "duplicate column" errors from re-runs are silently ignored.
  */
 export const MIGRATIONS: string[] = [
+  "ALTER TABLE proxy_traffic ADD COLUMN routing_connector TEXT",
+  "ALTER TABLE proxy_traffic ADD COLUMN routing_identity_hash TEXT",
+  "ALTER TABLE proxy_traffic ADD COLUMN routing_source_id TEXT",
+  "ALTER TABLE proxy_traffic ADD COLUMN routing_identity_verified INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE proxy_traffic ADD COLUMN proxy_request_id TEXT",
+  "ALTER TABLE connector_routing_operations ADD COLUMN source_id TEXT",
+  `CREATE TABLE IF NOT EXISTS routing_change_plans (
+    id TEXT PRIMARY KEY,
+    plan_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'prepared',
+    result_json TEXT
+  )`,
+  `CREATE TABLE IF NOT EXISTS provider_routing_readiness (
+    provider_id TEXT NOT NULL,
+    model_alias TEXT NOT NULL,
+    receipt_json TEXT NOT NULL,
+    PRIMARY KEY (provider_id, model_alias)
+  )`,
   "ALTER TABLE proxy_traffic ADD COLUMN source TEXT DEFAULT 'proxy'",
   `CREATE TABLE IF NOT EXISTS investigation_cases (
     id TEXT PRIMARY KEY,
@@ -844,6 +916,52 @@ export const MIGRATIONS: string[] = [
   )`,
   "CREATE INDEX IF NOT EXISTS idx_connector_routing_connector ON connector_routing_items(connector, present)",
   "CREATE INDEX IF NOT EXISTS idx_connector_routing_desired ON connector_routing_items(connector, desired_route)",
+
+  // 2026-08-04: durable, secret-free routing reconciliation history.
+  `CREATE TABLE IF NOT EXISTS connector_routing_snapshots (
+    id TEXT PRIMARY KEY,
+    connector TEXT NOT NULL,
+    source_id TEXT NOT NULL DEFAULT '',
+    fingerprint TEXT NOT NULL,
+    state_json TEXT NOT NULL,
+    trigger TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  // 2026-08-04: allow a provider to reference an operator-selected
+  // environment variable instead of copying its secret into ClawNex.
+  "ALTER TABLE config_providers ADD COLUMN api_key_env TEXT DEFAULT ''",
+  `CREATE TABLE IF NOT EXISTS connector_routing_events (
+    id TEXT PRIMARY KEY,
+    connector TEXT NOT NULL,
+    source_id TEXT NOT NULL DEFAULT '',
+    item_key TEXT NOT NULL,
+    change_type TEXT NOT NULL,
+    previous_state_json TEXT,
+    current_state_json TEXT,
+    protection_state TEXT NOT NULL,
+    action_required INTEGER NOT NULL DEFAULT 1 CHECK(action_required IN (0,1)),
+    writable INTEGER NOT NULL DEFAULT 0 CHECK(writable IN (0,1)),
+    consequence TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    resolved_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_connector_routing_open_event ON connector_routing_events(connector, source_id, item_key, fingerprint) WHERE resolved_at IS NULL",
+  "CREATE INDEX IF NOT EXISTS idx_connector_routing_events_created ON connector_routing_events(created_at)",
+  `CREATE TABLE IF NOT EXISTS connector_routing_operations (
+    id TEXT PRIMARY KEY,
+    connector TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    before_snapshot_id TEXT,
+    after_snapshot_id TEXT,
+    outcome TEXT NOT NULL,
+    restart_outcome TEXT,
+    verification_outcome TEXT,
+    detail TEXT NOT NULL,
+    actor TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_connector_routing_operations_created ON connector_routing_operations(created_at)",
 
   // 2026-07-08 (v0.15.6-alpha): Security operations workflow.
   // Redacted replay cases and REVIEW queue decisions for Shield operations.

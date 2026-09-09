@@ -275,7 +275,7 @@ export function InfrastructurePanel({ infra: liveInfra, onNavigate, filters, dem
                       const res = await fetch("/api/system/litellm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "restart" }) });
                       const data = await res.json();
                       if (data.ok) {
-                        btn.textContent = "Restarted \u2713";
+                        btn.textContent = "Restart requested · verify connection";
                         btn.style.borderColor = C.green;
                         btn.style.color = C.green;
                         setTimeout(() => { btn.textContent = orig; btn.style.opacity = "1"; btn.style.pointerEvents = "auto"; btn.style.borderColor = `${C.brand}44`; btn.style.color = C.brand; }, 4000);

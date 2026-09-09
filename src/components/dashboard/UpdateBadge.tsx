@@ -44,6 +44,18 @@ interface UpdateSource {
   updateAvailable: boolean;
   openclawChanges?: number;
   hermesChanges?: number;
+  reconciliationEvents?: Array<{
+    id: string;
+    connector: "openclaw" | "hermes";
+    changeType: string;
+    protectionState: string;
+    actionRequired: boolean;
+    writable: boolean;
+    consequence: string;
+    current?: { profileName?: string | null; providerId?: string; modelId?: string } | null;
+    previous?: { profileName?: string | null; providerId?: string; modelId?: string } | null;
+    detectedAt: string;
+  }>;
 }
 
 interface UpdateStatusResponse {
@@ -150,6 +162,8 @@ export function UpdateBadge({ navigate }: Props) {
     data.connectorRouting?.hermesChanges && !data.connectorRouting?.openclawChanges
       ? "hermesRouting"
       : "openclawRouting";
+  const routingEvents = data.connectorRouting?.reconciliationEvents || [];
+  const actionableRoutingEvents = routingEvents.filter((event) => event.actionRequired);
 
   const sources: Array<{
     key: string;
@@ -164,11 +178,11 @@ export function UpdateBadge({ navigate }: Props) {
     { key: "clawnex-defenseclaw", src: data.defenseclaw, label: "ClawNex Shield Rules",  kind: "info" },
   ];
   const actionableUpdates = sources.filter(s => s.kind === "actionable" && s.src?.updateAvailable);
-  const count = actionableUpdates.length;
+  const count = actionableUpdates.length + (actionableRoutingEvents.length > 0 ? 1 : 0);
 
   const goToUpdates = () => {
     setOpen(false);
-    const routingNeedsReview = data.connectorRouting?.updateAvailable;
+    const routingNeedsReview = data.connectorRouting?.updateAvailable || actionableRoutingEvents.length > 0;
     if (navigate) navigate("configuration", routingNeedsReview ? connectorRoutingFocusKey : "updates");
   };
 
@@ -187,7 +201,7 @@ export function UpdateBadge({ navigate }: Props) {
           place for the per-source breakdown + last-checked detail. */}
       <button
         onClick={() => setOpen(!open)}
-        aria-label={count > 0 ? `${count} updates available` : "All up to date"}
+        aria-label={actionableRoutingEvents.length > 0 ? "Routing change needs review" : count > 0 ? `${count} updates available` : "All up to date"}
         style={{
           display: "inline-flex", alignItems: "center", justifyContent: "center",
           background: count > 0 ? C.brand : "transparent",
@@ -200,7 +214,9 @@ export function UpdateBadge({ navigate }: Props) {
           minHeight: 18,
         }}
       >
-        {count > 0
+        {actionableRoutingEvents.length > 0
+          ? "ROUTING REVIEW"
+          : count > 0
           ? `${count} ${count === 1 ? "UPDATE" : "UPDATES"}`
           : "UPDATES"}
       </button>
@@ -230,6 +246,26 @@ export function UpdateBadge({ navigate }: Props) {
               {refreshing ? "…" : "REFRESH"}
             </button>
           </div>
+
+          {actionableRoutingEvents.length > 0 && (
+            <div style={{
+              marginBottom: 8, padding: "8px 9px", borderRadius: 5,
+              background: `${C.warn}10`, border: `1px solid ${C.warn}55`,
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: C.warn, marginBottom: 4 }}>
+                Connector changes requiring review
+              </div>
+              {actionableRoutingEvents.slice(0, 5).map((event) => {
+                const item = event.current || event.previous;
+                const name = item?.modelId ? `${item.providerId || "provider"}/${item.modelId}` : item?.providerId || "route";
+                return (
+                  <div key={event.id} style={{ fontSize: 10, color: C.txS, lineHeight: 1.45 }}>
+                    {event.connector} · {event.changeType.replaceAll("-", " ")} · {name} · {event.protectionState.replaceAll("-", " ")}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {sources.map(({ key, src, label, kind }) => {
             if (!src) return null;

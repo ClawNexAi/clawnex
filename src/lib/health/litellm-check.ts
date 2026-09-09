@@ -4,8 +4,9 @@
  * internal reviewer 2026-05-09 launch-final architecture:
  *
  *   STATUS is driven by FAST LIVENESS only (`/health/liveliness`).
- *   Deep model-health (`/health`) is best-effort enrichment for the
- *   detail line. Slow deep checks NEVER drive the row to DEGRADED.
+ *   Deep model-health (`/health`) is opt-in after operator approval;
+ *   routine polling checks liveness only. Slow approved deep checks
+ *   NEVER drive the row to DEGRADED.
  *
  * Why: LiteLLM's `/health` endpoint actively pings every configured
  * model upstream (one outbound request per model_list entry). On a
@@ -42,6 +43,8 @@ export interface ServiceCheck {
 }
 
 export interface CheckLiteLLMOpts {
+  /** Only set after explicit operator approval: deep health may incur upstream costs. */
+  deepHealthApproved?: boolean;
   /** Inject a fetch impl. Default: globalThis.fetch. */
   fetchImpl?: typeof fetch;
   /** Inject the active-provider count query. Default: live DB query. */
@@ -131,7 +134,15 @@ export async function checkLiteLLM(port: number, opts: CheckLiteLLMOpts = {}): P
     };
   }
 
-  // Step 2 — deep model health (best-effort enrichment). NEVER drives
+  if (opts.deepHealthApproved !== true) {
+    return {
+      name: 'LiteLLM Proxy', url: `${baseUrl}/health/liveliness`,
+      status: 'online', latency: liveLatency,
+      detail: 'Proxy reachable; model inference not tested. Upstream probes require operator approval.',
+    };
+  }
+
+  // Step 2 — explicitly approved deep model health. NEVER drives
   // the row to DEGRADED on a slow/timed-out check. Only drives DEGRADED
   // when /health returns within budget AND has real (non-placeholder)
   // unhealthy endpoints.

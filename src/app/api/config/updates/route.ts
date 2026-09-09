@@ -251,6 +251,9 @@ export async function GET(request: NextRequest) {
         updateAvailable: routingInventory.driftTotal > 0,
         openclawChanges: routingInventory.openclaw.drift.total,
         hermesChanges: routingInventory.hermes.drift.total,
+        reconciliationEvents: routingInventory.reconciliation.events
+          .filter((event) => event.actionRequired)
+          .slice(0, 20),
       },
       lastChecked: now,
     });

@@ -53,42 +53,59 @@ function warnIfInsecure(url: string, context: string): void {
 //   - http://10.x.y.z/some-admin-panel               (internal RFC1918)
 //   - http://fd00::xxxx/                              (IPv6 ULA)
 //
-// Block private/link-local/metadata/reserved ranges. Loopback is intentionally
-// ALLOWED because legitimate flows (OpenClaw gateway on 127.0.0.1, LM Studio
-// on localhost:1234) depend on it. The threat model accepts "operator who can
-// already configure providers can probe local services" — they can probe via
-// other means anyway. The headline risk is cross-host SSRF to cloud metadata.
+// Provider endpoints may intentionally live on operator-owned private networks
+// (LM Studio on a LAN address or a Tailscale/CGNAT address). Keep those usable,
+// along with loopback, while blocking link-local/cloud-metadata and reserved
+// ranges. The provider hostname allowlist below remains the DNS-rebinding gate
+// for non-literal hosts.
 
 function isLoopbackIp(ip: string): boolean {
   return ip === '127.0.0.1' || ip === '::1' || ip.startsWith('127.') || ip === '::ffff:127.0.0.1';
 }
 
-function isBlockedRange(ip: string): boolean {
+function isPrivateProviderNetwork(ip: string): boolean {
   // Strip IPv4-mapped IPv6 prefix and recurse on the IPv4 form.
   const ipv4Mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (ipv4Mapped) return isBlockedRange(ipv4Mapped[1]);
+  if (ipv4Mapped) return isPrivateProviderNetwork(ipv4Mapped[1]);
 
   if (isIP(ip) === 4) {
     const [a, b] = ip.split('.').map((n) => parseInt(n, 10));
     if (a === 10) return true;                              // 10.0.0.0/8 private
     if (a === 172 && b >= 16 && b <= 31) return true;       // 172.16.0.0/12 private
     if (a === 192 && b === 168) return true;                // 192.168.0.0/16 private
-    if (a === 169 && b === 254) return true;                // 169.254.0.0/16 link-local + metadata
     if (a === 100 && b >= 64 && b <= 127) return true;      // 100.64.0.0/10 CGNAT
-    if (a === 0) return true;                               // 0.0.0.0/8 "this host"
-    if (a >= 224) return true;                              // 224.0.0.0/4 multicast + 240/4 reserved
     return false;
   }
   if (isIP(ip) === 6) {
     const lc = ip.toLowerCase();
     if (lc.startsWith('fc') || lc.startsWith('fd')) return true;  // fc00::/7 ULA
-    if (/^fe[89ab]/.test(lc)) return true;                        // fe80::/10 link-local
     return false;
   }
   return false;
 }
 
-async function assertSafeFetchTarget(url: string, context: string): Promise<{ blocked: boolean; reason?: string }> {
+function isBlockedRange(ip: string, allowPrivateProviderNetwork = false): boolean {
+  // Strip IPv4-mapped IPv6 prefix and recurse on the IPv4 form.
+  const ipv4Mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (ipv4Mapped) return isBlockedRange(ipv4Mapped[1], allowPrivateProviderNetwork);
+
+  if (isPrivateProviderNetwork(ip)) return !allowPrivateProviderNetwork;
+  if (isIP(ip) === 4) {
+    const [a, b] = ip.split('.').map((n) => parseInt(n, 10));
+    if (a === 169 && b === 254) return true;                // link-local + cloud metadata
+    if (a === 0) return true;                               // 0.0.0.0/8 "this host"
+    if (a >= 224) return true;                              // multicast + reserved
+    return false;
+  }
+  if (isIP(ip) === 6) return /^fe[89ab]/.test(ip.toLowerCase()); // fe80::/10 link-local
+  return false;
+}
+
+async function assertSafeFetchTarget(
+  url: string,
+  context: string,
+  options: { allowPrivateProviderNetwork?: boolean } = {},
+): Promise<{ blocked: boolean; reason?: string }> {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -111,7 +128,7 @@ async function assertSafeFetchTarget(url: string, context: string): Promise<{ bl
   }
   for (const ip of ips) {
     if (isLoopbackIp(ip)) continue;  // legitimate for OpenClaw / LM Studio
-    if (isBlockedRange(ip)) {
+    if (isBlockedRange(ip, options.allowPrivateProviderNetwork === true)) {
       const reason = `target ${host} resolves to ${ip} (private/link-local/metadata/reserved range — refused for ${context})`;
       console.warn('[SECURITY] Provider target resolved to a blocked private/link-local/metadata/reserved range.');
       return { blocked: true, reason };
@@ -130,10 +147,18 @@ export interface ConfigProvider {
   type: string;
   base_url: string;
   api_key: string;
+  api_key_env: string;
   is_default: number;
   is_active: number;
   created_at: string;
   updated_at: string;
+}
+
+export class ProviderEndpointValidationError extends Error {
+  constructor(action: 'add' | 'update', reason: string) {
+    super(`Refused to ${action} provider: ${reason}`);
+    this.name = 'ProviderEndpointValidationError';
+  }
 }
 
 export interface ConfigModel {
@@ -186,8 +211,8 @@ function maskSecret(secret: string | null | undefined): string {
 }
 
 /** Redact the api_key field from a provider record for safe GET responses. */
-export function redactProvider<T extends { api_key?: string }>(p: T): T & { api_key_masked: string } {
-  return { ...p, api_key_masked: maskSecret(p.api_key), api_key: "" };
+export function redactProvider<T extends { api_key?: string; api_key_env?: string }>(p: T): T & { api_key_masked: string; api_key_env: string } {
+  return { ...p, api_key_masked: maskSecret(p.api_key), api_key: "", api_key_env: p.api_key_env || "" };
 }
 
 /** Redact the token field from a gateway record for safe GET responses. */
@@ -279,8 +304,8 @@ const PROVIDER_HOST_ALLOWLIST: ReadonlyArray<string> = [
   'ai.api.nvidia.com',
 ];
 
-function getProviderHostAllowlist(): Set<string> {
-  const list = new Set<string>(PROVIDER_HOST_ALLOWLIST);
+function getOperatorTrustedProviderHosts(): Set<string> {
+  const list = new Set<string>();
   const extra = process.env.TRUSTED_PROVIDER_HOSTS;
   if (extra) {
     for (const raw of extra.split(',').map(s => s.trim()).filter(Boolean)) {
@@ -291,6 +316,10 @@ function getProviderHostAllowlist(): Set<string> {
     }
   }
   return list;
+}
+
+function getProviderHostAllowlist(): Set<string> {
+  return new Set([...PROVIDER_HOST_ALLOWLIST, ...getOperatorTrustedProviderHosts()]);
 }
 
 async function rejectIfWriteTargetUnsafe(url: string): Promise<{ blocked: boolean; reason?: string }> {
@@ -335,7 +364,12 @@ async function rejectIfWriteTargetUnsafe(url: string): Promise<{ blocked: boolea
   // Defense-in-depth: even allowlisted hostnames go through the DNS+range
   // walker so a poisoned allowlist entry can't shortcut to private space.
   // Literal non-loopback IPs also land here for the range check.
-  return assertSafeFetchTarget(url, 'addProvider/updateProvider');
+  const privateNetworkApproved = isIP(host)
+    ? isPrivateProviderNetwork(host)
+    : getOperatorTrustedProviderHosts().has(host.toLowerCase());
+  return assertSafeFetchTarget(url, 'addProvider/updateProvider', {
+    allowPrivateProviderNetwork: privateNetworkApproved,
+  });
 }
 
 /**
@@ -370,7 +404,12 @@ export async function assertSafeProviderHttpFetchTarget(url: string, context: st
     }
   }
 
-  return assertSafeFetchTarget(url, context);
+  const privateNetworkApproved = isIP(host)
+    ? isPrivateProviderNetwork(host)
+    : getOperatorTrustedProviderHosts().has(host.toLowerCase());
+  return assertSafeFetchTarget(url, context, {
+    allowPrivateProviderNetwork: privateNetworkApproved,
+  });
 }
 
 export function providerEndpointUrl(baseUrl: string, endpointPath: string): string {
@@ -379,16 +418,16 @@ export function providerEndpointUrl(baseUrl: string, endpointPath: string): stri
   return new URL(relative, base).toString();
 }
 
-export async function addProvider(data: { id?: string; name: string; type: string; baseUrl: string; apiKey?: string }): Promise<ProviderWithModels> {
+export async function addProvider(data: { id?: string; name: string; type: string; baseUrl: string; apiKey?: string; apiKeyEnv?: string }): Promise<ProviderWithModels> {
   const safety = await rejectIfWriteTargetUnsafe(data.baseUrl);
   if (safety.blocked) {
-    throw new Error(`Refused to add provider: ${safety.reason}`);
+    throw new ProviderEndpointValidationError('add', safety.reason || 'unsafe endpoint');
   }
   const id = data.id || `provider-${Date.now()}`;
   run(
-    `INSERT INTO config_providers (id, name, type, base_url, api_key, is_default, is_active)
-     VALUES (?, ?, ?, ?, ?, 0, 1)`,
-    [id, data.name, data.type, data.baseUrl, data.apiKey || '']
+    `INSERT INTO config_providers (id, name, type, base_url, api_key, api_key_env, is_default, is_active)
+     VALUES (?, ?, ?, ?, ?, ?, 0, 1)`,
+    [id, data.name, data.type, data.baseUrl, data.apiKey || '', data.apiKeyEnv || '']
   );
 
   // Seed default models for known provider types
@@ -409,14 +448,14 @@ export async function addProvider(data: { id?: string; name: string; type: strin
   return getProvider(id)!;
 }
 
-export async function updateProvider(id: string, data: Partial<{ name: string; type: string; baseUrl: string; apiKey: string; isActive: boolean }>): Promise<ProviderWithModels | undefined> {
+export async function updateProvider(id: string, data: Partial<{ name: string; type: string; baseUrl: string; apiKey: string; apiKeyEnv: string; isActive: boolean }>): Promise<ProviderWithModels | undefined> {
   const existing = getProvider(id);
   if (!existing) return undefined;
 
   if (data.baseUrl !== undefined) {
     const safety = await rejectIfWriteTargetUnsafe(data.baseUrl);
     if (safety.blocked) {
-      throw new Error(`Refused to update provider: ${safety.reason}`);
+      throw new ProviderEndpointValidationError('update', safety.reason || 'unsafe endpoint');
     }
   }
 
@@ -424,6 +463,7 @@ export async function updateProvider(id: string, data: Partial<{ name: string; t
   if (data.type !== undefined) run('UPDATE config_providers SET type = ?, updated_at = datetime(\'now\') WHERE id = ?', [data.type, id]);
   if (data.baseUrl !== undefined) run('UPDATE config_providers SET base_url = ?, updated_at = datetime(\'now\') WHERE id = ?', [data.baseUrl, id]);
   if (data.apiKey !== undefined) run('UPDATE config_providers SET api_key = ?, updated_at = datetime(\'now\') WHERE id = ?', [data.apiKey, id]);
+  if (data.apiKeyEnv !== undefined) run('UPDATE config_providers SET api_key_env = ?, updated_at = datetime(\'now\') WHERE id = ?', [data.apiKeyEnv, id]);
   if (data.isActive !== undefined) run('UPDATE config_providers SET is_active = ?, updated_at = datetime(\'now\') WHERE id = ?', [data.isActive ? 1 : 0, id]);
 
   return getProvider(id);
@@ -445,6 +485,8 @@ export async function testProvider(id: string): Promise<{ status: string; models
   const p = queryOne<ConfigProvider>('SELECT * FROM config_providers WHERE id = ?', [id]);
   if (!p) return { status: 'error', error: 'Provider not found' };
 
+  const configuredApiKey = p.api_key || (p.api_key_env ? process.env[p.api_key_env] || '' : '');
+
   // For openclaw type, test via HTTP health endpoint (no auth — gateway uses WebSocket auth)
   const baseUrl = p.type === 'openclaw'
     ? p.base_url.replace('ws://', 'http://').replace('wss://', 'https://')
@@ -456,12 +498,39 @@ export async function testProvider(id: string): Promise<{ status: string; models
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
     // OpenClaw gateway authenticates via WebSocket challenge-response, not Bearer token
-    if (p.api_key && p.type !== 'openclaw') headers['Authorization'] = `Bearer ${p.api_key}`;
+    if (configuredApiKey && p.type !== 'openclaw') headers['Authorization'] = `Bearer ${configuredApiKey}`;
 
-    const modelsUrl = p.type === 'openclaw' ? `${baseUrl}/health` : `${baseUrl}/models`;
+    const modelsUrl = providerEndpointUrl(baseUrl, p.type === 'openclaw' ? 'health' : 'models');
     if (headers['Authorization']) warnIfInsecure(modelsUrl, `testProvider(${p.name})`);
-    // SSRF guard — block private/link-local/metadata before any auth header is sent.
-    const safety = await assertSafeFetchTarget(modelsUrl, `testProvider(${p.name})`);
+    // OpenRouter's catalog is public. Verify the resolved credential first;
+    // catalog discovery alone cannot establish authentication or inference.
+    if ((p.type || '').toLowerCase() === 'openrouter') {
+      if (!configuredApiKey) {
+        clearTimeout(timeout);
+        return { status: 'error', error: 'OpenRouter authentication failed: configure an API key or a readable key environment variable before testing.' };
+      }
+      const authUrl = providerEndpointUrl(baseUrl, 'key');
+      const authSafety = await assertSafeFetchTarget(authUrl, 'OpenRouter authentication');
+      if (authSafety.blocked) {
+        clearTimeout(timeout);
+        return { status: 'error', error: authSafety.reason };
+      }
+      try {
+        const authResponse = await fetch(authUrl, { signal: controller.signal, headers, redirect: 'error' });
+        if (!authResponse.ok) {
+          clearTimeout(timeout);
+          // Never echo provider response bodies: they can contain credentials.
+          return { status: 'error', error: `OpenRouter authentication check failed (HTTP ${authResponse.status}). Check the configured credential and provider availability, then test again.` };
+        }
+      } catch {
+        clearTimeout(timeout);
+        return { status: 'offline', error: 'OpenRouter authentication could not be verified. Check connectivity and retry.' };
+      }
+    }
+    // Use the same provider-specific policy as save/read validation: explicit
+    // LAN/Tailscale endpoints are supported, while metadata, link-local,
+    // reserved and untrusted-hostname targets remain blocked before auth.
+    const safety = await assertSafeProviderHttpFetchTarget(modelsUrl, `testProvider(${p.name})`);
     if (safety.blocked) {
       clearTimeout(timeout);
       return { status: 'error', error: safety.reason };

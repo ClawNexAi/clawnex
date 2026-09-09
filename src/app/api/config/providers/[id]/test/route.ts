@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as configService from '@/lib/services/config-service';
 import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/guard';
 import { requireLocalhost } from "@/lib/middleware/localhost-guard";
+import { testConfiguredProxyModel } from '@/lib/services/provider-routing-readiness';
+import { logEvent } from '@/lib/services/audit-logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -26,6 +28,24 @@ export async function POST(
     }
 
     const { id } = await params;
+    let body: Record<string, unknown> = {};
+    try {
+      const text = await request.text();
+      if (text) {
+        const parsed = JSON.parse(text);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('invalid');
+        body = parsed;
+      }
+    } catch { return NextResponse.json({ error: 'Body must be a JSON object' }, { status: 400 }); }
+    if (body.action === 'inference') {
+      if (typeof body.modelAlias !== 'string' || !body.modelAlias.trim()) {
+        return NextResponse.json({ error: 'Select a configured model first.' }, { status: 400 });
+      }
+      const result = await testConfiguredProxyModel(id, body.modelAlias, body.approved === true);
+      if (body.approved === true) logEvent('config', 'provider_inference_test', 'provider', id, result.status, 'api');
+      return NextResponse.json(result, { status: result.ready ? 200 : 409 });
+    }
+    if (body.action !== undefined) return NextResponse.json({ error: 'Unknown test action' }, { status: 400 });
     const result = await configService.testProvider(id);
 
     if (result.status === 'connected' && result.models) {

@@ -168,7 +168,7 @@ console.log("[2] syncProvidersToYaml with 0 providers");
 }
 
 // ---------------------------------------------------------------------------
-// Test 3: 1 OpenRouter provider → real openrouter/auto + wildcard, no placeholder
+// Test 3: explicitly selected OpenRouter auto, without invented wildcard routes
 // ---------------------------------------------------------------------------
 console.log("[3] syncProvidersToYaml with 1 OpenRouter provider");
 {
@@ -182,7 +182,7 @@ console.log("[3] syncProvidersToYaml with 1 OpenRouter provider");
       is_active: 1,
     },
   ];
-  mockModels = [];
+  mockModels = [{ model_id: 'openrouter/auto', provider_id: 'p-openrouter' }];
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "verify-litellm-"));
   const cfg = path.join(tmp, "config.yaml");
   const result = syncProvidersToYaml({ db: makeStubDb(), configPath: cfg });
@@ -190,8 +190,8 @@ console.log("[3] syncProvidersToYaml with 1 OpenRouter provider");
 
   assert(result.provider_count === 1, "synced count is 1 when one provider");
   assert(out.includes('model_name: "openrouter/auto"'), "real openrouter/auto entry written");
-  assert(out.includes('model_name: "openrouter/*"'), "wildcard openrouter/* entry written");
-  assert(out.includes('model: "openrouter/auto"') && out.includes('model: "openrouter/*"'), "openrouter/* model field present");
+  assert(!out.includes('model_name: "openrouter/*"'), "unselected OpenRouter wildcard is absent");
+  assert(out.includes('model: "openrouter/auto"') && !out.includes('model: "openrouter/*"'), "only selected upstream model is present");
   assert(!out.includes(PLACEHOLDER_MODEL_NAME), "placeholder model removed when real providers present");
   assert(
     out.includes("callbacks: [\"clawnex_logger.ClawNexLogger\"]"),
@@ -228,8 +228,8 @@ console.log("[4] syncProvidersToYaml with mixed providers + configured model");
   syncProvidersToYaml({ db: makeStubDb(), configPath: cfg });
   const out = fs.readFileSync(cfg, "utf-8");
 
-  assert(out.includes('model_name: "openai"'), "openai provider produces a top-level openai route");
-  assert(out.includes('model_name: "openai/*"'), "openai provider produces wildcard openai/* route");
+  assert(!out.includes('model_name: "openai"'), "provider-only alias is not invented");
+  assert(!out.includes('model_name: "openai/*"'), "unselected OpenAI wildcard is absent");
   assert(out.includes('model_name: "gpt-4o-mini"'), "configured model gpt-4o-mini produces its own route");
   assert(!out.includes(PLACEHOLDER_MODEL_NAME), "placeholder NOT written when real providers exist");
   assert(out.includes("callbacks: [\"clawnex_logger.ClawNexLogger\"]"), "callbacks preserved across mixed sync");

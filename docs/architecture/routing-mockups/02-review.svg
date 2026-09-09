@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="820" viewBox="0 0 1200 820" role="img" aria-label="Hermes · Local">
+<defs><style>text{font-family:Arial,Helvetica,sans-serif;fill:#e4edf4}.muted{fill:#97adbf;font-size:16px}.small{font-size:14px}.label{fill:#80d8ca;font-size:13px;font-weight:700;letter-spacing:1.2px}.title{font-size:30px;font-weight:700}.button{font-size:16px;font-weight:700}</style></defs>
+<rect width="1200" height="820" fill="#07111b"/>
+<rect width="1200" height="58" fill="#0c1b28"/><text x="32" y="37" fill="#00dcb0" font-size="22" font-weight="700">ClawNex</text><text x="170" y="36" class="muted">Configuration / Fleet &amp; Routing</text><text x="946" y="36" class="small muted">PROPOSED UI · SAMPLE DATA</text>
+<rect x="30" y="86" width="1140" height="698" rx="16" fill="#0d1f2e" stroke="#294657"/>
+<text x="62" y="134" class="label">TOOL CONNECTION</text><text x="62" y="178" class="title">Hermes · Local</text><text x="62" y="209" class="muted">Connection: Ready for review   •   Configured policy: Blocking</text>
+<rect x="903" y="117" width="231" height="44" rx="7" fill="#152e40" stroke="#355467"/><text x="923" y="145" font-size="16">Choose instance ▾</text>
+<rect x="62" y="240" width="254" height="45" rx="6" fill="#132b3c" stroke="#294657"/><text x="82" y="269" font-size="16" fill="#9bb2c3">1  Prepare</text><rect x="334" y="240" width="254" height="45" rx="6" fill="#16483f" stroke="#00dcb0"/><text x="354" y="269" font-size="16" fill="#00efbd">2  Review</text><rect x="606" y="240" width="254" height="45" rx="6" fill="#132b3c" stroke="#294657"/><text x="626" y="269" font-size="16" fill="#9bb2c3">3  Apply</text><rect x="878" y="240" width="254" height="45" rx="6" fill="#132b3c" stroke="#294657"/><text x="898" y="269" font-size="16" fill="#9bb2c3">4  Verify</text>
+
+<text x="62" y="332" font-size="24" font-weight="700">Connect 2 provider routes. Leave 1 unchanged.</text>
+<text x="62" y="365" class="muted">Review the scope below. Nothing is applied until you confirm.</text>
+<text x="84" y="405" class="label">INCLUDE</text><text x="200" y="405" class="label">PROVIDER</text><text x="550" y="405" class="label">AFFECTED MODELS</text><text x="913" y="405" class="label">READINESS</text>
+<rect x="62" y="419" width="1072" height="47" rx="5" fill="#153344"/><text x="91" y="450" font-size="21">☑</text><text x="200" y="449" font-size="17">OpenRouter</text><text x="550" y="449" class="muted">▸ 3 models</text><text x="913" y="449" font-size="16" style="fill:#82e3c4">Tested</text><rect x="62" y="472" width="1072" height="47" rx="5" fill="#153344"/><text x="91" y="503" font-size="21">☑</text><text x="200" y="502" font-size="17">Local models</text><text x="550" y="502" class="muted">▸ 2 models</text><text x="913" y="502" font-size="16" style="fill:#82e3c4">Tested</text><rect x="62" y="525" width="1072" height="47" rx="5" fill="#292d30"/><text x="91" y="556" font-size="21">—</text><text x="200" y="555" font-size="17">Session login</text><text x="550" y="555" class="muted">1 model</text><text x="913" y="555" font-size="16" style="fill:#ffd37b">Unsupported</text>
+<text x="62" y="601" class="muted">Excluded: session-login routing cannot be changed safely by this integration.</text>
+<text x="62" y="635" font-size="16" style="fill:#ffd37b">Restart required. Active work may be interrupted; confirm the impact before applying.</text>
+<line x1="62" y1="658" x2="1135" y2="658" stroke="#294657"/>
+<rect x="62" y="684" width="292" height="48" rx="7" fill="#00dcb0"/><text x="82" y="715" class="button" style="fill:#06231f">Review and apply…</text>
+<rect x="372" y="684" width="252" height="48" rx="7" fill="#152e40" stroke="#466073"/><text x="392" y="715" class="button">Refresh configuration</text>
+<text x="651" y="714" class="muted">▸ Technical details</text>
+<text x="62" y="761" class="small muted">Shared layout for OpenClaw and Hermes · No configuration changes from this mockup</text>
+</svg>

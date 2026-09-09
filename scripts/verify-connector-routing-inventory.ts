@@ -32,6 +32,9 @@ process.env.CLAWNEX_TEST_SKIP_DB_SEED = "1";
 process.env.CLAWNEX_SELECTIVE_ROUTING_SIDECAR = path.join(root, ".clawnex-selective-routing-managed.json");
 process.env.CLAWNEX_HERMES_ROUTING_SIDECAR = path.join(root, ".clawnex-hermes-routing-managed.json");
 process.env.LITELLM_PORT = "4001";
+process.env.LITELLM_CONFIG_PATH = path.join(root, "litellm-config.yaml");
+process.env.CLAWNEX_LITELLM_CONFIG = process.env.LITELLM_CONFIG_PATH;
+fs.writeFileSync(process.env.LITELLM_CONFIG_PATH, "model_list: []\n", { mode: 0o600 });
 
 const openclawConfigPath = path.join(openclawHome, "openclaw.json");
 const originalOpenRouterKey = "sk-or-test-do-not-print";
@@ -52,6 +55,10 @@ fs.writeFileSync(openclawConfigPath, JSON.stringify({
         baseUrl: "https://generativelanguage.googleapis.com/v1beta",
         apiKey: "google-test-key",
         models: [{ id: "gemini-3-pro", name: "Gemini 3 Pro" }],
+      },
+      'oauth-fixture': {
+        baseUrl: 'https://fixture.example/v1', auth: 'oauth', api: 'openai-completions',
+        models: [{ id: 'session-model' }],
       },
       litellm: {
         baseUrl: "http://127.0.0.1:4001/v1",
@@ -74,6 +81,7 @@ fs.writeFileSync(hermesConfigPath, YAML.stringify({
       name: "kimi",
       base_url: "https://integrate.api.nvidia.com/v1",
       api_mode: "chat_completions",
+      api_key: "nvidia-test-key",
     },
     {
       name: "agent-main",
@@ -90,6 +98,12 @@ async function main(): Promise<void> {
   const scanner = await import("../src/lib/services/permissiveness/scanners/openclaw");
 
   let inventory = svc.syncConnectorRoutingInventory();
+  assert(inventory.openclaw.items.filter(item => item.providerId === 'oauth-fixture').every(item => item.capability === 'unsupported'), 'OAuth remains excluded even with an HTTP chat endpoint');
+  assert(inventory.openclaw.items.filter(item => item.capability === 'provider-routing' && item.providerId !== 'litellm').every(item => item.desiredRoute === 'routed'), 'Eligible routes are proposed by default, without changing agent files');
+  // The remaining primitive tests deliberately exercise a single selected model.
+  svc.setAllConnectorRoutingSelections('openclaw', 'direct');
+  svc.setAllConnectorRoutingSelections('hermes', 'direct');
+  inventory = svc.syncConnectorRoutingInventory();
   assert(inventory.openclaw.status === "ok", "OpenClaw inventory sync succeeds");
   assert(inventory.openclaw.items.some((item) => item.providerId === "openrouter" && item.itemType === "provider"), "OpenRouter provider discovered");
   assert(inventory.openclaw.items.some((item) => item.providerId === "openrouter" && item.modelId === "openrouter/auto"), "OpenRouter model discovered");
@@ -140,6 +154,11 @@ async function main(): Promise<void> {
   const kimiModel = inventory.hermes.items.find((item) => item.connector === "hermes" && item.providerId === "kimi" && item.modelId === "moonshotai/kimi-k2");
   assert(kimiModel?.capability === "model-inventory", "Hermes model backed by custom provider is selectable inventory");
 
+  const wiredKimi = await svc.wireHermesModel(kimiModel!.id);
+  assert(wiredKimi.ok && wiredKimi.status === "wired", "Readable Hermes credentials can configure a model in ClawNex");
+  assert(wiredKimi.credential?.masked && wiredKimi.credential.masked !== "nvidia-test-key", "Hermes wire result returns only a masked credential preview");
+  assert(!JSON.stringify(wiredKimi).includes("nvidia-test-key"), "Hermes wire result never returns the plaintext credential");
+
   svc.setConnectorRoutingSelections("hermes", [kimiModel!.id], "routed");
   const hermesApplied = svc.applyHermesDesiredRouting();
   assert(hermesApplied.ok && hermesApplied.status === "applied", "Hermes selected routing applies");
@@ -175,6 +194,26 @@ async function main(): Promise<void> {
   const restoredKimi = hermesCfg.custom_providers.find((provider) => provider.name === "kimi");
   assert(restoredKimi?.base_url === "https://integrate.api.nvidia.com/v1", "Hermes custom provider base_url restored");
   assert(restoredKimi?.key_env === undefined, "Hermes key_env removed when it was not originally present");
+
+  inventory = svc.syncConnectorRoutingInventory();
+  const conflictModel = inventory.hermes.items.find(item => item.providerId === 'kimi' && item.modelId === 'moonshotai/kimi-k2')!;
+  svc.setConnectorRoutingSelections('hermes', [conflictModel.id], 'routed');
+  svc.applyHermesDesiredRouting();
+  const editedConfig = YAML.parse(fs.readFileSync(hermesConfigPath, 'utf8'));
+  editedConfig.custom_providers.find((provider: { name: string }) => provider.name === 'kimi').key_env = 'OPERATOR_REPLACEMENT_KEY';
+  fs.writeFileSync(hermesConfigPath, YAML.stringify(editedConfig));
+  const conflictRestore = svc.revertHermesRouting();
+  const preservedConfig = YAML.parse(fs.readFileSync(hermesConfigPath, 'utf8'));
+  assert(preservedConfig.custom_providers.find((provider: { name: string }) => provider.name === 'kimi').key_env === 'OPERATOR_REPLACEMENT_KEY', 'Restore preserves operator-edited credential references');
+  assert(conflictRestore.skippedProviders.some(provider => provider.providerId === 'kimi'), 'Restore reports credential-reference conflicts');
+  assert(fs.existsSync(process.env.CLAWNEX_HERMES_ROUTING_SIDECAR!), 'Conflicted ownership remains recoverable');
+  assert(!conflictRestore.ok, 'An unresolved restoration conflict is not blanket success');
+  const ownershipBefore = fs.readFileSync(process.env.CLAWNEX_HERMES_ROUTING_SIDECAR!, 'utf8');
+  fs.writeFileSync(process.env.CLAWNEX_HERMES_ROUTING_SIDECAR!, '{broken');
+  let corruptRefused = false;
+  try { svc.revertHermesRouting(); } catch { corruptRefused = true; }
+  assert(corruptRefused, 'Corrupt ownership is an error, not an unwired instance');
+  fs.writeFileSync(process.env.CLAWNEX_HERMES_ROUTING_SIDECAR!, ownershipBefore);
 
   db.run(
     `INSERT INTO hermes_events (id, source_id, message_id, model, content_hash, observed_at)

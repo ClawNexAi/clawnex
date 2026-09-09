@@ -629,12 +629,10 @@ function WelcomeWizard({ onNavigate, onReload, allComplete, onAllCompleteChange 
   const [openclawState, setOpenclawState] = useState<"connected" | "auth-failing" | "stopped" | "absent" | null>(null);
   const [hostOs, setHostOs] = useState<"macos" | "linux" | "other">("other");
   const [routingConfigured, setRoutingConfigured] = useState<boolean>(false);
-  const [wiringRouting, setWiringRouting] = useState<boolean>(false);
   // Surfaces whatever the wire+restart sequence reported, so the
   // wizard step description shows the actual outcome instead of the
   // generic blurb after the operator clicks. Cleared when the operator
   // reloads the wizard or moves past the step.
-  const [routingMessage, setRoutingMessage] = useState<string | null>(null);
   const [cveSynced, setCveSynced] = useState<boolean>(false);
   const [hostSecurityInstalled, setHostSecurityInstalled] = useState<boolean>(false);
   const [shieldTested, setShieldTested] = useState<boolean>(false);
@@ -821,52 +819,6 @@ function WelcomeWizard({ onNavigate, onReload, allComplete, onAllCompleteChange 
   // for the wire result and the restart result so we can surface a
   // sensible message either way (wired-but-restart-failed is a real
   // outcome on hosts where the supervisor isn't auto-detected).
-  const wireRoutingFromWizard = async () => {
-    setWiringRouting(true);
-    setRoutingMessage("Wiring LiteLLM into openclaw.json...");
-    try {
-      const wireRes = await fetch("/api/openclaw/routing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "wire" }),
-      });
-      const wireData = await wireRes.json().catch(() => ({}));
-      if (!wireRes.ok || !wireData.ok) {
-        const detail = wireData.detail || wireData.error || "Wire failed.";
-        setRoutingMessage(`Wire failed: ${detail} Open Configuration -> OpenClaw Routing for details.`);
-        setWiringRouting(false);
-        return;
-      }
-      // Wire succeeded. If restart isn't required (idempotent already-
-      // wired path), we're done. Otherwise restart now so the operator
-      // doesn't have to jump to SSH.
-      if (!wireData.restartRequired) {
-        setRoutingMessage(`Already wired: ${wireData.detail}`);
-        await refreshStatus();
-        setWiringRouting(false);
-        return;
-      }
-      setRoutingMessage("Wired. Restarting openclaw-gateway...");
-      const restartRes = await fetch("/api/openclaw/gateway/restart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
-      const restartData = await restartRes.json().catch(() => ({}));
-      if (restartRes.ok && restartData.ok) {
-        setRoutingMessage(`Wired and restarted via ${restartData.supervisor} in ${restartData.elapsedMs ?? "?"}ms. New routing is active.`);
-      } else if (restartData.status === "unsupported") {
-        setRoutingMessage(`Wired. Auto-restart unsupported on this host -- run manually: ${restartData.manualCommand ?? "see Configuration -> OpenClaw Routing"}.`);
-      } else {
-        setRoutingMessage(`Wired but restart failed: ${restartData.detail ?? restartData.error ?? "unknown error"}. Run manually: ${restartData.manualCommand ?? "see Configuration -> OpenClaw Routing"}.`);
-      }
-      await refreshStatus();
-    } catch (err) {
-      setRoutingMessage(`Wire/restart errored: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setWiringRouting(false);
-    }
-  };
 
   const syncPricing = async () => {
     setSyncingPricing(true);
@@ -1005,15 +957,14 @@ function WelcomeWizard({ onNavigate, onReload, allComplete, onAllCompleteChange 
     {
       key: "routing",
       label: "Configure OpenClaw routing",
-      description: routingMessage ?? "Open the OpenClaw Routing card and choose exactly which OpenClaw providers/models should route through the ClawNex LiteLLM proxy at 127.0.0.1:4001/v1. Hermes has a separate Hermes Routing card for writable custom providers.",
+      description: "Prepare upstream models, review provider-wide changes for one instance, approve the connection, then verify new traffic. OpenClaw and Hermes use the same reviewed workflow in Configuration.",
       realDone: routingConfigured,
       isSkipped: skipped.routing,
       skippable: true,
       action: {
-        label: wiringRouting ? "Opening..." : (routingConfigured ? "Open Configuration" : "Choose Routing"),
+        label: routingConfigured ? "Open Configuration" : "Review Routing",
         run: () => onNavigate("configuration", "openclawRouting"),
       },
-      secondary: routingConfigured ? undefined : { label: "Legacy Wire", run: wireRoutingFromWizard },
     },
     {
       key: "shield",

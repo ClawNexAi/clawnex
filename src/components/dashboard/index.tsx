@@ -1015,6 +1015,9 @@ function SentinelDashboardInner() {
       <div style={{
         height: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "0 16px", ...G.header,
+        // The glass header creates a stacking context. Lift that context so
+        // update/routing notices cannot be covered by isolated content cards.
+        zIndex: 100,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

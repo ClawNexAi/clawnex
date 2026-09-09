@@ -1,0 +1,146 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { C, F } from '../constants';
+import { CollapsibleCard } from '../shared';
+import { ConfirmDialog } from '../ConfirmDialog';
+import type { ConnectorId, ConnectorRoutingResponse, ConnectorRoutingItem } from '@/lib/services/connector-routing-inventory';
+import type { RoutingPlan } from '@/lib/services/routing-workflow';
+import type { RoutingVerification } from '@/lib/services/routing-reconciliation';
+
+const button = { padding: '8px 12px', borderRadius: 6, border: `1px solid ${C.brand}66`, background: `${C.brand}16`, color: C.brand, fontFamily: F.disp, fontSize: 12, cursor: 'pointer' };
+const primaryButton = { ...button, background: C.brand, color: C.bg, borderColor: C.brand, fontWeight: 700 };
+
+async function command(body: Record<string, unknown>) {
+  const response = await fetch('/api/connector-routing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const result = await response.json();
+  if (!response.ok || result.ok === false) throw new Error(result.error || result.result?.detail || 'The operation could not be completed. No success has been assumed.');
+  return result;
+}
+
+function InstanceRouting({ connector, data, refresh, focusedCard }: {
+  connector: ConnectorId; data: ConnectorRoutingResponse; refresh: () => Promise<void>; focusedCard?: string | null;
+}) {
+  const summary = data[connector];
+  const sources = [...new Set(summary.items.filter(item => item.present).map(item => item.sourceId))];
+  const [selectedSource, setSelectedSource] = useState('');
+  const sourceId = sources.includes(selectedSource) ? selectedSource : sources[0] || '';
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [prerequisites, setPrerequisites] = useState<string[]>([]);
+  const [plan, setPlan] = useState<RoutingPlan | null>(null);
+  const reviewOrigin = useRef<HTMLElement | null>(null);
+  const [verification, setVerification] = useState<{ key: string; result: RoutingVerification } | null>(null);
+  const title = connector === 'openclaw' ? 'OpenClaw' : 'Hermes';
+  const items = summary.items.filter(item => item.present && item.sourceId === sourceId && !['litellm', 'clawnex-litellm'].includes(item.providerId));
+  const providers = new Map<string, ConnectorRoutingItem[]>();
+  for (const item of items) providers.set(item.providerId, [...(providers.get(item.providerId) || []), item]);
+  const groups = [...providers.entries()];
+  const currentKey = JSON.stringify(items.map(item => [item.id, item.fingerprint, item.desiredRoute]));
+  const currentVerification = verification?.key === currentKey ? verification.result : null;
+  const routed = groups.filter(([, rows]) => rows.some(row => row.currentRoute === 'routed')).length;
+  const pending = items.some(item => ['provider-routing', 'model-inventory'].includes(item.capability) && item.desiredRoute !== item.currentRoute);
+  const verificationPending = routed > 0 && !pending && currentVerification?.status !== 'verified';
+  const excluded = groups.filter(([, rows]) => rows.every(row => ['read-only', 'unsupported'].includes(row.capability))).length;
+  const run = async (task: () => Promise<void>) => {
+    setBusy(true); setMessage(''); setPrerequisites([]);
+    try { await task(); } catch (error) { setMessage(error instanceof Error ? error.message : 'Operation could not be confirmed.'); }
+    finally { setBusy(false); }
+  };
+  const review = (operation: 'apply' | 'restore') => {
+    reviewOrigin.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return run(async () => {
+    const result = await command({ action: 'prepare', connector, sourceId, operation });
+    if (result.plan.prerequisites.length) {
+      setPrerequisites(result.plan.prerequisites);
+      setMessage('Prepare the replacement connection first. A model test is missing, expired, or no longer matches the loaded configuration. In Model Providers, test each affected model; readiness remains valid for 30 minutes unless configuration changes.');
+    } else setPlan(result.plan);
+    });
+  };
+  const apply = () => {
+    const approved = plan;
+    setPlan(null);
+    if (!approved) return;
+    void run(async () => {
+      const result = await command({ action: 'execute-plan', planId: approved.id, approved: true });
+      setMessage(`${result.result.detail} ${result.result.restartRequired ? 'Restart this agent instance before verifying its next request. No restart was performed automatically.' : ''}`);
+      await refresh();
+      window.dispatchEvent(new Event('clawnex:updates-refreshed'));
+    });
+  };
+
+  return <CollapsibleCard title={`${title.toUpperCase()} ROUTING`} accent={connector === 'openclaw' ? C.brand : C.purp}
+    defaultOpen={false} focusKey={connector === 'openclaw' ? 'openclawRouting' : 'hermesRouting'} focusedCard={focusedCard}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+      <strong style={{ color: C.tx }}>{currentVerification?.status === 'verified' ? 'Routed models verified' : routed ? 'Configured · verification required' : 'Direct connection'}</strong>
+      <select aria-label={`${title} instance`} disabled={busy || sources.length === 0} value={sourceId}
+        onChange={event => { setSelectedSource(event.target.value); setMessage(''); setPlan(null); setPrerequisites([]); }}
+        style={{ maxWidth: '100%', padding: 8, color: C.tx, background: C.srf, border: `1px solid ${C.brd}`, borderRadius: 6 }}>
+        {!sources.length && <option value="">No local instance found</option>}
+        {sources.map(source => <option key={source} value={source}>{source === 'default' ? 'Local instance' : summary.items.find(item => item.sourceId === source)?.metadata.profileName as string || source}</option>)}
+      </select>
+    </div>
+    <p style={{ color: C.txS, fontSize: 12, lineHeight: 1.6 }}>Prepare → Review → Apply → Verify<br />
+      {routed} of {groups.length} provider routes configured through ClawNex. {excluded ? `${excluded} unsupported route(s) remain unchanged. Coverage is partial.` : ''}
+      {' '}Connection status does not change your existing blocking, observe-only, or emergency-bypass policy.</p>
+    <p style={{ color: C.txS, fontSize: 12 }}>Configure and test your upstream models first. Select provider routes below, then review the changes. Selecting a provider affects all of its models.</p>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+      <button aria-label={`Review ${title} connection changes`} style={pending ? primaryButton : button} disabled={busy || !sourceId || !pending} onClick={() => void review('apply')}>Review connection changes</button>
+      <button aria-label={`Refresh ${title} configuration`} style={button} disabled={busy} onClick={() => void run(refresh)}>Refresh configuration</button>
+      <button aria-label={`Verify ${title} connection`} style={{ ...(verificationPending ? primaryButton : button), opacity: busy || !sourceId || !routed || pending ? 0.45 : 1 }} disabled={busy || !sourceId || routed === 0 || pending} onClick={() => void run(async () => {
+        const result = await command({ action: 'verify', connector, sourceId });
+        setVerification({ key: currentKey, result: result.verification });
+      })}>Verify connection</button>
+      <button aria-label={`Restore ${title} direct connection`} style={{ ...button, color: C.warn, borderColor: `${C.warn}66` }} disabled={busy || !sourceId || routed === 0} onClick={() => void review('restore')}>Restore direct connection</button>
+    </div>
+    {busy && <p role="status" style={{ color: C.txS }}>Working…</p>}
+    {message && <p role="status" style={{ color: C.tx, fontSize: 12, lineHeight: 1.6 }}>{message}</p>}
+    {currentVerification && <p role="status" style={{ color: C.txS, fontSize: 12 }}>{currentVerification.detail}</p>}
+    {prerequisites.length > 0 && <details open><summary style={{ color: C.warn }}>Connection prerequisites ({prerequisites.length})</summary>
+      <ul style={{ color: C.txS, fontSize: 12 }}>{prerequisites.map(reason => <li key={reason}>{reason}</li>)}</ul></details>}
+    <details open style={{ marginTop: 12 }}><summary style={{ cursor: 'pointer', color: C.tx, marginBottom: 8 }}>Providers and affected models</summary>
+      {groups.map(([providerId, rows]) => {
+        const writable = rows.filter(row => ['provider-routing', 'model-inventory'].includes(row.capability));
+        const models = [...new Set(rows.map(row => row.modelId).filter(Boolean))];
+        return <div key={providerId} style={{ padding: '10px 12px', border: `1px solid ${C.brd}`, borderRadius: 6, marginBottom: 8 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, color: C.tx }}>
+            <input type="checkbox" aria-label={`Route ${providerId} through ClawNex for ${title} ${sourceId}`} disabled={busy || !writable.length} checked={writable.some(row => row.desiredRoute === 'routed')}
+              onChange={event => { const checked = event.target.checked; void run(async () => {
+                await command({ action: 'select', connector, itemIds: writable.map(row => row.id), desiredRoute: checked ? 'routed' : 'direct' });
+                await refresh();
+              }); }} />
+            <strong>{providerId}</strong>
+            <span style={{ marginLeft: 'auto', color: C.txS, fontSize: 11 }}>{!writable.length ? 'Not supported · unchanged' : rows.some(row => row.currentRoute === 'routed') ? 'Configured' : 'Direct'}</span>
+          </label>
+          <details style={{ marginTop: 8, color: C.txS, fontSize: 12 }}><summary>{models.length} affected model(s)</summary>
+            {models.map(model => <div key={model} style={{ padding: '4px 0', overflowWrap: 'anywhere' }}>{model}</div>)}</details>
+        </div>;
+      })}
+      {!groups.length && <p style={{ color: C.txS }}>No supported local configuration found. Add the instance in Fleet Connectors, then refresh. Remote instances require supported configuration access; they are not treated as local.</p>}
+    </details>
+    <details style={{ marginTop: 12, color: C.txT, fontSize: 12 }}><summary>Technical details</summary><p>Instance: {sourceId || 'unavailable'}</p><p>Proxy: {data.litellmTarget}</p><p>{summary.detail}</p></details>
+    <ConfirmDialog open={plan !== null} title={`${plan?.operation === 'restore' ? 'Restore direct connection' : 'Apply reviewed connection changes'} — ${title}`}
+      danger={plan?.operation === 'restore'} confirmLabel={plan?.operation === 'restore' ? 'Restore eligible routes' : 'Apply approved changes'}
+      body={<><p>Instance: {plan?.sourceId}</p><p>{plan?.providers.length} provider route(s), {plan?.models.length} model(s). {plan?.exclusions} unsupported route(s) remain unchanged.</p>
+        <p>{plan?.operation === 'restore' ? 'Restore only connection settings and identity headers still owned by ClawNex. Preserve unrelated edits and report conflicts.' : 'Point the selected provider endpoints to LiteLLM and add a signed instance-identity header. Hermes connection settings are updated where required. Upstream credentials are not copied into the recovery journal.'}</p>
+        <details><summary>Affected providers and models</summary><p style={{ overflowWrap: 'anywhere' }}>{plan?.providers.join(', ') || 'None'}</p><p style={{ overflowWrap: 'anywhere' }}>{plan?.models.join(', ') || 'None'}</p></details>
+        {!!plan?.legacyPaths.length && <p>Legacy routing fields will also be reviewed for safe restoration: {plan.legacyPaths.join(', ')}. Edited or still-referenced fields are preserved.</p>}
+        <p>Gateway restart may interrupt active work. No restart occurs automatically. Later operator edits are preserved; conflicts require review.</p></>}
+      returnFocusTo={reviewOrigin.current} onConfirm={apply} onCancel={() => setPlan(null)} />
+  </CollapsibleCard>;
+}
+
+export function RoutingWorkflowPanel({ focusedCard }: { focusedCard?: string | null }) {
+  const [data, setData] = useState<ConnectorRoutingResponse | null>(null);
+  const [error, setError] = useState('');
+  const refresh = useCallback(async () => {
+    const response = await fetch('/api/connector-routing');
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Unable to read routing configuration.');
+    setData(result); setError('');
+  }, []);
+  useEffect(() => { void refresh().catch(reason => setError(String(reason.message || reason))); }, [refresh]);
+  return <>{error && <p role="alert" style={{ color: C.warn }}>{error}</p>}
+    {data ? <>{(['openclaw', 'hermes'] as const).map(connector => <InstanceRouting key={connector} connector={connector} data={data} refresh={refresh} focusedCard={focusedCard} />)}</>
+      : error ? <button style={button} onClick={() => { setError(''); void refresh().catch(reason => setError(String(reason.message || reason))); }}>Retry reading configuration</button> : <p style={{ color: C.txS }}>Reading routing configuration…</p>}</>;
+}
