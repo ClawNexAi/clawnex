@@ -212,7 +212,7 @@ export function syncProvidersToYaml(opts: SyncOptions): SyncResult {
     "",
     "# ClawNex Shield Logger — scans all traffic",
     "litellm_settings:",
-    "  callbacks: [\"clawnex_logger.ClawNexLogger\"]",
+    "  callbacks: [\"clawnex_logger.clawnex_logger_instance\"]",
     "  drop_params: true",
     "  request_timeout: 120",
     "",

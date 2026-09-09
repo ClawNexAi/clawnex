@@ -137,8 +137,8 @@ console.log("[1] Shipped litellm/config.template.yaml");
     `template contains the labeled placeholder model_name "${PLACEHOLDER_MODEL_NAME}"`,
   );
   assert(
-    tpl.includes("callbacks: [\"clawnex_logger.ClawNexLogger\"]"),
-    "template preserves the Shield Logger callbacks line",
+    tpl.includes("callbacks: [\"clawnex_logger.clawnex_logger_instance\"]"),
+    "template configures a dispatchable Shield Logger callback instance",
   );
 }
 
@@ -161,8 +161,8 @@ console.log("[2] syncProvidersToYaml with 0 providers");
   assert(!out.includes("localhost:1234"), "output never references localhost:1234");
   assert(!out.includes('model: "openai/auto"'), "output never emits openai/auto");
   assert(
-    out.includes("callbacks: [\"clawnex_logger.ClawNexLogger\"]"),
-    "Shield Logger callbacks preserved on empty install",
+    out.includes("callbacks: [\"clawnex_logger.clawnex_logger_instance\"]"),
+    "empty-provider sync configures a dispatchable Shield Logger callback instance",
   );
   fs.rmSync(tmp, { recursive: true, force: true });
 }
@@ -194,8 +194,8 @@ console.log("[3] syncProvidersToYaml with 1 OpenRouter provider");
   assert(out.includes('model: "openrouter/auto"') && !out.includes('model: "openrouter/*"'), "only selected upstream model is present");
   assert(!out.includes(PLACEHOLDER_MODEL_NAME), "placeholder model removed when real providers present");
   assert(
-    out.includes("callbacks: [\"clawnex_logger.ClawNexLogger\"]"),
-    "Shield Logger callbacks preserved with real providers",
+    out.includes("callbacks: [\"clawnex_logger.clawnex_logger_instance\"]"),
+    "real-provider sync configures a dispatchable Shield Logger callback instance",
   );
   // The api_key SHOULD appear inside the YAML file (that's the point) — but
   // the verifier MUST NOT echo it. fs.readFileSync into `out` is fine; we
@@ -232,7 +232,7 @@ console.log("[4] syncProvidersToYaml with mixed providers + configured model");
   assert(!out.includes('model_name: "openai/*"'), "unselected OpenAI wildcard is absent");
   assert(out.includes('model_name: "gpt-4o-mini"'), "configured model gpt-4o-mini produces its own route");
   assert(!out.includes(PLACEHOLDER_MODEL_NAME), "placeholder NOT written when real providers exist");
-  assert(out.includes("callbacks: [\"clawnex_logger.ClawNexLogger\"]"), "callbacks preserved across mixed sync");
+  assert(out.includes("callbacks: [\"clawnex_logger.clawnex_logger_instance\"]"), "mixed-provider sync configures a dispatchable Shield Logger callback instance");
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 

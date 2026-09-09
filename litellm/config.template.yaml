@@ -52,7 +52,7 @@ model_list:
 
 # ClawNex Shield Logger — scans all traffic
 litellm_settings:
-  callbacks: ["clawnex_logger.ClawNexLogger"]
+  callbacks: ["clawnex_logger.clawnex_logger_instance"]
 
 general_settings:
   master_key: null

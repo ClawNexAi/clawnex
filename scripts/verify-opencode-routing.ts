@@ -109,6 +109,12 @@ async function main(): Promise<void> {
     assert.equal(configured.provider.fleet.models['openrouter/openai/gpt-5.4'].id, 'openrouter/openai/gpt-5.4', 'OpenCode sends the exact loaded LiteLLM alias');
     assert.equal(configured.provider.fleet.options.apiKey, '{env:LITELLM_MASTER_KEY}', 'routed OpenCode uses the LiteLLM credential reference');
     assert.equal(typeof configured.provider.fleet.options.headers['x-clawnex-routing-identity'], 'string');
+    const routedInventoryResponse = await routingApi.GET(new NextRequest('http://127.0.0.1:5001/api/connector-routing', {
+      headers: { origin: 'http://127.0.0.1:5001' },
+    }));
+    const routedInventory = await routedInventoryResponse.json();
+    const routedModel = routedInventory.opencode.items.find((item: { modelId: string }) => item.modelId === 'fleet/openrouter/openai/gpt-5.4');
+    assert.equal(routedModel.metadata.proxyModelAlias, 'openrouter/openai/gpt-5.4', 'routed inventory preserves the exact LiteLLM alias written into OpenCode');
     const sidecar = fs.readFileSync(process.env.CLAWNEX_OPENCODE_ROUTING_SIDECAR!, 'utf8');
     assert.ok(!sidecar.includes('OPENROUTER_API_KEY'), 'OpenCode recovery journal contains no credential material');
     const unsafeRemoval = await connectorApi.DELETE(new NextRequest(`http://127.0.0.1:5001/api/config/coding-agent-connectors?id=${encodeURIComponent(addedConnector.connector.id)}`, {

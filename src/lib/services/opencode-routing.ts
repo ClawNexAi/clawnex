@@ -124,13 +124,16 @@ export function discoverOpenCodeItems(): {
     for (const [modelKey, modelValue] of Object.entries(models)) {
       const model = asRecord(modelValue) || {};
       const modelId = modelKey.startsWith(`${providerId}/`) ? modelKey : `${providerId}/${modelKey}`;
-      const proxyModel = resolveConfiguredProxyModel(modelId, { providerId, baseUrl });
+      const managedModel = ownership.get(providerId)?.models.find(entry => entry.key === modelKey);
+      const proxyModelAlias = route === 'routed' && managedModel
+        ? managedModel.routedId
+        : resolveConfiguredProxyModel(modelId, { providerId, baseUrl })?.modelAlias || modelId;
       items.push({
         connector: 'opencode', sourceId: 'opencode:global', itemType: 'model', providerId, modelId,
         displayName: typeof model.name === 'string' ? model.name : modelId, baseUrl,
         capability: capability === 'provider-routing' ? 'model-inventory' : capability,
         currentRoute: route, defaultDesiredRoute: route === 'routed' ? 'routed' : 'direct',
-        metadata: { ...metadata, enforcedAt: 'provider', proxyModelAlias: proxyModel?.modelAlias || modelId, note: 'OpenCode global routing changes this provider endpoint for all of its configured models.' },
+        metadata: { ...metadata, enforcedAt: 'provider', proxyModelAlias, note: 'OpenCode global routing changes this provider endpoint for all of its configured models.' },
       });
     }
   }
