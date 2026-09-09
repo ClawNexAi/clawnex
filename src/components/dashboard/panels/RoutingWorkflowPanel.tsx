@@ -135,9 +135,10 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   </CollapsibleCard>;
 }
 
-export function RoutingWorkflowPanel({ focusedCard, connectors = ['openclaw', 'hermes'] }: {
+export function RoutingWorkflowPanel({ focusedCard, connectors = ['openclaw', 'hermes'], refreshToken }: {
   focusedCard?: string | null;
   connectors?: readonly ConnectorId[];
+  refreshToken?: string;
 }) {
   const [data, setData] = useState<ConnectorRoutingResponse | null>(null);
   const [error, setError] = useState('');
@@ -147,7 +148,7 @@ export function RoutingWorkflowPanel({ focusedCard, connectors = ['openclaw', 'h
     if (!response.ok) throw new Error(result.error || 'Unable to read routing configuration.');
     setData(result); setError('');
   }, []);
-  useEffect(() => { void refresh().catch(reason => setError(String(reason.message || reason))); }, [refresh]);
+  useEffect(() => { void refresh().catch(reason => setError(String(reason.message || reason))); }, [refresh, refreshToken]);
   return <>{error && <p role="alert" style={{ color: C.warn }}>{error}</p>}
     {data ? <>{connectors.filter(connector => data[connector].status !== 'missing').map(connector =>
       <InstanceRouting key={connector} connector={connector} data={data} refresh={refresh} focusedCard={focusedCard} />)}</>

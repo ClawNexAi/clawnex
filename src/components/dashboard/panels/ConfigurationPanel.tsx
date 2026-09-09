@@ -3995,6 +3995,10 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   const showAutoDetectedHermes = !!hermesStatus?.available && !autoHermesSaved;
   const hermesConnectorCount = hermesInstances.length + (showAutoDetectedHermes ? 1 : 0);
   const openCodeConnectors = codingAgentConnectors.filter(connector => connector.type === 'opencode');
+  const codingAgentConnectorToken = codingAgentConnectors
+    .map(connector => `${connector.id}:${connector.status}:${connector.available}`)
+    .sort()
+    .join('|');
   const renderHermesChecks = (diag: HermesDiagnostics | null | undefined) => {
     if (!diag) return null;
     const checks = [
@@ -5078,7 +5082,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
       <CategorySection title="FLEET & ROUTING" accent={C.cyan} storageKey="fleetRouting" focusCard={focusCard}
         focusKeys={["openclawRouting", "hermesRouting", "opencodeRouting"]}>
         {fleetConnectorsCard}
-        <RoutingWorkflowPanel focusedCard={focusCard} connectors={['opencode']} />
+        <RoutingWorkflowPanel focusedCard={focusCard} connectors={['opencode']} refreshToken={codingAgentConnectorToken} />
         <OpenClawRoutingGuide focusedCard={focusCard} />
         <McpServerCard />
       </CategorySection>

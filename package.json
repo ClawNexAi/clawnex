@@ -38,6 +38,7 @@
     "verify:provider-onboarding": "tsx scripts/verify-provider-onboarding-contract.ts",
     "verify:routing-reconciliation": "tsx scripts/verify-routing-reconciliation.ts",
     "verify:coding-agent-connectors": "tsx scripts/verify-coding-agent-connectors.ts",
+    "verify:coding-agent-routing-visibility": "tsx scripts/verify-coding-agent-routing-visibility.ts",
     "verify:opencode-routing": "tsx scripts/verify-opencode-routing.ts",
     "verify:hermes-routing-credentials": "tsx scripts/verify-hermes-routing-credentials.ts",
     "verify:security-remediation": "tsx scripts/verify-github-security-remediation.ts",
