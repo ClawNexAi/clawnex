@@ -33,7 +33,14 @@ async function main() {
     assert.equal(YAML.parse(fs.readFileSync(file, 'utf8')).model.default, 'openrouter/deepseek/deepseek-v4-flash-0731',
       'Hermes sends the exact model alias exposed by LiteLLM');
     assert.equal(fs.readFileSync(secondFile, 'utf8'), secondBefore, 'Applying one instance cannot write another with the same provider/model');
+    const discovered = YAML.parse(fs.readFileSync(file, 'utf8'));
+    const bridge = discovered.custom_providers.find((provider: { name: string }) => provider.name === 'clawnex-litellm');
+    bridge.models = { 'openrouter/deepseek/deepseek-v4-flash-0731': {} };
+    bridge.models_discovered = true;
+    fs.writeFileSync(file, YAML.stringify(discovered));
     assert.equal(routing.revertHermesRouting({ sourceId: firstSource }).ok, true);
+    assert.deepEqual(YAML.parse(fs.readFileSync(file, 'utf8')), original,
+      'Hermes-discovered bridge catalog metadata does not block owned restoration');
     assert.equal(fs.readFileSync(secondFile, 'utf8'), secondBefore);
     const wire = () => {
       routing.syncConnectorRoutingInventory();

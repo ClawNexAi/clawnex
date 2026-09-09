@@ -1236,14 +1236,20 @@ function removeHermesProxyProvider(doc: YAML.Document.Parsed): boolean {
   if (index < 0) return false;
   const bridge = seq.items[index];
   const expected = { name: HERMES_LITELLM_PROVIDER_NAME, base_url: litellmTarget(), key_env: HERMES_LITELLM_KEY_ENV, api_mode: 'chat_completions' };
-  const actual = YAML.isMap(bridge) ? bridge.toJSON() : null;
+  const actual = YAML.isMap(bridge) ? bridge.toJSON() as Record<string, unknown> : null;
+  // Hermes persists its live /models result back onto custom providers. This
+  // cache is Hermes-owned only when it carries the explicit discovery marker;
+  // hand-curated model metadata must continue to block bridge removal.
+  const managedShape = actual?.models_discovered === true
+    ? Object.fromEntries(Object.entries(actual).filter(([key]) => key !== 'models' && key !== 'models_discovered'))
+    : actual;
   const referencesBridge = (value: unknown): boolean => typeof value === 'string' ? value === HERMES_LITELLM_PROVIDER_NAME || value.startsWith(`${HERMES_LITELLM_PROVIDER_NAME}/`)
     : Array.isArray(value) ? value.some(referencesBridge)
     : Boolean(value && typeof value === 'object' && Object.values(value).some(referencesBridge));
   const documentValue = doc.toJSON() as Record<string, unknown>;
   const { custom_providers: ignored, ...otherConfiguration } = documentValue;
   void ignored;
-  if (stableHash(actual) !== stableHash(expected) || referencesBridge(otherConfiguration)) {
+  if (stableHash(managedShape) !== stableHash(expected) || referencesBridge(otherConfiguration)) {
     throw new Error('The Hermes proxy bridge was edited or remains referenced. Configuration and recovery ownership were preserved for review.');
   }
   seq.items.splice(index, 1);
