@@ -35,10 +35,33 @@ export interface HermesRestartResult {
   targets: string[];
 }
 
-interface LaunchdHermesTarget {
+export interface LaunchdHermesTarget {
   label: string;
   plistPath?: string;
   loaded: boolean;
+  running: boolean;
+}
+
+export function buildLaunchdRestartActions(target: LaunchdHermesTarget, uid: number): string[][] {
+  const serviceTarget = `gui/${uid}/${target.label}`;
+  if (!target.plistPath) return [["kickstart", "-k", serviceTarget]];
+  if (!path.isAbsolute(target.plistPath)) {
+    throw new Error(`Hermes launchd plist path must be absolute for ${target.label}.`);
+  }
+  return [
+    ["bootout", `gui/${uid}`, target.plistPath],
+    ["bootstrap", `gui/${uid}`, target.plistPath],
+    ["kickstart", "-k", serviceTarget],
+  ];
+}
+
+export function selectLaunchdRestartTargets(targets: LaunchdHermesTarget[]): LaunchdHermesTarget[] {
+  const running = targets.filter((target) => target.running);
+  if (running.length > 0) return running;
+  const defaultTarget = targets.find((target) => target.label === "ai.hermes.gateway");
+  if (defaultTarget) return [defaultTarget];
+  const loadedTarget = targets.find((target) => target.loaded);
+  return loadedTarget ? [loadedTarget] : targets.slice(0, 1);
 }
 
 function redactSensitive(s: string): string {
@@ -78,19 +101,20 @@ function extractPlistLabel(plist: string): string | null {
 }
 
 async function listDarwinHermesLaunchdTargets(): Promise<LaunchdHermesTarget[]> {
-  const loaded = new Set<string>();
+  const loaded = new Map<string, boolean>();
   try {
     const r = await execFileP("launchctl", ["list"]);
     for (const line of r.stdout.split(/\r?\n/)) {
-      const label = line.trim().split(/\s+/).at(-1) || "";
+      const columns = line.trim().split(/\s+/);
+      const label = columns.at(-1) || "";
       if (label === "ai.hermes.gateway" || label.startsWith("ai.hermes.gateway-")) {
-        loaded.add(label);
+        loaded.set(label, columns[0] !== "-");
       }
     }
   } catch { /* launchctl probing is best-effort */ }
 
   const targets = new Map<string, LaunchdHermesTarget>();
-  for (const label of loaded) targets.set(label, { label, loaded: true });
+  for (const [label, running] of loaded) targets.set(label, { label, loaded: true, running });
 
   const agentsDir = path.join(os.homedir(), "Library", "LaunchAgents");
   try {
@@ -100,10 +124,10 @@ async function listDarwinHermesLaunchdTargets(): Promise<LaunchdHermesTarget[]> 
       const plistPath = path.join(agentsDir, file);
       try {
         const label = extractPlistLabel(await fs.readFile(plistPath, "utf8")) ?? file.replace(/\.plist$/, "");
-        targets.set(label, { label, plistPath, loaded: loaded.has(label) });
+        targets.set(label, { label, plistPath, loaded: loaded.has(label), running: loaded.get(label) ?? false });
       } catch {
         const label = file.replace(/\.plist$/, "");
-        targets.set(label, { label, plistPath, loaded: loaded.has(label) });
+        targets.set(label, { label, plistPath, loaded: loaded.has(label), running: loaded.get(label) ?? false });
       }
     }
   } catch { /* LaunchAgents can be absent on headless/nonstandard hosts */ }
@@ -115,12 +139,12 @@ export async function detectHermesSupervisor(): Promise<HermesSupervisorInfo> {
   const platform = os.platform();
 
   if (platform === "darwin") {
-    const launchdTargets = await listDarwinHermesLaunchdTargets();
+    const launchdTargets = selectLaunchdRestartTargets(await listDarwinHermesLaunchdTargets());
     if (launchdTargets.length > 0) {
       const uid = process.getuid?.() ?? 0;
       const manualCommand = launchdTargets
         .map((target) => target.plistPath
-          ? `launchctl bootout gui/${uid}/${target.label} 2>/dev/null || true; launchctl bootstrap gui/${uid} ${JSON.stringify(target.plistPath)}; launchctl kickstart -k gui/${uid}/${target.label}`
+          ? `launchctl bootout gui/${uid} ${JSON.stringify(target.plistPath)} 2>/dev/null || true; launchctl bootstrap gui/${uid} ${JSON.stringify(target.plistPath)}; launchctl kickstart -k gui/${uid}/${target.label}`
           : `launchctl kickstart -k gui/${uid}/${target.label}`)
         .join(" && ");
       return {
@@ -188,17 +212,22 @@ export async function restartHermesGateway(): Promise<HermesRestartResult> {
       const uid = process.getuid?.() ?? 0;
       const launchdTargets = await listDarwinHermesLaunchdTargets();
       const targetMap = new Map(launchdTargets.map((target) => [target.label, target]));
-      for (const target of supervisor.targets) {
+      const targetActions = supervisor.targets.map((target) => {
         const targetInfo = targetMap.get(target);
-        if (targetInfo?.plistPath) {
+        if (!targetInfo) throw new Error(`Hermes launchd target disappeared before restart: ${target}.`);
+        return { target, actions: buildLaunchdRestartActions(targetInfo, uid) };
+      });
+      for (const { target, actions } of targetActions) {
+        for (const args of actions) {
           try {
-            await execFileP("launchctl", ["bootout", `gui/${uid}/${target}`]);
-          } catch { /* not loaded is fine; bootstrap below handles it */ }
-          await execFileP("launchctl", ["bootstrap", `gui/${uid}`, targetInfo.plistPath]);
+            const r = await execFileP("launchctl", args);
+            const out = `${r.stdout}${r.stderr}`.trim();
+            if (out) outputs.push(`${target}: ${out}`);
+          } catch (err) {
+            if (args[0] === "bootout") continue; // An unloaded job is expected; bootstrap is authoritative.
+            throw err;
+          }
         }
-        const r = await execFileP("launchctl", ["kickstart", "-k", `gui/${uid}/${target}`]);
-        const out = `${r.stdout}${r.stderr}`.trim();
-        if (out) outputs.push(`${target}: ${out}`);
       }
       return {
         ok: true,
