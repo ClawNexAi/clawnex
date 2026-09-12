@@ -34,6 +34,10 @@
 - Recovery is conservative: if an operator edits managed configuration after ClawNex writes it, ClawNex preserves the edit and reports the conflict.
 - Peer routing actions remain in one command row and expose restart requirements consistently.
 
+**Fixed:**
+
+- Standalone builds now pin Next.js output tracing to the ClawNex checkout. This keeps `.next/standalone/server.js` at the service entrypoint even when another lockfile exists above the checkout, and prevents unrelated parent-directory files from entering the deploy artifact.
+
 **Known Limits:**
 
 - OpenCode routing reads the global configuration resolved from `OPENCODE_CONFIG`, `~/.config/opencode/opencode.json`, or `~/.config/opencode/opencode.jsonc`. Project-local configurations are not managed.

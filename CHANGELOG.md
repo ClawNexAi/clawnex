@@ -56,6 +56,7 @@ Section ordering per release: **Added, Changed, Deprecated, Removed, Fixed, Secu
 - Blocked inbound proxy requests now preserve verified connector, source, instance, and client attribution in routing evidence.
 - OpenCode discovery accepts JSONC configuration, respects macOS config locations, and rejects unsupported project-specific or ambiguous provider routes.
 - Provider aliases and replacement models must resolve exactly, preventing a routed client from selecting a similarly named but incorrect LiteLLM model.
+- Production builds pin Next.js output tracing to the ClawNex checkout, keeping `server.js` at the launchd/systemd entrypoint and preventing unrelated files above the checkout from entering the standalone bundle.
 
 ### Security
 
