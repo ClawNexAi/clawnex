@@ -95,18 +95,34 @@ def _remember_routing_identity(auth, data):
     _ROUTING_IDENTITIES[handle] = (now, connector, source_id, data.get("model"), trusted.get('identity_hash'))
 
 
-def _completed_routing_identity(kwargs, response_obj):
+def _consume_routing_identity(kwargs):
     metadata = kwargs.get("metadata") or (kwargs.get("litellm_params") or {}).get("metadata") or {}
     handle = metadata.get("clawnex_evidence_handle") if isinstance(metadata, dict) else None
     entry = _ROUTING_IDENTITIES.pop(handle, None) if isinstance(handle, str) else None
+    if not entry or time.monotonic() - entry[0] > 600:
+        return None
+    return entry
+
+
+def _completed_routing_identity(kwargs, response_obj):
+    entry = _consume_routing_identity(kwargs)
     request_id = getattr(response_obj, "id", None)
     choices = getattr(response_obj, "choices", None) or []
     completed = any(getattr(getattr(choice, "message", None), "content", None) or
                     getattr(getattr(choice, "message", None), "tool_calls", None) for choice in choices)
-    if not entry or not completed or time.monotonic() - entry[0] > 600 or not isinstance(request_id, str) or not request_id:
+    if not entry or not completed or not isinstance(request_id, str) or not request_id:
         return {}
     return {"routing_connector": entry[1], "routing_source_id": entry[2], "proxy_request_id": request_id,
             "model": entry[3], **({'routing_identity_hash': entry[4]} if entry[4] else {})}
+
+
+def _blocked_routing_identity(kwargs):
+    entry = _consume_routing_identity(kwargs)
+    if not entry:
+        return {}
+    return {"routing_connector": entry[1], "routing_source_id": entry[2],
+            "proxy_request_id": f"blocked-{os.urandom(16).hex()}", "model": entry[3],
+            **({'routing_identity_hash': entry[4]} if entry[4] else {})}
 
 
 def _fail_closed() -> bool:
@@ -429,6 +445,7 @@ class ClawNexLogger(CustomLogger):
                     "block_reason": f"Shield BLOCK (score {score}): {det_names}",
                     "status_code": 403,
                     "source": _source_for(model, data),
+                    **_blocked_routing_identity(data),
                 })
 
                 print(f"[ClawNex Logger] BLOCKED: {model} score={score} — {det_names}")
