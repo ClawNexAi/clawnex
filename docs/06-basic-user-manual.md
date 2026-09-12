@@ -3,8 +3,8 @@
 **Document ID:** CLAWNEX-USR-001
 **Version:** 1.10
 **Classification:** For Distribution
-**Last Updated:** 2026-05-08
-**Product Version:** v0.15.5-alpha
+**Last Updated:** 2026-09-12
+**Product Version:** v0.15.10-alpha development line
 **Status:** Living Document
 
 ---
@@ -74,7 +74,7 @@ On a fresh install, **Fleet Command** opens directly into the **Welcome Wizard**
 | 3. Enable Host Security | Click **Verify Now** — verifies the bundled scanner is available. Or click **Open Updates panel** for the manual path. | — (or Configuration → Updates) |
 | 4. Sync CVE database | Click **Sync Now** — pulls the feed in place | — |
 | 5. Sync Model Pricing | Click **Sync Now** — pulls the LiteLLM price snapshot in place | — |
-| 6. Configure OpenClaw routing | Click **Choose Routing** — opens Configuration → OpenClaw Routing so you can select exactly which OpenClaw providers/models route through ClawNex. Hermes routing is managed separately from Configuration → Hermes Routing. The legacy all-provider OpenClaw wire remains available as an explicit secondary action. | — (or Configuration → OpenClaw Routing) |
+| 6. Configure agent routing | Click **Choose Routing** — opens Configuration → Fleet & Routing so you can select an OpenClaw, Hermes, or global OpenCode instance, review its provider/model changes, and apply them explicitly. The legacy all-provider OpenClaw wire remains available as a secondary compatibility action. | — (or Configuration → Fleet & Routing) |
 | 7. Run first shield test | Click **Open Shield Tests** | Prompt Shield |
 
 Every "Open Configuration" button deep-links into the specific card you need — that card auto-expands and scrolls into view so you don't have to hunt for it.
@@ -374,7 +374,7 @@ This tab shows the health of all ClawNex services at a glance.
 
 This is where you manage platform settings. Every setting lives in a collapsible card. Cards can be deep-linked from elsewhere in the dashboard (e.g. the Welcome Wizard) — when you arrive via a deep link, the target card auto-expands and scrolls into view.
 
-**Sticky collapse (added 2026-05-01).** Inside the larger cards (Fleet Connectors, Updates, OpenClaw Routing) every subsection remembers whether you left it open or collapsed. The state is persisted in `localStorage` so subsections stay the way you set them across reloads. Operators who only ever look at one connector no longer have to re-scroll past the others on every page load.
+**Sticky collapse (added 2026-05-01).** Inside the larger cards (Fleet Connectors, Updates, and connector routing) every subsection remembers whether you left it open or collapsed. The state is persisted in `localStorage` so subsections stay the way you set them across reloads. Operators who only ever look at one connector no longer have to re-scroll past the others on every page load.
 
 **UI Preferences:**
 - **Display Name** — Override the client name shown on Fleet Command and Instance Detail. Leave blank to use the machine's hostname (`os.hostname()`).
@@ -424,6 +424,14 @@ The five **actions** in plain English: **Score** (default) feeds the threat scor
 - **Restart Gateway** restarts the detected Hermes gateway supervisor so Hermes reloads `config.yaml`. On unsupported hosts, the card shows the manual restart command instead.
 - Hermes OAuth/session-bound and watcher-only rows remain read-only retrospective inventory because ClawNex cannot safely rewrite those client-owned paths.
 - If `openclaw.json` truly can't be read, an amber warning explains it.
+
+**OpenCode Routing (v0.15.10-alpha development line):**
+- Add the single global connector in Configuration → Fleet Connectors. ClawNex checks `OPENCODE_CONFIG` first, then `~/.config/opencode/opencode.json`, then `~/.config/opencode/opencode.jsonc`.
+- Project-local OpenCode configuration is not managed. The connector represents `opencode:global` only.
+- In Fleet & Routing, select writable provider/model rows, choose **Review connection changes**, inspect the exact file changes, and approve the plan. ClawNex only routes explicit OpenAI-compatible providers with a unique loaded LiteLLM model alias.
+- Apply writes the local LiteLLM endpoint, the `{env:LITELLM_MASTER_KEY}` credential reference, exact LiteLLM model aliases, and a signed routing-identity header. The recovery sidecar stores no plaintext provider credential.
+- Restart OpenCode after apply or restore, start a new request, then run **Verify**. A routed Traffic Monitor row should show connector `opencode`, source `opencode:global`, and verified routing identity.
+- Before removing the OpenCode connector, review and execute **Restore direct connection**. ClawNex blocks connector removal while it still owns routed OpenCode configuration.
 
 **Shield Settings:**
 - **Shield Block Mode** — Toggle between OBSERVE and BLOCK.

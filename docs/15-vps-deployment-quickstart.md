@@ -3,8 +3,8 @@
 **Document ID:** CLAWNEX-VPS-001
 **Version:** 1.9
 **Classification:** For Distribution
-**Last Updated:** 2026-05-14
-**Product Version:** v0.15.5-alpha
+**Last Updated:** 2026-09-12
+**Product Version:** v0.15.10-alpha development line
 **Status:** Living Document
 
 ---

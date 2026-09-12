@@ -1,12 +1,44 @@
 # ClawNex Release Notes & Changelog
 
 **Document ID:** CLAWNEX-REL-001
-**Version:** 1.21
+**Version:** 1.22
 **Classification:** For Distribution
-**Last Updated:** 2026-07-02
+**Last Updated:** 2026-09-12
 **Status:** Living Document
 
 **See also:** `20-product-roadmap.md`, `21-project-history.md`, `14-data-dictionary.md`, `11-security-architecture.md`, `12-deployment-guide.md`.
+
+---
+
+## Development Version: v0.15.10-alpha — Connector fleet and routing hardening
+
+**Release Date:** Not yet released
+**Version:** v0.15.10-alpha
+**Type:** Alpha development line
+**Status:** Available on the `dev` branch; `main` and the latest published release remain v0.15.9-alpha.
+**Scope:** Adds a global OpenCode connector and unifies OpenClaw, Hermes, and OpenCode routing around explicit review, apply, restore, drift reconciliation, and verification evidence.
+**Upgrade Path:** From v0.15.9-alpha, check out `dev`, run `npm ci`, run `npm run build`, and restart the ClawNex dashboard and LiteLLM services. Existing routing must be reviewed in Configuration after the upgrade; ClawNex does not silently rewrite agent configuration.
+**Breaking Changes:** None. OpenCode support is global-configuration-only; project-local OpenCode configuration is outside this release scope.
+**Security Fixes:** Routed requests use a signed identity header. Verified identity is retained on blocked requests, unverified caller attribution is ignored, and routing recovery sidecars contain no plaintext provider credentials.
+
+**Added:**
+
+- Configuration → Fleet Connectors can register one global OpenCode connector and report whether its JSON or JSONC configuration is available.
+- The shared routing inventory includes provider and model rows for OpenClaw, writable Hermes custom providers, and supported OpenCode providers.
+- Operators review a fingerprinted change plan before apply or restore, restart the affected coding agent when prompted, and verify the resulting traffic evidence from the same workflow.
+- OpenCode readiness testing requires an exact loaded LiteLLM model alias before routing can be applied.
+
+**Changed:**
+
+- OpenClaw, Hermes, and OpenCode use the same instance-specific routing workflow instead of connector-specific write buttons.
+- Recovery is conservative: if an operator edits managed configuration after ClawNex writes it, ClawNex preserves the edit and reports the conflict.
+- Peer routing actions remain in one command row and expose restart requirements consistently.
+
+**Known Limits:**
+
+- OpenCode routing reads the global configuration resolved from `OPENCODE_CONFIG`, `~/.config/opencode/opencode.json`, or `~/.config/opencode/opencode.jsonc`. Project-local configurations are not managed.
+- OAuth/session-bound Hermes routes and other client-owned authentication paths remain read-only when ClawNex cannot safely rewrite them.
+- A version change is not live until the dashboard is rebuilt and its service restarted; verify `/api/health` and the dashboard header after deployment.
 
 ---
 
@@ -41,7 +73,7 @@ Each release entry below is structured against a fixed metadata contract so that
 
 ---
 
-## Current Release: v0.15.5-alpha (2026-07-02) — Hermes custom-provider routing
+## Archived Release Detail: v0.15.5-alpha (2026-07-02) — Hermes custom-provider routing
 
 **Release Date:** 2026-07-02
 **Version:** v0.15.5-alpha

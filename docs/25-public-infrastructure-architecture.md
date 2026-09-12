@@ -1,9 +1,9 @@
 # ClawNex Public Infrastructure Architecture
 
 **Document ID:** CLAWNEX-PUB-INFRA-001
-**Version:** 1.0
+**Version:** 1.1
 **Classification:** Public
-**Product Version:** v0.15.5-alpha
+**Product Version:** v0.15.10-alpha development line
 **Status:** Public Reference
 
 ---
@@ -30,6 +30,7 @@ At runtime, a typical installation includes:
 | Service Manager | Keeps ClawNex services running on the target host |
 | Reverse Proxy | Provides HTTPS and public-domain routing for VPS deployments |
 | OpenClaw Gateway | Optional agent gateway integration used to observe agent sessions and routing state |
+| Coding-Agent Connectors | Optional same-host OpenClaw, Hermes, and global OpenCode integrations used for inventory, routing state, and supported provider routing |
 
 ---
 
@@ -129,6 +130,7 @@ The public infrastructure expectation is:
 - Credentials are never printed in logs or public documentation.
 - Provider changes are auditable.
 - Local model endpoints are operator-managed and not assumed for VPS installs.
+- Supported coding-agent routing is reviewed and applied per connector instance; recovery metadata excludes plaintext provider credentials and preserves later operator edits.
 
 ---
 
@@ -173,4 +175,3 @@ This public document does not include:
 - Full database schema definitions.
 - Internal implementation notes.
 - Security-sensitive rule internals.
-

@@ -3,7 +3,7 @@
 **Document ID:** CLAWNEX-GOV-001
 **Version:** 1.5
 **Date:** 2026-06-30
-**Product Version:** v0.15.5-alpha
+**Product Version:** v0.15.10-alpha development line
 **Owner & Maintainer:** Project owner
 **Audience:** Leadership, VC, prospective enterprise pilots, security questionnaires
 

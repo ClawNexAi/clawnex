@@ -3,8 +3,8 @@
 **Document ID:** CLAWNEX-OPS-001
 **Version:** 1.3
 **Classification:** Confidential — IT Staff Only
-**Last Updated:** 2026-05-08
-**Product Version:** v0.15.5-alpha
+**Last Updated:** 2026-09-12
+**Product Version:** v0.15.10-alpha development line
 **Status:** Living Document
 
 ---
@@ -487,6 +487,19 @@ grep OPENCLAW_SESSIONS_PATH ~/sentinel/.env.local
 - No session files yet (agents haven't run)
 - File permissions (ClawNex user can't read OpenClaw files)
 - Session watcher disabled (`SESSION_WATCHER_ENABLED=false`)
+
+### 7.7A OpenCode Route Applied but Traffic Is Still Direct
+
+**Symptom:** The global OpenCode connector is connected and its plan was applied, but new Traffic Monitor rows are absent or do not show `opencode:global`.
+
+**Diagnostic steps:**
+
+1. In Configuration → Fleet Connectors, confirm the resolved global config path is the file OpenCode actually uses. Resolution order is `OPENCODE_CONFIG`, `~/.config/opencode/opencode.json`, then `.jsonc`.
+2. In Fleet & Routing, sync inventory and verify the intended provider/model rows show a routed current state.
+3. Restart OpenCode completely, start a new request, and run **Verify** for `opencode:global`.
+4. Confirm Traffic Monitor shows connector `opencode`, source `opencode:global`, and verified routing identity. A shield-blocked row should retain the same attribution.
+
+**Common causes:** OpenCode has not reloaded its global configuration; a project-local file is overriding behavior but is outside ClawNex's managed scope; the reviewed plan became stale after an operator edit; or the provider/model does not resolve to one exact loaded LiteLLM alias. Refresh and review a new plan rather than forcing a stale one.
 
 ### 7.8 High Memory Usage
 

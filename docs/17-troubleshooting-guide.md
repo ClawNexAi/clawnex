@@ -2,8 +2,8 @@
 
 **Document:** 17-troubleshooting-guide
 **Version:** 0.14.5
-**Last Updated:** 2026-05-08
-**Product Version:** v0.15.5-alpha
+**Last Updated:** 2026-09-12
+**Product Version:** v0.15.10-alpha development line
 **Classification:** Operations Reference
 
 ---
@@ -548,7 +548,7 @@ curl http://localhost:1234/v1/models
 
 ## 8. Traffic Not Being Scanned
 
-Requests from OpenClaw agents are not appearing in the Traffic Monitor, and the shield is not scanning prompts.
+Requests from OpenClaw, Hermes, or OpenCode are not appearing in the Traffic Monitor, and the shield is not scanning prompts.
 
 ### Cause: openclaw.json apiBase not pointing to LiteLLM
 
@@ -562,17 +562,20 @@ jq '.models.providers' ~/.openclaw/openclaw.json
 # In ClawNex, open the connector-specific card:
 # - Configuration → OpenClaw Routing for OpenClaw providers/models
 # - Configuration → Hermes Routing for Hermes custom providers/models
-# OpenClaw: tick rows, click Apply OpenClaw Routing, then Restart Gateway if prompted.
-# Hermes: tick writable rows, click Save Hermes Wire, then Restart Gateway.
-# Hermes also has Revert Hermes Wire for restoring ClawNex-managed provider edits.
+# - Configuration → Fleet Connectors, then Fleet & Routing for OpenCode
+# Select one instance, review the connection changes, approve the plan,
+# restart the affected agent when prompted, and then run Verify.
 ```
 
-**Provider-level note:** OpenClaw and Hermes custom providers route through
-provider endpoint values (`baseUrl` / `base_url`). If multiple models share the
-same provider, selecting one model routes that provider and its sibling models.
-Hermes OAuth/session-bound and watcher-only rows remain read-only.
+**Provider-level note:** OpenClaw, Hermes custom providers, and OpenCode route
+through provider endpoint values (`baseUrl`, `base_url`, or `baseURL`). If
+multiple models share the same provider, selecting one model can route that
+provider and its sibling models. Hermes OAuth/session-bound and watcher-only
+rows remain read-only.
 
-**Verification:** After updating, send a test request through OpenClaw and check the Traffic Monitor tab in the dashboard. The request should appear within a few seconds.
+**OpenCode-specific checks:** Confirm the connector resolves the intended global file. Resolution order is `OPENCODE_CONFIG`, `~/.config/opencode/opencode.json`, then `~/.config/opencode/opencode.jsonc`; project-local files are unsupported. Restart OpenCode and start a new request after apply or restore. If the configuration changed after review, refresh the plan instead of retrying the stale approval.
+
+**Verification:** After updating, send a test request through the affected agent and check Traffic Monitor. A routed OpenCode row should show connector `opencode`, source `opencode:global`, and verified routing identity. Blocked requests retain that verified attribution.
 
 ---
 

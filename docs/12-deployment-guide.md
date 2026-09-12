@@ -3,8 +3,8 @@
 **Document ID:** CLAWNEX-DEP-001
 **Version:** 2.4
 **Classification:** Confidential
-**Last Updated:** 2026-05-14
-**Product Version:** v0.15.5-alpha
+**Last Updated:** 2026-09-12
+**Product Version:** v0.15.10-alpha development line
 **Status:** Living Document
 
 ---
@@ -264,6 +264,17 @@ Open Configuration → Hermes Routing and review the Hermes provider inventory:
 - Use **Revert Hermes Wire** to restore ClawNex-managed Hermes provider edits. Operator edits made after the wire are preserved.
 
 Hermes uses provider-level routing for writable `custom_providers` in `~/.hermes/config.yaml`. Hermes OAuth/session-bound and watcher-only rows remain read-only retrospective inventory.
+
+### Step 15: Choose OpenCode Routing Through ClawNex
+
+If this host runs OpenCode:
+
+1. Open Configuration → Fleet Connectors and add the global OpenCode connector.
+2. Open Fleet & Routing, select `opencode:global`, choose the provider/model rows to route, and click **Review connection changes**.
+3. Inspect and approve the plan. ClawNex resolves `OPENCODE_CONFIG`, `~/.config/opencode/opencode.json`, or `~/.config/opencode/opencode.jsonc`; project-local configuration is not changed.
+4. Restart OpenCode, send a new request, then click **Verify** and confirm the Traffic Monitor row identifies `opencode:global` with verified routing identity.
+
+Apply uses `http://127.0.0.1:4001/v1`, `{env:LITELLM_MASTER_KEY}`, and exact loaded LiteLLM aliases. Use **Restore direct connection** before removing the connector. Recovery preserves operator edits and does not store plaintext provider credentials.
 
 ---
 

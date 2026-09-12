@@ -80,7 +80,7 @@ const PANEL_GUIDE: Array<{
   {
     group: "SYSTEM",
     panels: [
-      { id: "configuration", label: "Configuration", oneLiner: "Everything-hub — 24 cards in 6 collapsible categories (AI & Models, Fleet & Routing, Shield & Detection, Access Control, Integrations, System). v0.9 adds Operator Management, Authentication Methods (GitHub OAuth + Magic Link admin toggles), Auth & Devices (per-operator passkey + GitHub + Magic Link status), Mail Configuration (Resend / SMTP / Emailit), API Keys with scoped permissions. Local password remains the break-glass identifier.", doc: "07-advanced-user-manual.md" },
+      { id: "configuration", label: "Configuration", oneLiner: "Everything-hub — settings grouped into 6 collapsible categories (AI & Models, Fleet & Routing, Shield & Detection, Access Control, Integrations, System). Fleet Connectors and the shared routing workflow cover OpenClaw, Hermes, and global OpenCode configuration. Local password remains the break-glass identifier.", doc: "07-advanced-user-manual.md" },
       { id: "help", label: "Help", oneLiner: "This panel. Onboarding tour, keyboard shortcuts, panel reference, tooltip system explainer, and inline documentation viewer.", doc: "06-basic-user-manual.md" },
       { id: "about", label: "Credits & Info", oneLiner: "Build version + channel, credits, attribution, and the About-tab dedications curated by the operator. Read-only.", doc: "06-basic-user-manual.md" },
     ],
@@ -354,6 +354,7 @@ export function HelpPanel({ onNavigate }: { onNavigate: (tab: TabId) => void }) 
             { issue: "Selecting one OpenClaw model routes other models too", fix: "Expected for provider-level enforcement. OpenClaw routes by provider baseUrl; if several models share the same provider, routing one model routes that provider and its sibling models.", doc: "06-basic-user-manual.md" },
             { issue: "OpenClaw Routing wire conflict (OPERATOR-OWNED badge)", fix: "Existing models.providers.litellm entry exists without a ClawNex sidecar. Prefer OpenClaw Selective Routing for new OpenClaw changes. Use Force Wire only when intentionally adopting the legacy litellm slot, or remove the entry manually with jq first.", doc: "17-troubleshooting-guide.md" },
             { issue: "Hermes routing saved but traffic still looks direct", fix: "Click Restart Gateway in Configuration → Hermes Routing so the detected Hermes gateway reloads config.yaml. If unsupported, use the manual command shown in the button tooltip.", doc: "17-troubleshooting-guide.md" },
+            { issue: "OpenCode routing applied but traffic still looks direct", fix: "Restart OpenCode and start a new request. Confirm Fleet Connectors resolved the intended global JSON/JSONC file, then run Verify and check for source opencode:global with verified identity.", doc: "17-troubleshooting-guide.md" },
             { issue: "Restart Gateway button missing / unsupported", fix: "Engine couldn't detect a known supervisor (systemd user unit on Linux, launchd Aqua agent on macOS). Result panel surfaces the manual command to run on the host.", doc: "17-troubleshooting-guide.md" },
             { issue: "Port 5001 already in use", fix: "pkill -9 -f 'next dev'; pkill -9 -f 'next-server'; then restart.", doc: "17-troubleshooting-guide.md" },
           ].map((item, i) => (

@@ -36,6 +36,32 @@ Section ordering per release: **Added, Changed, Deprecated, Removed, Fixed, Secu
 - `scripts/install.sh` (offered the deleted Docker path) and
   `deploy/deploy.sh` (legacy Ubuntu deployer) — superseded by `install.sh`.
 
+## [0.15.10-alpha] - Unreleased
+
+### Added
+
+- A global OpenCode coding-agent connector discovers `~/.config/opencode/opencode.json` or `.jsonc`, with `OPENCODE_CONFIG` available as an explicit override.
+- OpenClaw, Hermes, and OpenCode now share one instance-scoped review, apply, restore, and verify routing workflow with provider/model inventory and drift reconciliation.
+- Routed OpenCode requests carry signed connector identity, allowing Traffic Monitor evidence to attribute both allowed and blocked requests to `opencode:global`.
+- OpenCode provider readiness verifies the exact LiteLLM alias before configuration can be routed.
+
+### Changed
+
+- Routing changes use review fingerprints and conservative recovery sidecars. Agent configuration that changes after review or after ClawNex applies a route is preserved instead of overwritten.
+- The routing interface groups peer actions into one command row and reports restart requirements after apply or restore.
+- OpenCode routing writes the local LiteLLM endpoint, the `LITELLM_MASTER_KEY` environment reference, and exact loaded model aliases only for explicit OpenAI-compatible global providers.
+
+### Fixed
+
+- Blocked inbound proxy requests now preserve verified connector, source, instance, and client attribution in routing evidence.
+- OpenCode discovery accepts JSONC configuration, respects macOS config locations, and rejects unsupported project-specific or ambiguous provider routes.
+- Provider aliases and replacement models must resolve exactly, preventing a routed client from selecting a similarly named but incorrect LiteLLM model.
+
+### Security
+
+- Routing identity is signed and verified before it is trusted for attribution; caller-supplied unverified routing headers are excluded.
+- Recovery sidecars do not store plaintext provider credentials, and connector removal is blocked until ClawNex-managed OpenCode routing is restored.
+
 ## [0.15.9-alpha] - 2026-07-18
 
 ### Added

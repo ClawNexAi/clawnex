@@ -1,9 +1,9 @@
 # ClawNex Public Low-Level Architecture
 
 **Document ID:** CLAWNEX-PUB-LLD-001
-**Version:** 1.0
+**Version:** 1.1
 **Classification:** Public
-**Product Version:** v0.15.5-alpha
+**Product Version:** v0.15.10-alpha development line
 **Status:** Public Reference
 
 ---
@@ -20,6 +20,7 @@ This document gives a public-safe low-level view of ClawNex. It explains the maj
 |---|---|
 | Database Core | Initializes local storage, applies schema, and provides query helpers |
 | Configuration Service | Manages providers, gateways, shield settings, defaults, and operational options |
+| Connector Routing | Discovers supported OpenClaw, Hermes, and global OpenCode provider/model inventory and executes reviewed apply, restore, and verify plans |
 | Authentication and RBAC | Handles operators, sessions, role checks, and protected dashboard access |
 | Shield Scanner | Evaluates content using ClawNex Shield Rules and returns verdicts, scores, and detections |
 | Proxy Integration | Receives traffic metadata from the model proxy and applies shield decisions |
@@ -81,6 +82,11 @@ When model traffic is routed through the proxy integration:
 3. ClawNex evaluates the request and returns a shield decision.
 4. The proxy allows, records, or blocks the request according to policy.
 5. Response and traffic metadata are sent back to ClawNex for visibility.
+
+For managed coding-agent routes, ClawNex fingerprints the reviewed source file,
+applies only supported provider-level changes, records recovery ownership without
+plaintext credentials, and verifies signed connector identity in resulting
+traffic evidence. Later operator edits are preserved during restore.
 
 The proxy should run as an internal service. In VPS mode, it is not intended to be public-facing.
 
@@ -186,4 +192,3 @@ This public LLD omits:
 - Secrets, sample real keys, and private environment values.
 - Non-public deployment notes.
 - Internal roadmap comments.
-

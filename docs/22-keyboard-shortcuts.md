@@ -3,8 +3,8 @@
 **Document:** 22-keyboard-shortcuts
 **Document ID:** CLAWNEX-A11Y-001
 **Version:** 1.5
-**Last Updated:** 2026-05-08
-**Product Version:** v0.15.5-alpha
+**Last Updated:** 2026-09-12
+**Product Version:** v0.15.10-alpha development line
 **Classification:** For Distribution
 **Status:** Living Document
 

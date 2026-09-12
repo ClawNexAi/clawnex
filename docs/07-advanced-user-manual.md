@@ -3,8 +3,8 @@
 **Document ID:** CLAWNEX-USR-002
 **Version:** 2.1
 **Classification:** Confidential
-**Last Updated:** 2026-05-08
-**Product Version:** v0.15.5-alpha
+**Last Updated:** 2026-09-12
+**Product Version:** v0.15.10-alpha development line
 **Status:** Living Document
 
 ---
@@ -134,6 +134,20 @@ When you spot a concerning entry in the Traffic Monitor:
 - Verdict is always "BYPASSED" — no scanning occurred
 - Review this traffic after break-glass ends to check for threats
 - The Session Watcher will retroactively scan these sessions
+
+### 3.2A Connector Attribution and Verification
+
+OpenClaw, writable Hermes custom providers, and the global OpenCode connector can route supported model traffic through LiteLLM. ClawNex records the connector and source only when the request carries routing identity that ClawNex can verify; unverified caller-supplied attribution is ignored.
+
+Use the shared workflow in Configuration → Fleet & Routing:
+
+1. Sync inventory and select one connector instance. OpenCode uses the single `opencode:global` source.
+2. Select provider/model rows and set their desired route.
+3. Choose **Review connection changes** and inspect the fingerprinted plan.
+4. Approve the plan, restart the affected agent when prompted, and send a new request.
+5. Choose **Verify** and confirm Traffic Monitor shows the expected connector, source, route, and verified identity.
+
+For OpenCode, global configuration resolution is `OPENCODE_CONFIG`, `~/.config/opencode/opencode.json`, then `~/.config/opencode/opencode.jsonc`. Project-local OpenCode files are intentionally outside the managed scope. Apply replaces supported provider endpoints with the local LiteLLM URL, uses `{env:LITELLM_MASTER_KEY}`, and writes exact LiteLLM aliases. Restore is ownership-aware: if a human changes a managed value after apply, ClawNex preserves it and reports a conflict instead of overwriting it.
 
 ### 3.3 Traffic Filtering Strategy
 

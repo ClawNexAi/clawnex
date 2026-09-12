@@ -1,9 +1,9 @@
 # ClawNex Public High-Level Architecture
 
 **Document ID:** CLAWNEX-PUB-HLD-001
-**Version:** 1.0
+**Version:** 1.1
 **Classification:** Public
-**Product Version:** v0.15.5-alpha
+**Product Version:** v0.15.10-alpha development line
 **Status:** Public Reference
 
 ---
@@ -48,7 +48,7 @@ ClawNex Dashboard and API
       |        v
       |   Model Providers
       |
-      +--> OpenClaw / Agent Gateway
+      +--> OpenClaw / Hermes / OpenCode Connectors
       |
       +--> Security, Audit, and Governance Services
 ```
@@ -70,7 +70,7 @@ The dashboard is the operator-facing control plane. The proxy is the model-routi
 | Trust Audit | Reviews who can reach agents, what they can do, and what happens if trust is wrong |
 | Security Posture | Tracks hardening checks, CVE context, remediation suggestions, and posture score |
 | Audit and Evidence | Records operator and system activity for review and reporting |
-| Configuration | Manages model providers, routing, shield settings, access control, and operational defaults |
+| Configuration | Manages model providers, reviewed OpenClaw/Hermes/OpenCode routing, shield settings, access control, and operational defaults |
 
 ---
 
@@ -85,7 +85,7 @@ The dashboard is the operator-facing control plane. The proxy is the model-routi
 
 ### 5.2 Model Traffic Flow
 
-1. An agent or client sends a model request to the configured model endpoint.
+1. OpenClaw, a writable Hermes custom provider, global OpenCode configuration, or another supported client sends a model request to the configured model endpoint.
 2. The request flows through the LiteLLM proxy integration when routing is enabled.
 3. ClawNex evaluates the request according to shield settings.
 4. Depending on policy, the request is allowed, reviewed, or blocked.
@@ -163,4 +163,3 @@ The expected production pattern is:
 ## 10. Public Scope
 
 This document does not disclose internal source inventories, private paths, private environments, or implementation-only controls. For installation and operations, use the deployment and troubleshooting guides in this documentation set.
-

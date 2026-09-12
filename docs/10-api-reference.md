@@ -3,7 +3,7 @@
 **Document ID:** CLAWNEX-API-001  
 **Version:** 2.0  
 **Classification:** Confidential  
-**Last Updated:** 2026-05-14  
+**Last Updated:** 2026-09-12  
 **Status:** Living Document  
 
 ---
@@ -1641,11 +1641,11 @@ Dashboard chat endpoint used by the in-app assistant. Same message-shape contrac
 
 ---
 
-## 14A. Connector Routing Inventory Endpoints (v0.15.3+)
+## 14A. Coding-Agent Connector and Routing Endpoints (v0.15.3+)
 
 These endpoints discover connector provider/model inventory, persist operator
-route intent, detect added/removed routes, and apply selected OpenClaw or
-Hermes custom-provider routing.
+route intent, detect added/removed routes, and manage selected OpenClaw,
+Hermes custom-provider, or global OpenCode routing.
 
 OpenClaw routing is enforceable at provider endpoint level. This means OpenClaw
 routes by provider `baseUrl`, not by independent per-model switches. Selecting a
@@ -1658,6 +1658,37 @@ Hermes routing uses the same provider-level model for writable
 the selected custom provider's `base_url` to the local LiteLLM proxy and sets
 `key_env: LITELLM_MASTER_KEY`. OAuth/session-bound and watcher-only Hermes rows
 remain read-only retrospective inventory.
+
+OpenCode routing is limited to the global configuration resolved from
+`OPENCODE_CONFIG`, `~/.config/opencode/opencode.json`, or
+`~/.config/opencode/opencode.jsonc`. Supported providers must be explicit
+OpenAI-compatible entries with unique loaded LiteLLM aliases. Project-local
+OpenCode configuration is not managed.
+
+### GET /api/config/coding-agent-connectors
+
+Return registered coding-agent connectors. The v0.15.10-alpha development line
+supports one connector of type `opencode`; its response includes `configPath`,
+`available`, `status`, and any discovery `error`. Requires `config:read` when
+RBAC is enabled.
+
+### POST /api/config/coding-agent-connectors
+
+Register the global OpenCode connector. Requires `config:write` when RBAC is
+enabled.
+
+```json
+{ "type": "opencode", "name": "OpenCode Local" }
+```
+
+Returns `201` with the connector, `409` if the global connector already exists,
+or `400` for an unsupported type or missing name.
+
+### DELETE /api/config/coding-agent-connectors?id={connectorId}
+
+Remove a registered coding-agent connector. OpenCode removal returns `409`
+until ClawNex-managed routing has been restored, or when routing ownership
+cannot be read safely. Requires `config:write` when RBAC is enabled.
 
 ### GET /api/connector-routing
 
@@ -1699,6 +1730,23 @@ Sync and return connector routing inventory.
         "present": true
       }
     ]
+  },
+  "opencode": {
+    "status": "ok",
+    "sourceId": "opencode:global",
+    "selected": 1,
+    "items": [
+      {
+        "connector": "opencode",
+        "itemType": "model",
+        "providerId": "fleet",
+        "modelId": "fleet/openrouter/openai/gpt-5.4",
+        "capability": "model-inventory",
+        "currentRoute": "direct",
+        "desiredRoute": "routed",
+        "present": true
+      }
+    ]
   }
 }
 ```
@@ -1711,15 +1759,23 @@ Sync and return connector routing inventory.
 { "action": "sync" }
 { "action": "select", "connector": "openclaw", "itemIds": ["cri_..."], "desiredRoute": "routed" }
 { "action": "select", "connector": "hermes", "itemIds": ["cri_..."], "desiredRoute": "routed" }
+{ "action": "select", "connector": "opencode", "itemIds": ["cri_..."], "desiredRoute": "routed" }
 { "action": "select-all", "connector": "openclaw", "desiredRoute": "direct" }
-{ "action": "apply-openclaw" }
-{ "action": "apply-hermes" }
-{ "action": "revert-hermes" }
+{ "action": "prepare", "connector": "opencode", "sourceId": "opencode:global", "operation": "apply" }
+{ "action": "execute-plan", "planId": "routing-plan-id", "approved": true }
+{ "action": "verify", "connector": "opencode", "sourceId": "opencode:global" }
+{ "action": "mark-intentionally-direct", "connector": "opencode", "eventIds": ["event-id"], "reason": "Approved direct route" }
 ```
 
 Hermes rejects `"desiredRoute": "routed"` for watcher-only, OAuth/session-bound,
 or otherwise unsupported rows. Only config-backed custom providers with
 HTTP-compatible endpoints are writable.
+
+`prepare` accepts `operation: "apply"` or `"restore"` and returns a
+fingerprinted instance-specific plan. `execute-plan` requires explicit approval
+and returns `409` if the plan is stale or cannot be safely executed. The former
+`apply-openclaw`, `apply-hermes`, and `revert-hermes` actions return `409`; use
+the review-plan workflow for all three connector types.
 
 ### GET /api/hermes/gateway/restart
 

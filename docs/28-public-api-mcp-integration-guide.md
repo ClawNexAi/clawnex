@@ -3,7 +3,7 @@
 **Document ID:** CLAWNEX-PUB-INT-001
 **Version:** 1.0
 **Classification:** Public
-**Product Version:** v0.15.5-alpha
+**Product Version:** v0.15.10-alpha development line
 **Status:** Public Reference
 
 ---
@@ -247,4 +247,3 @@ This public guide omits:
 - Full schema definitions.
 - Sensitive rule internals.
 - Non-public operational procedures.
-

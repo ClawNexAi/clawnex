@@ -4,8 +4,8 @@
 **Document ID:** CLAWNEX-INT-001
 **Version:** 1.7
 **Classification:** For Distribution -- ClawNex maintainers
-**Last Updated:** 2026-05-14
-**Product Version:** v0.15.5-alpha
+**Last Updated:** 2026-09-12
+**Product Version:** v0.15.10-alpha development line
 
 ---
 
