@@ -15,6 +15,10 @@ pass() { echo "  ✓ $1"; }
 fail() { echo "  ✗ $1"; FAIL=1; }
 assert_grep()  { grep -qE -e "$2" "$1" 2>/dev/null && pass "$1: $3" || fail "$1: $3"; }
 assert_nogrep(){ grep -qE -e "$2" "$1" 2>/dev/null && fail "$1: $3" || pass "$1: $3"; }
+assert_section_grep() {
+    sed -n "/$2/,/$3/p" "$1" | grep -qE -e "$4" 2>/dev/null \
+        && pass "$1: $5" || fail "$1: $5"
+}
 
 echo "[1] setup.sh engine switches"
 assert_grep setup.sh '\-\-preseeded\)' "parses --preseeded"
@@ -129,6 +133,9 @@ assert_grep deploy/lib-macos.sh 'io\.clawnex\.litellm'   "litellm launchd label"
 assert_grep deploy/lib-macos.sh 'KeepAlive'              "KeepAlive set"
 assert_grep deploy/lib-macos.sh 'DASHBOARD_BIND="127\.0\.0\.1"' "macOS dashboard always binds loopback"
 assert_grep deploy/lib-macos.sh '\[ -f \./\.env \] && \. \./\.env' "macOS dashboard launcher loads shared LiteLLM management settings"
+assert_grep deploy/lib-macos.sh 'LITELLM_LAUNCHER=' "macOS LiteLLM uses an environment-loading launcher"
+assert_grep deploy/lib-macos.sh 'exec "\$LITELLM_BIN" --config' "macOS LiteLLM launcher execs the discovered binary"
+assert_section_grep deploy/lib-macos.sh 'LITELLM_LAUNCHER=' 'chmod +x "\$LITELLM_LAUNCHER"' '\[ -f \./\.env\.local \] && \. \./\.env\.local' "macOS LiteLLM launcher loads the runtime file containing the shared ingest secret"
 assert_grep deploy/lib-macos.sh 'CLAWNEX_INSTALL_DIR="\$INSTALL_DIR"' "macOS dashboard launcher pins the authoritative install directory"
 assert_grep deploy/lib-macos.sh 'CLAWNEX_LITELLM_CONFIG="\$INSTALL_DIR/litellm/config.yaml"' "macOS dashboard launcher pins the launchd LiteLLM config"
 assert_grep deploy/lib-macos.sh 'CLAWNEX_LOG_DIR="\$INSTALL_DIR/logs"' "macOS dashboard writes structured logs outside standalone artifact"

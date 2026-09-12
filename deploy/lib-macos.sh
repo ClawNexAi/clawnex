@@ -127,16 +127,26 @@ if [ -z "$LITELLM_BIN" ]; then
     done
 fi
 if [ -n "$LITELLM_BIN" ] && [ -f "$INSTALL_DIR/litellm/config.yaml" ]; then
+LITELLM_LAUNCHER="$INSTALL_DIR/deploy/.clawnex-litellm-run.sh"
+cat > "$LITELLM_LAUNCHER" <<LAUNCH
+#!/bin/bash
+cd "$INSTALL_DIR" || exit 1
+set -a
+[ -f ./.env ] && . ./.env
+[ -f ./.env.local ] && . ./.env.local
+set +a
+exec "$LITELLM_BIN" --config "$INSTALL_DIR/litellm/config.yaml" --host 127.0.0.1 --port "$LITELLM_PORT"
+LAUNCH
+chmod +x "$LITELLM_LAUNCHER"
+
 cat > "$AGENTS_DIR/io.clawnex.litellm.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>io.clawnex.litellm</string>
   <key>ProgramArguments</key><array>
-    <string>${LITELLM_BIN}</string>
-    <string>--config</string><string>${INSTALL_DIR}/litellm/config.yaml</string>
-    <string>--host</string><string>127.0.0.1</string>
-    <string>--port</string><string>${LITELLM_PORT}</string>
+    <string>/bin/bash</string>
+    <string>${LITELLM_LAUNCHER}</string>
   </array>
   <key>WorkingDirectory</key><string>${INSTALL_DIR}</string>
   <key>RunAtLoad</key><true/>
