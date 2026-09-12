@@ -4488,7 +4488,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
             </div>
             <div>
               <div style={{ fontSize: 11, color: C.txT, marginBottom: 3 }}>TYPE</div>
-              <Tooltip placement="top" variant="detail" content={<span>The provider family — drives the LiteLLM routing prefix and auth shape. Choosing a known type also auto-fills the base URL with that provider&apos;s default endpoint, which you can override below if needed.</span>}>
+              <Tooltip as="div" placement="top" variant="detail" content={<span>The provider family — drives the LiteLLM routing prefix and auth shape. Choosing a known type also auto-fills the base URL with that provider&apos;s default endpoint, which you can override below if needed.</span>}>
               <select value={newProviderType} onChange={e => {
                 const val = e.target.value;
                 setNewProviderType(val as string);
@@ -4545,17 +4545,17 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
           </div>
           <div style={{ marginBottom: 8 }}>
             <div style={{ fontSize: 11, color: C.txT, marginBottom: 3 }}>BASE URL</div>
-            <Tooltip placement="top" variant="detail" content={<span>The provider&apos;s API root URL. Most OpenAI-compatible providers use a path ending in <strong>/v1</strong>. This is auto-filled when you pick a known TYPE above — only edit it if you self-host or need a regional/private endpoint (e.g. Azure, NVIDIA NIM, an internal mirror).</span>}>
+            <Tooltip as="div" placement="top" variant="detail" content={<span>The provider&apos;s API root URL. Most OpenAI-compatible providers use a path ending in <strong>/v1</strong>. This is auto-filled when you pick a known TYPE above — only edit it if you self-host or need a regional/private endpoint (e.g. Azure, NVIDIA NIM, an internal mirror).</span>}>
               <input value={newProviderUrl} onChange={e => setNewProviderUrl(e.target.value)} placeholder="http://localhost:1234/v1" style={inputStyle} />
             </Tooltip>
           </div>
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 11, color: C.txT, marginBottom: 3 }}>API KEY (optional)</div>
-            <Tooltip placement="top" variant="detail" content={<span>The provider&apos;s API key — what ClawNex sends to authenticate each request. Stored encrypted. Leave blank for local servers (LM Studio, Ollama, vLLM) that don&apos;t require auth.</span>}>
+            <Tooltip as="div" placement="top" variant="detail" content={<span>The provider&apos;s API key — what ClawNex sends to authenticate each request. Stored encrypted. Leave blank for local servers (LM Studio, Ollama, vLLM) that don&apos;t require auth.</span>}>
               <input value={newProviderKey} onChange={e => setNewProviderKey(e.target.value)} placeholder="Leave empty for local servers" type="password" style={inputStyle} />
             </Tooltip>
           </div>
-          <Tooltip placement="top" variant="detail" content={<span>Save the provider, then immediately test connectivity by asking it for its model list. Any models it returns are added so you can pick one in Default AI Model right away.</span>}>
+          <Tooltip as="div" placement="top" variant="detail" content={<span>Save the provider, then immediately test connectivity by asking it for its model list. Any models it returns are added so you can pick one in Default AI Model right away.</span>}>
             <button onClick={addProvider} disabled={!newProviderName.trim() || !newProviderUrl.trim()} style={{ ...btnStyle, background: !newProviderName.trim() || !newProviderUrl.trim() ? C.glassSurfTrans : C.cyan, color: "#fff", width: "100%" }}>
               + Add Provider
             </button>

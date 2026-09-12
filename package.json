@@ -36,6 +36,7 @@
     "lint": "tsc --noEmit --pretty false --incremental false",
     "verify:investigation-workbench": "tsx scripts/verify-investigation-workbench.ts",
     "verify:provider-onboarding": "tsx scripts/verify-provider-onboarding-contract.ts",
+    "verify:tooltip-layout": "tsx scripts/verify-tooltip-layout.ts",
     "verify:routing-reconciliation": "tsx scripts/verify-routing-reconciliation.ts",
     "verify:coding-agent-connectors": "tsx scripts/verify-coding-agent-connectors.ts",
     "verify:coding-agent-routing-visibility": "tsx scripts/verify-coding-agent-routing-visibility.ts",
