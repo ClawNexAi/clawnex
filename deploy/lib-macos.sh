@@ -76,18 +76,23 @@ fi
 [ -n "$NODE_BIN" ] || die "node not found on PATH or in known prefixes"
 
 # launchd has no systemd-style EnvironmentFile, so a tiny launcher sources
-# .env.local before exec'ing the standalone server. PORT/HOSTNAME/DATABASE_PATH
+# both generated env files before exec'ing the standalone server. setup.sh
+# stores the LiteLLM management key in .env and auth/runtime settings in
+# .env.local. PORT/HOSTNAME/DATABASE_PATH
 # are set AFTER the source so they win — mirrors the systemd unit's Environment.
 DASH_LAUNCHER="$INSTALL_DIR/deploy/.clawnex-dashboard-run.sh"
 cat > "$DASH_LAUNCHER" <<LAUNCH
 #!/bin/bash
 cd "$INSTALL_DIR" || exit 1
 set -a
+[ -f ./.env ] && . ./.env
 [ -f ./.env.local ] && . ./.env.local
 PORT=$DASHBOARD_PORT
 HOSTNAME=$DASHBOARD_BIND
 DATABASE_PATH="$INSTALL_DIR/clawnex.db"
 CLAWNEX_LOG_DIR="$INSTALL_DIR/logs"
+CLAWNEX_INSTALL_DIR="$INSTALL_DIR"
+CLAWNEX_LITELLM_CONFIG="$INSTALL_DIR/litellm/config.yaml"
 set +a
 exec "$NODE_BIN" "$STANDALONE_SERVER"
 LAUNCH
