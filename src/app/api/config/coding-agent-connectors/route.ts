@@ -35,7 +35,7 @@ function serialize(row: ConnectorRow) {
     id: row.id,
     type: row.type,
     name: row.name,
-    configPath: row.config_path,
+    configPath: check.configPath,
     active: row.is_active === 1,
     status: check.available ? 'connected' : 'error',
     available: check.available,
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) return NextResponse.json({ error: 'Connector name is required.' }, { status: 400 });
     const check = resolveOpenCodeGlobalConfig();
-    const existing = queryOne<ConnectorRow>('SELECT * FROM coding_agent_connectors WHERE type = ? AND config_path = ?', ['opencode', check.configPath]);
+    const existing = queryOne<ConnectorRow>('SELECT * FROM coding_agent_connectors WHERE type = ?', ['opencode']);
     if (existing) return NextResponse.json({ error: 'The global OpenCode connector already exists.', connector: serialize(existing) }, { status: 409 });
     const id = `coding-agent-${randomUUID()}`;
     run(`INSERT INTO coding_agent_connectors (id, type, name, config_path, status, last_error)

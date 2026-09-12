@@ -4709,7 +4709,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
             {openCodeConnectors.length === 0 && <div style={{ padding: 14, background: `${C.cyan}06`, borderRadius: 8, border: `1px dashed ${C.cyan}33`, marginTop: 8 }}>
               <div style={{ fontSize: 11, color: C.txT, marginBottom: 3 }}>NAME</div>
               <input value={newOpenCodeName} onChange={event => setNewOpenCodeName(event.target.value)} placeholder="OpenCode Local" style={{ ...inputStyle, marginBottom: 8 }} />
-              <div style={{ fontSize: 11, color: C.txS, marginBottom: 8 }}>Uses only the global <span style={{ fontFamily: F.mono }}>~/.config/opencode/opencode.json</span>. Project configurations are not changed.</div>
+              <div style={{ fontSize: 11, color: C.txS, marginBottom: 8 }}>Uses only the global <span style={{ fontFamily: F.mono }}>~/.config/opencode/opencode.json(c)</span>. Project configurations are not changed.</div>
               <button onClick={async () => { if (!newOpenCodeName.trim()) return; setOpenCodeResult(null); try {
                 const response = await fetch('/api/config/coding-agent-connectors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'opencode', name: newOpenCodeName.trim() }) });
                 const result = await response.json();

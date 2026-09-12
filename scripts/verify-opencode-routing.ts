@@ -24,7 +24,7 @@ process.env.CLAWNEX_LITELLM_CONFIG = liteLlmConfigPath;
 fs.writeFileSync(liteLlmConfigPath, 'model_list: []\n');
 
 const configDirectory = path.join(root, '.config', 'opencode');
-const configPath = path.join(configDirectory, 'opencode.json');
+const configPath = path.join(configDirectory, 'opencode.jsonc');
 fs.mkdirSync(configDirectory, { recursive: true });
 fs.writeFileSync(configPath, `{
   // OpenCode accepts JSONC in its global configuration.

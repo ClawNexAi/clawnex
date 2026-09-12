@@ -17,10 +17,16 @@ function inside(base: string, candidate: string): boolean {
 
 export function resolveOpenCodeGlobalConfig(): CodingAgentConfigCheck {
   const home = path.resolve(os.homedir());
+  const configuredFile = process.env.OPENCODE_CONFIG?.trim();
   const configuredDirectory = process.env.OPENCODE_CONFIG_DIR?.trim();
-  const configPath = path.resolve(configuredDirectory
-    ? path.join(configuredDirectory, 'opencode.json')
-    : path.join(home, '.config', 'opencode', 'opencode.json'));
+  const configDirectory = path.resolve(configuredDirectory || path.join(home, '.config', 'opencode'));
+  // OpenCode loads opencode.json before opencode.jsonc, so JSONC has the
+  // higher precedence when both global files exist. OPENCODE_CONFIG is an
+  // explicit file override; OPENCODE_CONFIG_DIR remains a directory.
+  const candidates = configuredFile
+    ? [path.resolve(configuredFile)]
+    : ['opencode.jsonc', 'opencode.json'].map(filename => path.join(configDirectory, filename));
+  const configPath = candidates.find(candidate => fs.existsSync(candidate)) || candidates[0];
   if (!inside(home, configPath)) {
     return { available: false, configPath, error: 'OpenCode global configuration must be inside this user\'s home directory.' };
   }
