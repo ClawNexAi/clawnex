@@ -41,6 +41,7 @@ function walk(dir: string, out: string[]) {
 
 console.log("[standalone artifact hygiene]");
 t(".next/standalone exists", fs.existsSync(standalone));
+t("standalone server entrypoint exists at root", exists("server.js"));
 
 const all: string[] = [];
 if (fs.existsSync(standalone)) walk(standalone, all);

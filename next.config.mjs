@@ -1,6 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  // A lockfile above the checkout can make Next infer the user's home directory
+  // as the workspace root. Pin tracing to this build's checkout so standalone
+  // always emits .next/standalone/server.js and never walks sibling user data.
+  outputFileTracingRoot: process.cwd(),
   // The development indicator is rendered outside the dashboard shell and can
   // create a second, document-level scrollbar. ClawNex owns scrolling inside
   // its navigation and content panes, so keep the dev overlay disabled.
