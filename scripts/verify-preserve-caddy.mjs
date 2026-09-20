@@ -52,6 +52,11 @@ try {
   assert(wrapper.includes('-sTCP:LISTEN'), 'port cleanup must exclude connected agent clients');
   assert(wrapper.includes('PRESERVE_CADDY=\'$PRESERVE_CADDY\''), 'flag forwarded over SSH');
   assert(wrapper.includes('INSTALL_OPTIONS+=(--preserve-caddy)'), 'flag forwarded to installer');
+  writeFileSync(path.join(temp, '.env.local'), 'RBAC_ENABLED=true\n');
+  const dbPath = slice(wrapper, 'RESOLVED_DB_PATH=""', 'TSX_BIN=');
+  const resolved = run(`set -o pipefail\nINSTALL_DIR=${temp}\n${dbPath}`);
+  assert.equal(resolved.status, 0, resolved.stderr);
+  assert(resolved.stdout.includes(`${temp}/clawnex.db`), 'absent DATABASE_PATH falls back under strict error handling');
   console.log('PASS: Caddy validation, unchanged config, restart behavior, deep-clean preservation, and flag forwarding');
 } finally {
   rmSync(temp, { recursive: true, force: true });

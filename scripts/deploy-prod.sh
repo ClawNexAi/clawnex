@@ -305,7 +305,7 @@ TARBALL="/tmp/cnx-bundle.tar.gz"
 DATA_PRESERVE_TAR="/tmp/clawnex-data-preserve.tar.gz"
 PRESERVED_EVIDENCE_ENCRYPTION_KEY=""
 if [ "${PRESERVE_DATA:-0}" = "1" ] && [ -f "$INSTALL_DIR/.env.local" ]; then
-  PRESERVED_EVIDENCE_ENCRYPTION_KEY=$(grep -E '^EVIDENCE_ENCRYPTION_KEY=' "$INSTALL_DIR/.env.local" | head -1 | cut -d= -f2-)
+  PRESERVED_EVIDENCE_ENCRYPTION_KEY=$(grep -E '^EVIDENCE_ENCRYPTION_KEY=' "$INSTALL_DIR/.env.local" | head -1 | cut -d= -f2- || true)
 fi
 
 # Decode the password back from the base64 envelope. Failure here means an
@@ -615,7 +615,7 @@ fi
 # ---------------------------------------------------------------------------
 RESOLVED_DB_PATH=""
 if [ -f "${INSTALL_DIR}/.env.local" ]; then
-    RESOLVED_DB_PATH=$(grep -E "^DATABASE_PATH=" "${INSTALL_DIR}/.env.local" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
+    RESOLVED_DB_PATH=$(grep -E "^DATABASE_PATH=" "${INSTALL_DIR}/.env.local" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)
 fi
 if [ -z "$RESOLVED_DB_PATH" ]; then
     RESOLVED_DB_PATH="${INSTALL_DIR}/clawnex.db"
