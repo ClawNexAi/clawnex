@@ -37,21 +37,19 @@ export function AnythingLLMFleetConnector({ onCountChange }: { onCountChange: (c
   const { data, error } = useAnything();
   const [busy, setBusy] = useState(false), [message, setMessage] = useState('');
   const [name, setName] = useState('AnythingLLM'), [managementUrl, setManagementUrl] = useState('');
-  const [relayOrigin, setRelayOrigin] = useState(''), [apiKey, setApiKey] = useState('');
-  useEffect(() => { setRelayOrigin(window.location.origin); }, []);
+  const [apiKey, setApiKey] = useState('');
   useEffect(() => { onCountChange(data.connectors.length); }, [data.connectors.length, onCountChange]);
   return <details style={{ marginBottom: 20 }}><summary style={{ color: C.cyan, fontWeight: 800, cursor: 'pointer', paddingBottom: 8 }}>ANYTHINGLLM · {data.connectors.length} registered</summary>
     {data.connectors.map(instance => <p key={instance.id} style={{ color: C.tx, fontSize: 12 }}><strong>{instance.name}</strong> — {instance.managementUrl}<br />Registered · review chat routing below</p>)}
-    <form onSubmit={event => { event.preventDefault(); setBusy(true); setMessage(''); void command({ action: 'add', name, managementUrl, relayOrigin, apiKey }).then(() => {
+    <form onSubmit={event => { event.preventDefault(); setBusy(true); setMessage(''); void command({ action: 'add', name, managementUrl, apiKey }).then(() => {
       setApiKey(''); setMessage('Connected. Open AnythingLLM Routing to choose models and review changes.'); window.dispatchEvent(new Event('clawnex:anythingllm'));
     }).catch(e => setMessage(e.message)).finally(() => setBusy(false)); }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, margin: '12px 0' }}>
         <label style={{ color: C.txS, fontSize: 12 }}>Instance name<input aria-label="AnythingLLM instance name" required maxLength={120} value={name} onChange={e => setName(e.target.value)} style={input} /></label>
         <label style={{ color: C.txS, fontSize: 12 }}>AnythingLLM address<input aria-label="AnythingLLM address" type="url" required placeholder="http://127.0.0.1:19322" value={managementUrl} onChange={e => setManagementUrl(e.target.value)} style={input} /></label>
-        <label style={{ color: C.txS, fontSize: 12 }}>ClawNex address reachable from AnythingLLM<input aria-label="ClawNex relay address" type="url" required value={relayOrigin} onChange={e => setRelayOrigin(e.target.value)} style={input} /></label>
         <label style={{ color: C.txS, fontSize: 12 }}>AnythingLLM developer API key<input aria-label="AnythingLLM API key" type="password" autoComplete="new-password" required value={apiKey} onChange={e => setApiKey(e.target.value)} style={input} /></label>
       </div>
-      <p style={{ color: C.txS, fontSize: 12 }}>Create an API key in AnythingLLM Settings → Developer API. Registration only discovers configuration. For Docker, use a ClawNex address reachable from inside the container.</p>
+      <p style={{ color: C.txS, fontSize: 12 }}>For AnythingLLM installed on the same host as ClawNex. Create an API key in AnythingLLM Settings → Developer API. Registration only discovers configuration; chat routes directly to the local LiteLLM proxy.</p>
       <div style={row}><button type="submit" disabled={busy} style={button}>{busy ? 'Connecting…' : 'Add AnythingLLM'}</button></div>
     </form>
     {(error || message) && <p role="status" style={{ color: C.txS }}>{error || message}</p>}
@@ -84,6 +82,7 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
         {data.connectors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
       <p style={{ color: C.txS, fontSize: 12, lineHeight: 1.6 }}>Select → Review → Apply → Send a chat → Verify. Default chat is selected initially; workspace overrides are opt-in. Selections alone do not change traffic.</p>
+      <p style={{ color: C.tx, fontSize: 12 }}>Proxy base URL: <code>{instance.proxyBaseUrl}</code></p>
       <div style={row}>
         <button style={button} disabled={busy} onClick={() => void review('apply')}>Review connection changes</button>
         <button style={button} disabled={busy} onClick={() => void run(async () => { setPlan(null); await command({ action: 'refresh', id: instance.id }); await refresh(); setMessage('Workspaces refreshed. New overrides remain unselected.'); })}>Refresh workspaces</button>
@@ -114,11 +113,12 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
           {(workspace.agentProvider || workspace.agentModel) && <p style={{ color: C.warn, fontSize: 12 }}>Agent override: {workspace.agentProvider || 'inherited provider'} / {workspace.agentModel || 'provider default'} — outside chat-routing coverage.</p>}
         </div>;
       })}
-      <p style={{ color: C.txS, fontSize: 12 }}>Verification identifies this instance and model, not individual workspaces. Agent overrides, embeddings, and other integrations are outside this connector’s chat-routing scope.</p>
+      <p style={{ color: C.txS, fontSize: 12 }}>Verify checks the saved local proxy settings and loaded models. Confirm actual requests in Traffic Monitor; this provider does not send an instance identity header. Agent overrides and embeddings are outside chat-routing scope.</p>
       {instance.slotReserved && <p style={{ color: instance.slotIntact ? C.txS : C.warn, fontSize: 12 }}>{instance.slotIntact ? 'The separate LiteLLM connection is reserved for ClawNex. Restore returns managed chat routes to their original providers and retains this connection for reuse.' : 'The shared ClawNex connection changed in AnythingLLM. Resolve that conflict before applying or restoring routes.'}</p>}
     </>}
     <ConfirmDialog open={!!plan} title="Review AnythingLLM chat routing" confirmLabel={plan?.prerequisites.length ? 'Resolve prerequisites first' : 'Apply reviewed changes'} danger={plan?.operation === 'restore'} returnFocusTo={reviewOrigin.current}
       body={<><p>{plan?.changes.length} route changes. No application restart is required.</p>
+        <p>Chat proxy: <code>{plan?.slot.base}</code></p>
         <ul>{plan?.changes.map(c => <li key={c.key}>{c.name}: {c.before.provider || 'default'} → {c.after.provider || 'default'}{c.after.model ? ` / ${c.after.model}` : ''}</li>)}</ul>
         <p>Affected workspaces: {plan?.affectedWorkspaces.join(', ') || 'None'}</p>
         {!!plan?.retired.length && <p>{plan.retired.length} deleted workspace record(s) will be retired. No workspace will be recreated.</p>}

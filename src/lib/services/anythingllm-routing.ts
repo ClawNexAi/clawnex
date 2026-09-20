@@ -1,9 +1,8 @@
-import { createCipheriv, createDecipheriv, hkdfSync, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createCipheriv, createDecipheriv, hkdfSync, randomBytes, randomUUID } from 'node:crypto';
 import { queryAll, queryOne, run } from '../db';
 import { assertSafeProviderHttpFetchTarget, listProviders } from './config-service';
 import { hasCurrentProviderReadiness, assertSelectedLiveDeployments } from './provider-routing-readiness';
-import { createRoutingIdentity } from './routing-identity';
-import { recordRoutingOperation, recordRoutingSnapshot, stableRoutingFingerprint, verifyRouting } from './routing-reconciliation';
+import { recordRoutingOperation, recordRoutingSnapshot, stableRoutingFingerprint } from './routing-reconciliation';
 import type { ConnectorRoutingItem, ConnectorRoutingSummary } from './connector-routing-inventory';
 
 type Route = { provider: string | null; model: string | null };
@@ -17,7 +16,7 @@ type State = {
   slot: Slot | null; appliedAt: string | null;
 };
 type Row = { id: string; name: string; management_url: string; relay_origin: string; credentials: string; state_json: string };
-type Credentials = { management: string; relay: string };
+type Credentials = { management: string };
 export type AnythingPlan = {
   id: string; connector: 'anythingllm'; sourceId: string; operation: 'apply' | 'restore'; fingerprint: string;
   changes: Array<{ key: string; name: string; before: Route; after: Route }>;
@@ -27,7 +26,7 @@ export type AnythingPlan = {
 const blank = (value: unknown): string | null => typeof value === 'string' && value.trim() ? value : null;
 const same = (a: unknown, b: unknown) => stableRoutingFingerprint(a) === stableRoutingFingerprint(b);
 const keyFor = (id: string) => `workspace:${id}`;
-const relayBase = (row: Row) => `${row.relay_origin}/api/v1/connectors/anythingllm/${row.id}`;
+const proxyBase = () => `http://127.0.0.1:${process.env.LITELLM_PORT || '4001'}/v1`;
 
 function cryptoKey() {
   const raw = process.env.EVIDENCE_ENCRYPTION_KEY || '';
@@ -155,26 +154,28 @@ function evidence(row: Row, state: State): ConnectorRoutingSummary<'anythingllm'
     const alias = key === 'default' ? state.slot?.model || '' : owner.after.model || '';
     const providerId = anythingModels().find(model => model.alias === alias)?.providerId || key;
     items.push({ id: `${row.id}:${key}`, connector: 'anythingllm', sourceId: row.id, itemType: 'model', providerId,
-      modelId: alias, displayName: key, baseUrl: relayBase(row), capability: 'model-inventory', currentRoute: slotIntact && same(current, owner.after) ? 'routed' : 'unknown',
+      modelId: alias, displayName: key, baseUrl: proxyBase(), capability: 'model-inventory', currentRoute: slotIntact && state.slot?.base === proxyBase() && same(current, owner.after) ? 'routed' : 'unknown',
       desiredRoute: state.choices[key]?.selected ? 'routed' : 'direct', present: !!current, fingerprint: stableRoutingFingerprint(current),
-      metadata: { proxyModelAlias: alias, identityIntact: slotIntact }, firstSeenAt: '', lastSeenAt: state.snapshot.scannedAt, updatedAt: state.snapshot.scannedAt, lastChangedAt: null });
+      metadata: { proxyModelAlias: alias, identityIntact: false }, firstSeenAt: '', lastSeenAt: state.snapshot.scannedAt, updatedAt: state.snapshot.scannedAt, lastChangedAt: null });
   }
   return { connector: 'anythingllm', sourceId: row.id, items, status: 'ok', detail: 'AnythingLLM chat routing; agent overrides are outside scope.',
     drift: { new: 0, removed: 0, changed: 0, total: 0 }, selected: items.length, pendingChanges: 0, scannedAt: state.snapshot.scannedAt };
 }
 function view(row: Row, state: State) {
-  return { id: row.id, name: row.name, managementUrl: row.management_url, relayOrigin: row.relay_origin,
+  return { id: row.id, name: row.name, managementUrl: row.management_url, proxyBaseUrl: proxyBase(),
     snapshot: state.snapshot, choices: state.choices, ownership: state.ownership, slotReserved: !!state.slot,
     slotIntact: !!state.slot && same(state.slot, state.snapshot.slot) };
 }
 export function listAnythingConnectors() {
   return queryAll<Row>('SELECT * FROM anythingllm_connectors ORDER BY name').map(row => view(row, JSON.parse(row.state_json)));
 }
-export async function addAnythingConnector(input: { name: string; managementUrl: string; relayOrigin: string; apiKey: string }) {
+export async function addAnythingConnector(input: { name: string; managementUrl: string; apiKey: string }) {
   if (!input.name.trim() || input.name.length > 120 || !input.apiKey.trim() || input.apiKey.length > 4096) throw new Error('Enter a name and AnythingLLM developer API key.');
   const id = randomUUID();
-  const row: Row = { id, name: input.name.trim(), management_url: origin(input.managementUrl), relay_origin: origin(input.relayOrigin),
-    credentials: seal(id, { management: input.apiKey.trim(), relay: randomBytes(32).toString('base64url') }), state_json: '' };
+  const managementUrl = origin(input.managementUrl);
+  if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(managementUrl).hostname)) throw new Error('This connector configures host-installed AnythingLLM on the same host as ClawNex. Use its localhost address.');
+  const row: Row = { id, name: input.name.trim(), management_url: managementUrl, relay_origin: '',
+    credentials: seal(id, { management: input.apiKey.trim() }), state_json: '' };
   if (queryOne('SELECT id FROM anythingllm_connectors WHERE management_url = ?', [row.management_url])) throw new Error('This AnythingLLM address is already registered.');
   const snapshot = await discover(row);
   const state: State = { snapshot, choices: { default: { selected: true, model: '' } }, ownership: {}, slot: null, appliedAt: null };
@@ -228,7 +229,8 @@ export function buildAnythingPlan(row: Pick<Row, 'id' | 'relay_origin'>, state: 
     } else if (owner) changes.push({ key, name: workspace?.name || 'Default chat', before: current, after: owner.before });
   }
   const model = state.choices.default?.selected ? state.choices.default.model : Object.values(state.choices).find(c => c.selected)?.model || state.slot?.model || '';
-  const slot: Slot = state.slot || { base: `${row.relay_origin}/api/v1/connectors/anythingllm/${row.id}`, model, limit: '32768', keyPresent: true };
+  const slot: Slot = state.slot || { base: proxyBase(), model, limit: '32768', keyPresent: true };
+  if (state.slot && state.slot.base !== proxyBase()) prerequisites.push('This connection uses the retired relay. Migrate it to the local LiteLLM proxy before applying changes.');
   const incompleteReservation = state.slot && !Object.keys(state.ownership).length && Object.entries(state.snapshot.slot).every(([key, value]) =>
     key === 'keyPresent' || !value || value === state.slot![key as keyof Slot]);
   if (state.slot && !same(state.slot, state.snapshot.slot) && !incompleteReservation) prerequisites.push('The shared ClawNex connection was edited in AnythingLLM. No connection settings will be overwritten.');
@@ -294,7 +296,7 @@ export async function executeAnythingPlan(planId: string, approved: boolean, act
         // Persist intent before the remote mutation so interrupted operations remain recoverable.
         state.slot = plan.slot; save(row.id, state);
         await api(row, 'system/update-env', { LiteLLMBasePath: plan.slot.base, LiteLLMModelPref: plan.slot.model,
-          LiteLLMTokenLimit: plan.slot.limit, ...(!state.snapshot.slot.keyPresent ? { LiteLLMApiKey: secrets(row).relay } : {}) });
+          LiteLLMTokenLimit: plan.slot.limit, ...(!state.snapshot.slot.keyPresent ? { LiteLLMApiKey: process.env.LITELLM_MASTER_KEY || 'clawnex-local' } : {}) });
         state.snapshot = await discover(row);
         if (!same(state.snapshot.slot, plan.slot)) throw new Error('AnythingLLM did not confirm the reserved connection. Recovery state was retained.');
         save(row.id, state);
@@ -330,16 +332,37 @@ export async function executeAnythingPlan(planId: string, approved: boolean, act
 export async function verifyAnythingConnector(id: string) {
   await refreshAnythingConnector(id);
   const { row, state } = load(id);
-  const result = verifyRouting(evidence(row, state), { since: state.appliedAt });
-  return { ...result, detail: `${result.detail} Evidence is for this AnythingLLM instance and model, not individual workspaces or agent overrides.` };
+  const summary = evidence(row, state);
+  const configured = summary.items.length > 0 && summary.items.every(item => item.currentRoute === 'routed');
+  if (configured) await assertSelectedLiveDeployments(summary);
+  return { status: configured ? 'configured' : 'configuration-mismatch',
+    detail: configured
+      ? `AnythingLLM is configured directly to ${proxyBase()} and its selected models are loaded. Send a chat and inspect Traffic Monitor for the result. This configuration check does not prove instance-specific traffic attribution.`
+      : 'AnythingLLM does not match the managed local proxy configuration. Refresh and review its settings.' };
 }
 
-/** Authenticate the instance before accepting inference. Never trust client-supplied attribution. */
-export function authorizeAnythingRelay(id: string, authorization: string | null, model?: string) {
-  const { row, state } = load(id);
-  const expected = Buffer.from(`Bearer ${secrets(row).relay}`), supplied = Buffer.from(authorization || '');
-  if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) return null;
-  const allowed = new Set(Object.entries(state.ownership).map(([key, owner]) => key === 'default' ? state.slot?.model : owner.after.model));
-  if (!state.slot || !allowed.size || (model !== undefined && !allowed.has(model))) return null;
-  return createRoutingIdentity('anythingllm', row.id);
+/** Explicit operator migration for connectors created by the retired relay implementation. */
+export async function migrateAnythingConnectorToLocalProxy(id: string) {
+  return locked(id, async () => {
+    const { row, state } = load(id);
+    if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(row.management_url).hostname)) throw new Error('Move AnythingLLM to this host before migrating its connection.');
+    if (!state.slot) throw new Error('No managed connection to migrate.');
+    const snapshot = await discover(row);
+    const retiredBase = `${row.relay_origin}/api/v1/connectors/anythingllm/${row.id}`;
+    if (![retiredBase, proxyBase()].includes(snapshot.slot.base) ||
+        !same({ ...snapshot.slot, base: state.slot.base }, state.slot)) throw new Error('The managed connection was edited. Preserve those edits and review before migration.');
+    for (const [key, owner] of Object.entries(state.ownership)) {
+      if (!same(route(snapshot, key), owner.after)) throw new Error('A managed chat route was edited. Review before migration.');
+    }
+    await api(row, 'system/update-env', { LiteLLMBasePath: proxyBase(), LiteLLMApiKey: process.env.LITELLM_MASTER_KEY || 'clawnex-local' });
+    const after = await discover(row);
+    const slot = { ...state.slot, base: proxyBase() };
+    if (!same(after.slot, slot)) throw new Error('AnythingLLM did not confirm the local proxy connection.');
+    state.slot = slot; state.snapshot = after; state.appliedAt = new Date().toISOString();
+    save(id, state);
+    run('UPDATE anythingllm_connectors SET relay_origin = ?, credentials = ? WHERE id = ?', ['', seal(id, { management: secrets(row).management }), id]);
+    recordRoutingSnapshot('anythingllm', evidence(row, state), 'apply');
+    recordRoutingOperation({ connector: 'anythingllm', sourceId: id, actor: 'operator-migration', operation: 'apply', outcome: 'applied', detail: 'Retired the connector relay and configured the local LiteLLM proxy directly.' });
+    return { id, baseUrl: slot.base, migrated: true };
+  });
 }

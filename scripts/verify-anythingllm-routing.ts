@@ -16,8 +16,6 @@ const workspaces: Array<Record<string, unknown>> = [];
 let failWrites = false;
 let writes = 0;
 let info: unknown[] = [];
-let lastChat: Record<string, unknown> | null = null;
-let lastIdentity = '';
 const server = http.createServer(async (req, res) => {
   const chunks = []; for await (const chunk of req) chunks.push(chunk);
   const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
@@ -25,7 +23,6 @@ const server = http.createServer(async (req, res) => {
   const send = (value: unknown) => res.end(JSON.stringify(value));
   if (req.url === '/model/info') return send({ data: info });
   if (req.url === '/v1/chat/completions') {
-    lastChat = body; lastIdentity = String(req.headers['x-clawnex-routing-identity'] || '');
     if (body.stream) { res.setHeader('Content-Type', 'text/event-stream'); return res.end('data: {"choices":[{"delta":{"content":"OK"}}]}\n\ndata: [DONE]\n\n'); }
     return send({ id: 'fixture-completion', choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }] });
   }
@@ -59,8 +56,6 @@ async function main() {
   const { getDb, queryOne, run } = await import('../src/lib/db');
   const { addProvider, addModel } = await import('../src/lib/services/config-service');
   const { deploymentRevision } = await import('../src/lib/litellm/deployment-revision');
-  const { POST: relay } = await import('../src/app/api/v1/connectors/anythingllm/[id]/chat/completions/route');
-  const { NextRequest } = await import('next/server');
   try {
     await addProvider({ id: 'fixture', name: 'Fixture', type: 'openai', baseUrl: base }); addModel('fixture', 'fixture-model');
     const params = { model: 'openai/fixture-model', api_base: base, api_key: 'not-needed' };
@@ -69,7 +64,8 @@ async function main() {
     fs.writeFileSync(process.env.CLAWNEX_LITELLM_CONFIG!, JSON.stringify({ model_list: info }));
     run('INSERT INTO provider_routing_readiness (provider_id, model_alias, receipt_json) VALUES (?, ?, ?)', ['fixture', 'fixture-model', JSON.stringify({ ready: true, port, revision,
       fingerprint: createHash('sha256').update(fs.readFileSync(process.env.CLAWNEX_LITELLM_CONFIG!)).digest('hex'), expiresAt: new Date(Date.now() + 60_000).toISOString() })]);
-    const instance = await svc.addAnythingConnector({ name: 'Fixture', managementUrl: base, relayOrigin: base, apiKey: 'fixture-management-key' });
+    await assert.rejects(svc.addAnythingConnector({ name: 'Remote', managementUrl: 'http://100.123.63.73:19322', apiKey: 'fixture-management-key' }), /same host/);
+    const instance = await svc.addAnythingConnector({ name: 'Fixture', managementUrl: base, apiKey: 'fixture-management-key' });
     assert.equal(instance.snapshot.workspaces.length, 0);
     assert.equal(instance.choices.default.selected, true);
     assert.equal(writes, 0, 'Registration must not change AnythingLLM');
@@ -112,15 +108,29 @@ async function main() {
     assert.equal(workspaces[1].agentProvider, 'anthropic');
     assert.equal(workspaces[2].chatProvider, 'generic-openai');
     assert.equal(workspaces[3].router_id, 7);
-    assert.equal((await svc.verifyAnythingConnector(instance.id)).status, 'pending-traffic');
-    const call = (authorization: string, extra: Record<string, unknown> = {}) => relay(new NextRequest(`${base}/chat`, { method: 'POST', headers: { authorization },
-      body: JSON.stringify({ model: 'fixture-model', messages: [{ role: 'user', content: 'OK' }], stream: true, ...extra }) }), { params: Promise.resolve({ id: instance.id }) });
-    assert.equal((await call('Bearer wrong')).status, 401);
-    assert.equal((await call(`Bearer ${settings.LiteLLMApiKey}`, { model: 'unapproved' })).status, 401);
-    const response = await call(`Bearer ${settings.LiteLLMApiKey}`, { api_base: 'http://evil.test', metadata: { clawnex_routing_source_id: 'forged' }, api_key: 'evil' });
-    assert.equal(response.status, 200); assert((await response.text()).includes('[DONE]'));
-    assert(lastIdentity.includes('.'));
-    assert(!('api_base' in lastChat!)); assert(!('metadata' in lastChat!)); assert(!('api_key' in lastChat!));
+    assert.equal(settings.LiteLLMBasePath, `${base}/v1`, 'Inference must go directly to the local LiteLLM proxy');
+    assert.equal(settings.LiteLLMApiKey, process.env.LITELLM_MASTER_KEY || 'clawnex-local');
+    assert.equal((await svc.verifyAnythingConnector(instance.id)).status, 'configured', 'Configuration is not instance-specific traffic proof');
+    settings.LiteLLMBasePath = 'http://127.0.0.1:9999/v1';
+    assert.equal((await svc.verifyAnythingConnector(instance.id)).status, 'configuration-mismatch');
+    settings.LiteLLMBasePath = `${base}/v1`;
+    // Upgrade the earlier relay implementation explicitly, retaining original
+    // provider recovery information and refusing a changed shared connection.
+    const legacy = queryOne<{ state_json: string }>('SELECT state_json FROM anythingllm_connectors WHERE id = ?', [instance.id])!;
+    const legacyState = JSON.parse(legacy.state_json);
+    const legacyBase = `${base}/api/v1/connectors/anythingllm/${instance.id}`;
+    legacyState.slot.base = legacyBase;
+    legacyState.snapshot.slot.base = legacyBase;
+    run('UPDATE anythingllm_connectors SET relay_origin = ?, state_json = ? WHERE id = ?', [base, JSON.stringify(legacyState), instance.id]);
+    settings.LiteLLMBasePath = 'http://127.0.0.1:9999/v1';
+    await assert.rejects(svc.migrateAnythingConnectorToLocalProxy(instance.id), /edited/);
+    settings.LiteLLMBasePath = legacyBase;
+    plan = await svc.prepareAnythingPlan(instance.id, 'apply');
+    assert(plan.prerequisites.some(p => p.includes('retired relay')));
+    await svc.migrateAnythingConnectorToLocalProxy(instance.id);
+    assert.equal(settings.LiteLLMBasePath, `${base}/v1`);
+    assert.equal(svc.listAnythingConnectors()[0].ownership.default.before.provider, 'generic-openai');
+    assert.equal(queryOne<{ relay_origin: string }>('SELECT relay_origin FROM anythingllm_connectors WHERE id = ?', [instance.id])?.relay_origin, '');
     // External edits must prevent restore, not be silently replaced.
     workspaces[1].chatModel = 'operator-edit';
     plan = await svc.prepareAnythingPlan(instance.id, 'restore'); assert(plan.prerequisites.some(p => p.includes('edited outside')));
@@ -135,7 +145,7 @@ async function main() {
     assert.equal(settings.LLMProvider, 'generic-openai'); assert.equal(workspaces[1].chatModel, 'gpt-test');
     assert.equal(workspaces[1].agentProvider, 'anthropic'); assert.equal(workspaces[2].chatModel, 'untouched-model');
     assert.equal(Object.keys(svc.listAnythingConnectors()[0].ownership).length, 0);
-    assert.equal((await call(`Bearer ${settings.LiteLLMApiKey}`)).status, 401, 'Restored connector key cannot perform inference');
+    assert.equal((await svc.verifyAnythingConnector(instance.id)).status, 'configuration-mismatch');
     workspaces.push({ id: 5, slug: 'later', name: 'Created later', chatProvider: 'openai', chatModel: 'later-model' });
     refreshed = await svc.refreshAnythingConnector(instance.id);
     assert.equal(refreshed.choices['workspace:5'].selected, false);
@@ -155,7 +165,7 @@ async function main() {
     assert(plan.prerequisites.some(p => p.includes('overrides its model')));
     await svc.selectAnythingRoute(instance.id, 'workspace:6', true, 'fixture-model');
     plan = await svc.prepareAnythingPlan(instance.id, 'apply'); assert.deepEqual(plan.prerequisites, []);
-    console.log('PASS: AnythingLLM discovery, encrypted credentials, workspace inheritance/opt-in, stable selections, review expiry/conflicts, idempotent apply, streaming relay/auth/model limits, failure recovery, and restore.');
+    console.log('PASS: AnythingLLM host-only discovery, direct local proxy URL, encrypted management credentials, workspace inheritance/opt-in, stable selections, review conflicts, idempotent apply, truthful verification, failure recovery, and restore.');
   } finally { getDb().close(); server.closeAllConnections(); server.close(); fs.rmSync(root, { recursive: true, force: true }); }
 }
 main().catch(error => { console.error(error); server.closeAllConnections(); server.close(); fs.rmSync(root, { recursive: true, force: true }); process.exitCode = 1; });

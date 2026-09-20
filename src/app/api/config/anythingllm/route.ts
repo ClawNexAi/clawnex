@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 }
 const id = z.string().uuid();
 const schema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('add'), name: z.string().min(1).max(120), managementUrl: z.string().max(2048), relayOrigin: z.string().max(2048), apiKey: z.string().min(1).max(4096) }),
+  z.object({ action: z.literal('add'), name: z.string().min(1).max(120), managementUrl: z.string().max(2048), apiKey: z.string().min(1).max(4096) }),
   z.object({ action: z.literal('refresh'), id }),
   z.object({ action: z.literal('select'), id, key: z.string().max(100), selected: z.boolean(), model: z.string().max(500) }),
   z.object({ action: z.literal('prepare'), id, operation: z.enum(['apply', 'restore']) }),

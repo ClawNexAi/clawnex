@@ -52,7 +52,7 @@ async function main() {
     });
     mock.listen(0, '127.0.0.1'); await once(mock, 'listening'); mock.unref();
     const { addAnythingConnector } = await import('../src/lib/services/anythingllm-routing');
-    await addAnythingConnector({ name: 'AnythingLLM fixture', managementUrl: `http://127.0.0.1:${(mock.address() as { port: number }).port}`, relayOrigin: 'http://127.0.0.1:15001', apiKey: 'nonsecret-fixture-value' });
+    await addAnythingConnector({ name: 'AnythingLLM fixture', managementUrl: `http://127.0.0.1:${(mock.address() as { port: number }).port}`, apiKey: 'nonsecret-fixture-value' });
   }
   getDb().close();
   console.log(`Isolated fixture: ${root}\nBrowser URL: http://127.0.0.1:15001/#tab=configuration`);
