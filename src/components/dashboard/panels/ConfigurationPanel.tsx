@@ -1551,11 +1551,14 @@ function VoiceAvatarCard({ focusedCard }: { focusedCard?: string | null }) {
   const [voiceProvider, setVoiceProviderState] = useState("browser");
   const [elevenLabsKey, setElevenLabsKey] = useState("");
   const [elevenLabsVoice, setElevenLabsVoice] = useState("<elevenlabs_voice_id>");
+  const [elevenLabsModel, setElevenLabsModel] = useState("");
   const [avatarProvider, setAvatarProviderState] = useState("shield");
   const [heyGenKey, setHeyGenKey] = useState("");
   const [heyGenAvatar, setHeyGenAvatar] = useState("");
   const [didKey, setDidKey] = useState("");
   const [didPresenter, setDidPresenter] = useState("");
+  const [didLlmProvider, setDidLlmProvider] = useState("");
+  const [didLlmModel, setDidLlmModel] = useState("");
   const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
 
@@ -1566,11 +1569,14 @@ function VoiceAvatarCard({ focusedCard }: { focusedCard?: string | null }) {
       setVoiceProviderState(s.voice_provider || "browser");
       setElevenLabsKey(s.elevenlabs_api_key || "");
       setElevenLabsVoice(s.elevenlabs_voice_id || "<elevenlabs_voice_id>");
+      setElevenLabsModel(s.elevenlabs_model_id || "");
       setAvatarProviderState(s.avatar_provider || "shield");
       setHeyGenKey(s.heygen_api_key || "");
       setHeyGenAvatar(s.heygen_avatar_id || "");
       setDidKey(s.did_api_key || "");
       setDidPresenter(s.did_presenter_id || "");
+      setDidLlmProvider(s.did_llm_provider || "");
+      setDidLlmModel(s.did_llm_model || "");
     }).catch(() => {});
   }, []);
 
@@ -1583,18 +1589,21 @@ function VoiceAvatarCard({ focusedCard }: { focusedCard?: string | null }) {
           voice_provider: voiceProvider,
           elevenlabs_api_key: elevenLabsKey.includes("...") ? undefined : elevenLabsKey,
           elevenlabs_voice_id: elevenLabsVoice,
+          elevenlabs_model_id: elevenLabsModel,
           avatar_provider: avatarProvider,
           heygen_api_key: heyGenKey.includes("...") ? undefined : heyGenKey,
           heygen_avatar_id: heyGenAvatar,
           did_api_key: didKey.includes("...") ? undefined : didKey,
           did_presenter_id: didPresenter,
+          did_llm_provider: didLlmProvider,
+          did_llm_model: didLlmModel,
         }}),
       });
       setTestResult("Saved!");
       setTimeout(() => setTestResult(null), 2000);
     } catch { setTestResult("Save failed"); }
     finally { setSaving(false); }
-  }, [voiceProvider, elevenLabsKey, elevenLabsVoice, avatarProvider, heyGenKey, heyGenAvatar, didKey, didPresenter]);
+  }, [voiceProvider, elevenLabsKey, elevenLabsVoice, elevenLabsModel, avatarProvider, heyGenKey, heyGenAvatar, didKey, didPresenter, didLlmProvider, didLlmModel]);
 
   const handleTestVoice = useCallback(async () => {
     setTestResult("Testing...");
@@ -1656,6 +1665,9 @@ function VoiceAvatarCard({ focusedCard }: { focusedCard?: string | null }) {
               <div style={{ fontSize: 10, color: C.txT, marginBottom: 2 }}>VOICE ID</div>
               <input value={elevenLabsVoice} onChange={e => setElevenLabsVoice(e.target.value)} placeholder="<elevenlabs_voice_id>" style={inputStyle} />
             </div>
+            <label style={{ fontSize: 10, color: C.txT }}>SPEECH MODEL ID
+              <input aria-label="ElevenLabs model ID" value={elevenLabsModel} onChange={e => setElevenLabsModel(e.target.value)} placeholder="Enter your selected ElevenLabs model" style={inputStyle} />
+            </label>
           </div>
         )}
       </div>
@@ -1736,6 +1748,12 @@ function VoiceAvatarCard({ focusedCard }: { focusedCard?: string | null }) {
                 <div style={{ fontSize: 10, color: C.txT, marginBottom: 2 }}>PRESENTER ID</div>
                 <input value={didPresenter} onChange={e => setDidPresenter(e.target.value)} placeholder="e.g., v2_public_Amber@0zSz8kflCN" style={inputStyle} />
               </div>
+              <label style={{ fontSize: 10, color: C.txT }}>AGENT LLM PROVIDER
+                <input aria-label="D-ID LLM provider" value={didLlmProvider} onChange={e => setDidLlmProvider(e.target.value)} placeholder="Enter your selected D-ID LLM provider" style={inputStyle} />
+              </label>
+              <label style={{ fontSize: 10, color: C.txT }}>AGENT LLM MODEL
+                <input aria-label="D-ID LLM model" value={didLlmModel} onChange={e => setDidLlmModel(e.target.value)} placeholder="Enter your selected D-ID LLM model" style={inputStyle} />
+              </label>
             </div>
           </div>
         )}

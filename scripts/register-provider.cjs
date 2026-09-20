@@ -19,7 +19,7 @@
  *
  * Mirrors src/lib/services/config-service.ts addProvider():
  *   - same INSERT shape (id, name, type, base_url, api_key, is_default=0, is_active=1)
- *   - same SEED_MODELS for openrouter/anthropic/openai/nvidia-nim
+ *   - no automatic models; PROVIDER_MODEL_ID is an explicit operator selection
  * If the provider already exists (by type+name), this is a no-op so the
  * script is idempotent across re-runs.
  */
@@ -55,34 +55,6 @@ if (!fs.existsSync(dbPath)) {
     process.exit(1);
 }
 
-// Same default-model seeds the in-app addProvider() uses. Kept in sync by
-// hand for now — both this script and config-service.ts reference the same
-// canonical list. If models drift, audit both.
-const SEED_MODELS = {
-    openrouter: [
-        { model_id: "openrouter/auto", name: "Auto (best available)" },
-        { model_id: "openrouter/anthropic/claude-sonnet-4", name: "Claude Sonnet 4" },
-        { model_id: "openrouter/anthropic/claude-haiku-4", name: "Claude Haiku 4" },
-        { model_id: "openrouter/openai/gpt-4o", name: "GPT-4o" },
-        { model_id: "openrouter/openai/gpt-4o-mini", name: "GPT-4o Mini" },
-        { model_id: "openrouter/google/gemini-2.5-pro-preview", name: "Gemini 2.5 Pro" },
-        { model_id: "openrouter/meta-llama/llama-4-scout", name: "Llama 4 Scout" },
-        { model_id: "openrouter/qwen/qwen3-235b-a22b", name: "Qwen 3 235B" },
-    ],
-    anthropic: [
-        { model_id: "claude-sonnet-4-20250514", name: "Claude Sonnet 4" },
-        { model_id: "claude-haiku-4-20250414", name: "Claude Haiku 4" },
-    ],
-    openai: [
-        { model_id: "gpt-4o", name: "GPT-4o" },
-        { model_id: "gpt-4o-mini", name: "GPT-4o Mini" },
-        { model_id: "o3-mini", name: "o3-mini" },
-    ],
-    "nvidia-nim": [
-        { model_id: "nvidia/llama-3.3-nemotron-super-49b-v1", name: "Llama 3.3 Nemotron Super 49B" },
-    ],
-};
-
 const db = new Database(dbPath);
 try {
     db.pragma("journal_mode = WAL");
@@ -106,21 +78,6 @@ try {
          VALUES (?, ?, ?, ?, ?, 0, 1)`,
     ).run(id, name, type, baseUrl, apiKey);
 
-    const typeKey = type.toLowerCase();
-    const seeds = SEED_MODELS[typeKey];
-    if (seeds) {
-        const stmt = db.prepare(
-            `INSERT OR IGNORE INTO config_models (id, provider_id, model_id, name, is_default, context_window)
-             VALUES (?, ?, ?, ?, 0, 128000)`,
-        );
-        for (const s of seeds) {
-            try {
-                stmt.run(`${id}::${s.model_id}`, id, s.model_id, s.name);
-            } catch {
-                /* ignore individual seed failures */
-            }
-        }
-    }
     if (modelId) {
         db.prepare(
             `INSERT OR IGNORE INTO config_models (id, provider_id, model_id, name, is_default, context_window)

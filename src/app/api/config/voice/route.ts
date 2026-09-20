@@ -17,11 +17,14 @@ const VOICE_KEYS = [
   "voice_provider",      // "browser" | "elevenlabs"
   "elevenlabs_api_key",
   "elevenlabs_voice_id",
+  "elevenlabs_model_id",
   "avatar_provider",     // "shield" | "heygen" | "did" | "comfyui"
   "heygen_api_key",
   "heygen_avatar_id",
   "did_api_key",
   "did_presenter_id",
+  "did_llm_provider",
+  "did_llm_model",
   "did_agent_id",
   "comfyui_url",
   "chat_mode",           // "bubbles" | "bubbles+avatar" | "avatar"
@@ -31,11 +34,14 @@ const DEFAULTS: Record<string, string> = {
   voice_provider: "browser",
   elevenlabs_api_key: "",
   elevenlabs_voice_id: "",  // operator-configured
+  elevenlabs_model_id: "",
   avatar_provider: "shield",
   heygen_api_key: "",
   heygen_avatar_id: "",
   did_api_key: "",
   did_presenter_id: "",
+  did_llm_provider: "",
+  did_llm_model: "",
   did_agent_id: "",
   comfyui_url: "",
   chat_mode: "bubbles",

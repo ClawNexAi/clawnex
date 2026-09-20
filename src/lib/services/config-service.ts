@@ -252,31 +252,6 @@ export function getProvider(id: string): ProviderWithModels | undefined {
 }
 
 // Default models to seed per provider type
-const SEED_MODELS: Record<string, Array<{ model_id: string; name: string }>> = {
-  openrouter: [
-    // 2026-05-09: seed the operator's two core OpenRouter targets — auto-router
-    // for "just work" use and gpt-oss-120b as the explicit default model.
-    // Both are pickable / removable. Other popular models (Claude / GPT /
-    // Gemini / Llama / Qwen) are operator-added when needed; we don't
-    // poison the install with 8 active models on every fresh add.
-    // Adding a richer catalog picker UI is queued as a v1.1 follow-up.
-    { model_id: "openrouter/auto", name: "Auto (best available)" },
-    { model_id: "openrouter/openai/gpt-oss-120b", name: "GPT-OSS 120B" },
-  ],
-  anthropic: [
-    { model_id: "claude-sonnet-4-20250514", name: "Claude Sonnet 4" },
-    { model_id: "claude-haiku-4-20250414", name: "Claude Haiku 4" },
-  ],
-  openai: [
-    { model_id: "gpt-4o", name: "GPT-4o" },
-    { model_id: "gpt-4o-mini", name: "GPT-4o Mini" },
-    { model_id: "o3-mini", name: "o3-mini" },
-  ],
-  "nvidia-nim": [
-    { model_id: "nvidia/llama-3.3-nemotron-super-49b-v1", name: "Llama 3.3 Nemotron Super 49B" },
-  ],
-};
-
 // Codex 2026-05-17 round 2 #3: even with a write-time DNS check, the
 // stored base_url is a hostname that LiteLLM re-resolves at chat time.
 // An attacker hostname can resolve public at save time and rebind to
@@ -430,21 +405,7 @@ export async function addProvider(data: { id?: string; name: string; type: strin
     [id, data.name, data.type, data.baseUrl, data.apiKey || '', data.apiKeyEnv || '']
   );
 
-  // Seed default models for known provider types
-  const typeKey = (data.type || "").toLowerCase();
-  const seeds = SEED_MODELS[typeKey];
-  if (seeds) {
-    for (const s of seeds) {
-      try {
-        run(
-          `INSERT OR IGNORE INTO config_models (id, provider_id, model_id, name, is_default, context_window)
-           VALUES (?, ?, ?, ?, 0, 128000)`,
-          [`${id}::${s.model_id}`, id, s.model_id, s.name]
-        );
-      } catch {}
-    }
-  }
-
+  // Provider compatibility never selects models. Only explicit operator choices do.
   return getProvider(id)!;
 }
 

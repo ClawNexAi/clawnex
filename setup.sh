@@ -683,9 +683,7 @@ PROVIDER_REG_TYPE=""
 PROVIDER_REG_BASE_URL=""
 PROVIDER_REG_API_KEY=""
 PROVIDER_REG_MODEL_ID=""
-NVIDIA_DEFAULT_MODEL="nvidia/llama-3.3-nemotron-super-49b-v1"
-NVIDIA_DEFAULT_BASE_URL="https://integrate.api.nvidia.com/v1"
-
+# Setup saves provider credentials only; the operator selects models in Configuration.
 case "$PROVIDER_SELECT" in
     1)
         read_api_key OPENROUTER_KEY "OpenRouter" || true
@@ -694,27 +692,6 @@ case "$PROVIDER_SELECT" in
             PROVIDER_REG_TYPE="openrouter"
             PROVIDER_REG_BASE_URL="https://openrouter.ai/api/v1"
             PROVIDER_REG_API_KEY="$OPENROUTER_KEY"
-            cat > "$LITELLM_CONFIG_FILE" << EOF
-# ClawNex v${CLAWNEX_VERSION} — LiteLLM Configuration
-# Provider: OpenRouter
-# Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-model_list:
-  - model_name: "openrouter/auto"
-    litellm_params:
-      model: "openrouter/auto"
-      api_key: "${OPENROUTER_KEY}"
-
-litellm_settings:
-  callbacks: ["clawnex_logger.ClawNexLogger"]
-  drop_params: true
-  request_timeout: 120
-EOF
-            chmod 600 "$LITELLM_CONFIG_FILE" 2>/dev/null || true
-            echo -e "  ${GREEN}✓${NC} LiteLLM configured for OpenRouter"
-            LITELLM_HAS_VALID_CONFIG=true
-        else
-            echo -e "  ${YELLOW}⚠${NC} No API key provided — skipping LiteLLM configuration"
         fi
         ;;
     2)
@@ -724,27 +701,6 @@ EOF
             PROVIDER_REG_TYPE="anthropic"
             PROVIDER_REG_BASE_URL="https://api.anthropic.com"
             PROVIDER_REG_API_KEY="$ANTHROPIC_KEY"
-            cat > "$LITELLM_CONFIG_FILE" << EOF
-# ClawNex v${CLAWNEX_VERSION} — LiteLLM Configuration
-# Provider: Anthropic (Claude)
-# Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-model_list:
-  - model_name: "claude-sonnet"
-    litellm_params:
-      model: "anthropic/claude-sonnet-4-20250514"
-      api_key: "${ANTHROPIC_KEY}"
-
-litellm_settings:
-  callbacks: ["clawnex_logger.ClawNexLogger"]
-  drop_params: true
-  request_timeout: 120
-EOF
-            chmod 600 "$LITELLM_CONFIG_FILE" 2>/dev/null || true
-            echo -e "  ${GREEN}✓${NC} LiteLLM configured for Anthropic (Claude)"
-            LITELLM_HAS_VALID_CONFIG=true
-        else
-            echo -e "  ${YELLOW}⚠${NC} No API key provided — skipping LiteLLM configuration"
         fi
         ;;
     3)
@@ -754,85 +710,31 @@ EOF
             PROVIDER_REG_TYPE="openai"
             PROVIDER_REG_BASE_URL="https://api.openai.com/v1"
             PROVIDER_REG_API_KEY="$OPENAI_KEY"
-            cat > "$LITELLM_CONFIG_FILE" << EOF
-# ClawNex v${CLAWNEX_VERSION} — LiteLLM Configuration
-# Provider: OpenAI (GPT)
-# Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-model_list:
-  - model_name: "gpt-4o"
-    litellm_params:
-      model: "openai/gpt-4o"
-      api_key: "${OPENAI_KEY}"
-
-litellm_settings:
-  callbacks: ["clawnex_logger.ClawNexLogger"]
-  drop_params: true
-  request_timeout: 120
-EOF
-            chmod 600 "$LITELLM_CONFIG_FILE" 2>/dev/null || true
-            echo -e "  ${GREEN}✓${NC} LiteLLM configured for OpenAI (GPT)"
-            LITELLM_HAS_VALID_CONFIG=true
-        else
-            echo -e "  ${YELLOW}⚠${NC} No API key provided — skipping LiteLLM configuration"
         fi
         ;;
     4)
-        echo ""
         echo "  Get an NVIDIA API key: https://build.nvidia.com/models"
         read_api_key NVIDIA_KEY "NVIDIA NIM" || true
         if [ -n "$NVIDIA_KEY" ]; then
-            _tty_read "  NVIDIA model [${NVIDIA_DEFAULT_MODEL}]: " NVIDIA_MODEL
-            NVIDIA_MODEL=${NVIDIA_MODEL:-$NVIDIA_DEFAULT_MODEL}
-            _tty_read "  NVIDIA API base [${NVIDIA_DEFAULT_BASE_URL}]: " NVIDIA_BASE_URL
-            NVIDIA_BASE_URL=${NVIDIA_BASE_URL:-$NVIDIA_DEFAULT_BASE_URL}
+            _tty_read "  NVIDIA API base [https://integrate.api.nvidia.com/v1]: " NVIDIA_BASE_URL
+            NVIDIA_BASE_URL=${NVIDIA_BASE_URL:-https://integrate.api.nvidia.com/v1}
             PROVIDER_REG_NAME="NVIDIA NIM"
             PROVIDER_REG_TYPE="nvidia-nim"
             PROVIDER_REG_BASE_URL="$NVIDIA_BASE_URL"
             PROVIDER_REG_API_KEY="$NVIDIA_KEY"
-            PROVIDER_REG_MODEL_ID="$NVIDIA_MODEL"
-            cat > "$LITELLM_CONFIG_FILE" << EOF
-# ClawNex v${CLAWNEX_VERSION} — LiteLLM Configuration
-# Provider: NVIDIA NIM
-# Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-model_list:
-  - model_name: "${NVIDIA_MODEL}"
-    litellm_params:
-      model: "nvidia_nim/${NVIDIA_MODEL}"
-      api_base: "${NVIDIA_BASE_URL}"
-      api_key: "${NVIDIA_KEY}"
-
-litellm_settings:
-  callbacks: ["clawnex_logger.ClawNexLogger"]
-  drop_params: true
-  request_timeout: 120
-EOF
-            chmod 600 "$LITELLM_CONFIG_FILE" 2>/dev/null || true
-            echo -e "  ${GREEN}✓${NC} LiteLLM configured for NVIDIA NIM (${NVIDIA_MODEL})"
-            LITELLM_HAS_VALID_CONFIG=true
-        else
-            echo -e "  ${YELLOW}⚠${NC} No API key provided — skipping LiteLLM configuration"
         fi
         ;;
-    5|*)
-        # Create minimal placeholder config
-        cat > "$LITELLM_CONFIG_FILE" << EOF
-# ClawNex v${CLAWNEX_VERSION} — LiteLLM Configuration
-# Provider: Not configured — set up via dashboard or re-run setup.sh
-# Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
+esac
+cat > "$LITELLM_CONFIG_FILE" << EOF
+# ClawNex — no models are selected by installation.
 model_list: []
-
 litellm_settings:
   callbacks: ["clawnex_logger.ClawNexLogger"]
   drop_params: true
   request_timeout: 120
 EOF
-        chmod 600 "$LITELLM_CONFIG_FILE" 2>/dev/null || true
-        echo -e "  ${CYAN}•${NC} Skipped — configure model provider later via Configuration tab"
-        ;;
-esac
+chmod 600 "$LITELLM_CONFIG_FILE" 2>/dev/null || true
+echo "  Choose models in Configuration → Model Providers after setup."
 
 # Generate LiteLLM master key for authenticated proxy access
 if [ -f "$LITELLM_CONFIG_FILE" ]; then
@@ -1509,10 +1411,9 @@ if [ "$LITELLM_HAS_VALID_CONFIG" = true ]; then
 fi
 
 # Register the model provider in the dashboard DB so it shows up in
-# Configuration → Model Providers. setup.sh wrote the API key into
-# litellm/config.yaml above (so the proxy uses it) but without this step
-# the dashboard UI showed an empty providers list and the operator had
-# to re-enter the same key manually. Schema is initialized by the
+# Configuration → Model Providers without selecting any models.
+# The operator chooses models there before proxy routes are generated.
+# Schema is initialized by the
 # dashboard's first start, which we just confirmed with the health check.
 if [ -n "$PROVIDER_REG_NAME" ] && [ -f "$INSTALL_DIR/clawnex.db" -o -f "$INSTALL_DIR/sentinel.db" ]; then
     if [ -x "$INSTALL_DIR/scripts/register-provider.cjs" ] || [ -f "$INSTALL_DIR/scripts/register-provider.cjs" ]; then

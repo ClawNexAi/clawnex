@@ -44,6 +44,8 @@ export async function POST(request: NextRequest) {
     if (provider !== "elevenlabs" || !apiKey) {
       return NextResponse.json({ provider: "browser", message: "ElevenLabs not configured" }, { status: 200 });
     }
+    const modelId = getSetting("elevenlabs_model_id")?.trim();
+    if (!modelId) return NextResponse.json({ error: "Choose an ElevenLabs model in Voice & Avatar configuration before generating speech." }, { status: 400 });
 
     // Clean text for speech (remove markdown formatting)
     const cleanText = text
@@ -71,7 +73,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         text: cleanText.slice(0, 5000), // ElevenLabs limit
-        model_id: "eleven_multilingual_v2",
+        model_id: modelId,
         voice_settings: {
           stability: 0.5,
           similarity_boost: 0.75,

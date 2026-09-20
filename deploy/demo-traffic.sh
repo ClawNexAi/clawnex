@@ -17,7 +17,7 @@
 set -euo pipefail
 
 LITELLM_URL="http://127.0.0.1:4001"
-MODEL="openrouter/auto"
+MODEL=""
 DELAY=3  # seconds between requests
 MODE="all"
 
@@ -36,7 +36,7 @@ while [[ $# -gt 0 ]]; do
       echo "Options:"
       echo "  --clean-only     Only send clean (safe) requests"
       echo "  --attacks-only   Only send attack requests"
-      echo "  --model MODEL    Model to use (default: openrouter/auto)"
+      echo "  --model MODEL    Model to use (required; choose a configured model)"
       echo "  --delay N        Seconds between requests (default: 3)"
       echo "  --fast           1 second delay"
       echo "  --url URL        LiteLLM URL (default: http://127.0.0.1:4001)"
@@ -45,6 +45,11 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
+
+if [ -z "$MODEL" ]; then
+  echo "Choose a configured model with --model MODEL; no model is selected automatically." >&2
+  exit 1
+fi
 
 # Colors
 GREEN='\033[0;32m'

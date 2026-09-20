@@ -80,6 +80,9 @@ export async function POST(request: NextRequest) {
       }
 
       case "create_agent": {
+        const llmProvider = getSetting("did_llm_provider")?.trim();
+        const llmModel = getSetting("did_llm_model")?.trim();
+        if (!llmProvider || !llmModel) return NextResponse.json({ error: "Choose the D-ID agent LLM provider and model in Voice & Avatar configuration before creating an agent." }, { status: 400 });
         const presenterId = getSetting("did_presenter_id") || "v2_public_Amber@0zSz8kflCN";
         const voiceId = getSetting("elevenlabs_voice_id") || "en-US-JennyMultilingualV2Neural";
         const voiceProvider = getSetting("voice_provider");
@@ -94,8 +97,8 @@ export async function POST(request: NextRequest) {
               : { type: "microsoft", voice_id: "en-US-JennyMultilingualV2Neural" },
           },
           llm: {
-            provider: "openai",
-            model: "gpt-4o-mini",
+            provider: llmProvider,
+            model: llmModel,
             instructions: "You are the ClawNex SOC analyst assistant. Repeat exactly what the user says without modification.",
           },
         };
