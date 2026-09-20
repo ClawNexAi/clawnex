@@ -112,7 +112,7 @@ def _completed_routing_identity(kwargs, response_obj):
                     getattr(getattr(choice, "message", None), "tool_calls", None) for choice in choices)
     if not entry or not completed or not isinstance(request_id, str) or not request_id:
         return {}
-    return {"routing_connector": entry[1], "routing_source_id": entry[2], "proxy_request_id": request_id,
+    return {"source": entry[1], "routing_connector": entry[1], "routing_source_id": entry[2], "proxy_request_id": request_id,
             "model": entry[3], **({'routing_identity_hash': entry[4]} if entry[4] else {})}
 
 
@@ -120,7 +120,7 @@ def _blocked_routing_identity(kwargs):
     entry = _consume_routing_identity(kwargs)
     if not entry:
         return {}
-    return {"routing_connector": entry[1], "routing_source_id": entry[2],
+    return {"source": entry[1], "routing_connector": entry[1], "routing_source_id": entry[2],
             "proxy_request_id": f"blocked-{os.urandom(16).hex()}", "model": entry[3],
             **({'routing_identity_hash': entry[4]} if entry[4] else {})}
 

@@ -65,6 +65,7 @@ async def main():
         response = types.SimpleNamespace(id=source, choices=[types.SimpleNamespace(message=types.SimpleNamespace(content='OK'))], usage=None)
         callback.log_success_event(data, response, datetime.now(), datetime.now())
         assert rows[-1]['routing_connector'] == connector
+        assert rows[-1]['source'] == connector, 'Traffic Monitor must use the verified connector, not a model-name heuristic'
         assert rows[-1]['routing_source_id'] == source
         forged = {'proxy_server_request': {'headers': {'x-clawnex-routing-identity': token + 'forged'}}}
         assert logger._signed_routing_identity(forged) is None
