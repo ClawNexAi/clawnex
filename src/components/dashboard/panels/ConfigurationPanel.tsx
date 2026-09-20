@@ -10,6 +10,7 @@ import type { TabId } from "../types";
 import { CORRELATION_STARTER_TEMPLATES } from "@/lib/correlation-templates";
 import { AuthDevicesCard } from "./AuthDevicesCard";
 import { RoutingWorkflowPanel } from "./RoutingWorkflowPanel";
+import { AnythingLLMFleetConnector, AnythingLLMRoutingPanel } from './AnythingLLMRoutingPanel';
 import { AuthMethodsCard } from "./AuthMethodsCard";
 import { PoliciesAndRulesCard } from "./PoliciesAndRulesCard";
 import { ConfirmDialog } from "../ConfirmDialog";
@@ -4107,6 +4108,13 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   }, []);
 
 
+  const [anythingLLMCount, setAnythingLLMCount] = useState(0);
+  useEffect(() => {
+    const refreshCount = () => { void fetch('/api/config/anythingllm').then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setAnythingLLMCount(data.connectors.length); }).catch(() => {}); };
+    refreshCount(); window.addEventListener('clawnex:anythingllm', refreshCount);
+    return () => window.removeEventListener('clawnex:anythingllm', refreshCount);
+  }, []);
   if (loading) return <div style={{ padding: 20, textAlign: "center", color: C.txT }}>Loading configuration...</div>;
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -4611,7 +4619,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   );
 
   const fleetConnectorsCard = (
-      <CollapsibleCard title={<span style={{ display: "flex", alignItems: "center", gap: 8 }}>FLEET CONNECTORS <span style={{ fontSize: 10, color: C.txT, fontFamily: F.mono }}>5 frameworks &middot; {(gateways.length > 0 ? 1 : 0) + hermesConnectorCount + openCodeConnectors.length} connected</span></span>} accent={C.brand} defaultOpen={false}>
+      <CollapsibleCard title={<span style={{ display: "flex", alignItems: "center", gap: 8 }}>FLEET CONNECTORS <span style={{ fontSize: 10, color: C.txT, fontFamily: F.mono }}>6 frameworks &middot; {(gateways.length > 0 ? 1 : 0) + hermesConnectorCount + openCodeConnectors.length + anythingLLMCount} connected</span></span>} accent={C.brand} defaultOpen={false}>
         <div style={{ fontSize: 13, color: C.txS, marginBottom: 16 }}>Manage connections to agent frameworks. Each connector enables ClawNex to monitor, scan, and protect traffic from that framework.</div>
 
         {/* --- OpenClaw --- */}
@@ -4772,6 +4780,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
           Additional fleet connectors are managed through released integrations only.
           ClawNex does not show disabled connector cards until an adapter is available.
         </div>
+        <AnythingLLMFleetConnector onCountChange={setAnythingLLMCount} />
       </CollapsibleCard>
   );
 
@@ -5126,9 +5135,10 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
 
       {/* ── FLEET & ROUTING ──────────────────────────────────────────── */}
       <CategorySection title="FLEET & ROUTING" accent={C.cyan} storageKey="fleetRouting" focusCard={focusCard}
-        focusKeys={["openclawRouting", "hermesRouting", "opencodeRouting"]}>
+        focusKeys={["openclawRouting", "hermesRouting", "opencodeRouting", "anythingllmRouting"]}>
         {fleetConnectorsCard}
         <RoutingWorkflowPanel focusedCard={focusCard} connectors={['opencode']} refreshToken={codingAgentConnectorToken} />
+        <AnythingLLMRoutingPanel focusedCard={focusCard} />
         <OpenClawRoutingGuide focusedCard={focusCard} />
         <McpServerCard />
       </CategorySection>

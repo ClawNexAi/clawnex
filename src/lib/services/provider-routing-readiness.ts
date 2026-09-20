@@ -6,7 +6,8 @@ import { resolveLiteLLMConfigPath } from '../litellm/paths';
 import { deploymentRevision } from '../litellm/deployment-revision';
 import { litellmModelForConfiguredModel } from '../litellm/sync';
 import { checkProxyModelReadiness } from '../litellm/model-readiness';
-import type { ConnectorRoutingSummary } from './connector-routing-inventory';
+import type { ConnectorRoutingSummary as Summary, RoutingConnectorId } from './connector-routing-inventory';
+type ConnectorRoutingSummary = Summary<RoutingConnectorId>;
 import { resolveConfiguredProxyModel } from './configured-proxy-model';
 
 function proxyTarget(item: ConnectorRoutingSummary['items'][number]) {

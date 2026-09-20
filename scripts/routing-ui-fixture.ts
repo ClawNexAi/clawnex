@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import http from 'node:http';
+import { once } from 'node:events';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'clawnex-routing-ui-'));
 Object.assign(process.env, {
@@ -12,6 +14,7 @@ Object.assign(process.env, {
   OPENCLAW_WORKSPACE_PATH: path.join(root, 'openclaw', 'workspace'),
   SESSION_WATCHER_ENABLED: 'false',
   CLAWNEX_INGEST_SECRET: 'fixture-only-routing-identity-secret-32-bytes',
+  EVIDENCE_ENCRYPTION_KEY: '43'.repeat(32),
   CLAWNEX_SELECTIVE_ROUTING_SIDECAR: path.join(root, 'openclaw-managed.json'),
   CLAWNEX_HERMES_ROUTING_SIDECAR: path.join(root, 'hermes-managed.json'),
   CLAWNEX_LEGACY_ROUTING_SIDECAR: path.join(root, 'legacy-managed.json'),
@@ -39,6 +42,18 @@ async function main() {
   routing.syncConnectorRoutingInventory();
   routing.setAllConnectorRoutingSelections('openclaw', 'routed');
   routing.setAllConnectorRoutingSelections('hermes', 'routed');
+  if (process.argv.includes('--anythingllm')) {
+    const mock = http.createServer((req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(req.url === '/api/v1/system' ? { settings: { LLMProvider: 'generic-openai', GenericOpenAiModelPref: 'fixture-model' } } : { workspaces: [
+        { id: 1, slug: 'inherited', name: 'Team chat', chatProvider: null, chatModel: null },
+        { id: 2, slug: 'override', name: 'Research override', chatProvider: 'openai', chatModel: 'research-model', agentProvider: 'anthropic', agentModel: 'agent-model' },
+      ] }));
+    });
+    mock.listen(0, '127.0.0.1'); await once(mock, 'listening'); mock.unref();
+    const { addAnythingConnector } = await import('../src/lib/services/anythingllm-routing');
+    await addAnythingConnector({ name: 'AnythingLLM fixture', managementUrl: `http://127.0.0.1:${(mock.address() as { port: number }).port}`, relayOrigin: 'http://127.0.0.1:15001', apiKey: 'nonsecret-fixture-value' });
+  }
   getDb().close();
   console.log(`Isolated fixture: ${root}\nBrowser URL: http://127.0.0.1:15001/#tab=configuration`);
   const production = process.argv.includes('--production');

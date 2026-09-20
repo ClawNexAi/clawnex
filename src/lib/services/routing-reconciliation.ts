@@ -8,7 +8,9 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { queryAll, queryOne, run } from "@/lib/db";
-import type { ConnectorId, ConnectorRoutingItem, ConnectorRoutingSummary } from "@/lib/services/connector-routing-inventory";
+import type { RoutingConnectorId as ConnectorId, ConnectorRoutingItem as Item, ConnectorRoutingSummary as Summary } from "@/lib/services/connector-routing-inventory";
+type ConnectorRoutingItem = Item<ConnectorId>;
+type ConnectorRoutingSummary = Summary<ConnectorId>;
 
 export type RoutingChangeType =
   | "provider-added"

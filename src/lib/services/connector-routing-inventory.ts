@@ -34,14 +34,15 @@ import { resolveConfiguredProxyModel } from './configured-proxy-model';
 export { resolveConfiguredProxyModel } from './configured-proxy-model';
 
 export type ConnectorId = "openclaw" | "hermes" | "opencode";
+export type RoutingConnectorId = ConnectorId | 'anythingllm';
 export type RoutingItemType = "provider" | "model";
 export type RoutingCapability = "provider-routing" | "model-inventory" | "read-only" | "unsupported";
 export type RoutingState = "routed" | "direct" | "unknown" | "unsupported";
 export type DesiredRoutingState = "routed" | "direct";
 
-export interface ConnectorRoutingItem {
+export interface ConnectorRoutingItem<Id extends RoutingConnectorId = ConnectorId> {
   id: string;
-  connector: ConnectorId;
+  connector: Id;
   sourceId: string;
   itemType: RoutingItemType;
   providerId: string;
@@ -63,12 +64,12 @@ export interface ConnectorRoutingItem {
   isChanged?: boolean;
 }
 
-export interface ConnectorRoutingSummary {
-  connector: ConnectorId;
+export interface ConnectorRoutingSummary<Id extends RoutingConnectorId = ConnectorId> {
+  connector: Id;
   sourceId: string;
   status: "ok" | "missing" | "read-only" | "error";
   detail: string;
-  items: ConnectorRoutingItem[];
+  items: ConnectorRoutingItem<Id>[];
   drift: {
     new: number;
     removed: number;

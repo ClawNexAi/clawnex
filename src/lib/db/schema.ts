@@ -946,6 +946,16 @@ export const MIGRATIONS: string[] = [
   )`,
 
   // 2026-08-04: durable, secret-free routing reconciliation history.
+  `CREATE TABLE IF NOT EXISTS anythingllm_connectors (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    management_url TEXT NOT NULL UNIQUE,
+    relay_origin TEXT NOT NULL,
+    credentials TEXT NOT NULL,
+    state_json TEXT NOT NULL,
+    lock_token TEXT,
+    locked_until INTEGER NOT NULL DEFAULT 0
+  )`,
   `CREATE TABLE IF NOT EXISTS connector_routing_snapshots (
     id TEXT PRIMARY KEY,
     connector TEXT NOT NULL,

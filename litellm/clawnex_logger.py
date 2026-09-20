@@ -86,7 +86,7 @@ def _remember_routing_identity(auth, data):
         return
     connector = trusted.get("clawnex_routing_connector")
     source_id = trusted.get("clawnex_routing_source_id")
-    if connector not in {"openclaw", "hermes", "opencode"} or not isinstance(source_id, str) or not 0 < len(source_id) <= 200:
+    if connector not in {"openclaw", "hermes", "opencode", "anythingllm"} or not isinstance(source_id, str) or not 0 < len(source_id) <= 200:
         return
     if len(_ROUTING_IDENTITIES) >= 4096:
         return  # bounded state: absence of proof is safer than guessed identity
