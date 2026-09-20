@@ -15,6 +15,31 @@
 - Root or sudo access
 - OpenClaw installed on the VPS (`~/.openclaw/` with `openclaw.json`)
 - Internet access (for package installation)
+- System Node.js and npm at `/usr/bin/node` and `/usr/bin/npm`. Production
+  deployment uses this runtime for dependency installation, builds, and systemd.
+
+### Node upgrades and native dependencies
+
+`better-sqlite3` contains a native binary tied to the Node runtime. After a
+major Node upgrade, reinstall dependencies and rebuild the standalone artifact
+under the new system Node before restarting ClawNex. Updating Node alone can
+break login and database-backed dashboard actions even while systemd reports
+the dashboard process as running.
+
+Schedule a maintenance window and use the normal deployment workflow with
+`--preserve-data` explicitly enabled. Do not use `--no-preserve-data` for runtime
+maintenance. A fresh dependency install and build regenerate both the root and
+standalone native modules; rebuilding only the root module is insufficient.
+
+The production installer checks SQLite before building and again in the final
+standalone artifact. The service repeats the standalone check before each
+start. These checks open only an in-memory database. An incompatible module
+blocks startup with the Node version and ABI in the service journal; it does
+not automatically rebuild dependencies. Deployment also requires HTTP 200 and
+a valid JSON response from `/api/auth/status`, including on fresh installations
+where initial admin setup is still required.
+
+Run the local regression checks with `node scripts/verify-runtime-guards.cjs`.
 
 ---
 

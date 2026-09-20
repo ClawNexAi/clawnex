@@ -80,6 +80,12 @@ if ! [[ "$PUBLIC_DOMAIN" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]]; then
     exit 1
 fi
 
+if [ ! -x /usr/bin/node ] || [ ! -x /usr/bin/npm ]; then
+    echo "System Node and npm are required at /usr/bin before installation."
+    exit 1
+fi
+export PATH="/usr/bin:$PATH"
+
 echo ""
 echo -e "${CYAN}${BOLD}╔══════════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}${BOLD}║      ClawNex Production Deploy — ${PUBLIC_DOMAIN}    ${NC}"
@@ -222,6 +228,8 @@ echo ""
 # ---------------------------------------------------------------------------
 echo -e "${BOLD}[3/8] Rebuilding with public-domain env${NC}"
 cd "$INSTALL_DIR"
+# Catch stale native dependencies before an expensive build.
+/usr/bin/node "$INSTALL_DIR/scripts/check-native-runtime.cjs" "$INSTALL_DIR"
 # internal reviewer 2026-05-10 fail-closed: capture full build log to disk and exit
 # loudly on failure. The previous `| tail -3` swallowed type errors that
 # made `next build` fail silently, leading to dashboard restart-loops.
@@ -249,6 +257,7 @@ if [ ! -d "${INSTALL_DIR}/.next/standalone/.next/static" ]; then
     tail -50 "$BUILD_LOG"
     exit 1
 fi
+/usr/bin/node "$INSTALL_DIR/scripts/check-native-runtime.cjs" "$INSTALL_DIR/.next/standalone"
 echo -e "  ${GREEN}✓${NC} build complete (full log: $BUILD_LOG)"
 echo ""
 
@@ -430,6 +439,7 @@ Environment=HOSTNAME=127.0.0.1
 # (operator data loss; live finding on Crucible 2026-06-13).
 Environment=DATABASE_PATH=${INSTALL_DIR}/clawnex.db
 Environment=CLAWNEX_LOG_DIR=${INSTALL_DIR}/logs
+ExecStartPre=/usr/bin/node "${INSTALL_DIR}/scripts/check-native-runtime.cjs" "${INSTALL_DIR}/.next/standalone"
 ExecStart=${DASHBOARD_EXEC}
 Restart=always
 RestartSec=5

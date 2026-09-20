@@ -300,6 +300,12 @@ SUDO_PASS_B64=$(printf '%s' "$SUDO_PASS" | base64 | tr -d '\n')
 ssh -o BatchMode=yes "$HOST" \
   "DOMAIN='$DOMAIN' SUDOPW_B64='$SUDO_PASS_B64' DEEP_CLEAN='$DEEP_CLEAN_REMOTE' PRESERVE_DATA='$PRESERVE_DATA_REMOTE' PRESERVE_CADDY='$PRESERVE_CADDY' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
+# Match the systemd runtime before installing any native dependencies.
+if [ ! -x /usr/bin/node ] || [ ! -x /usr/bin/npm ]; then
+  echo "System Node and npm are required at /usr/bin before deployment."
+  exit 1
+fi
+export PATH="/usr/bin:$PATH"
 INSTALL_DIR="$HOME/clawnex"
 TARBALL="/tmp/cnx-bundle.tar.gz"
 DATA_PRESERVE_TAR="/tmp/clawnex-data-preserve.tar.gz"
@@ -540,6 +546,7 @@ DEPLOY_LOG_DIR="/tmp/clawnex-deploy-logs-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$DEPLOY_LOG_DIR"
 echo "  full deploy logs: $DEPLOY_LOG_DIR"
 npm ci --no-audit --no-fund 2>&1 | tee "$DEPLOY_LOG_DIR/npm-ci.log" | tail -40
+/usr/bin/node "$INSTALL_DIR/scripts/check-native-runtime.cjs" "$INSTALL_DIR"
 npm run build 2>&1 | tee "$DEPLOY_LOG_DIR/npm-build.log" | tail -80
 
 echo "=== 7/8 install-prod.sh ${DOMAIN} ==="
@@ -710,7 +717,13 @@ echo "=== 8/8 health + url ==="
 HEALTH_LB=$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:5001/api/health 2>/dev/null)
 HEALTH_HTTPS=$(curl -sk --resolve "${DOMAIN}:443:127.0.0.1" --max-time 10 -o /dev/null -w '%{http_code}' "https://${DOMAIN}/api/health" 2>/dev/null)
 HEALTH_PUBLIC=$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' "https://${DOMAIN}/api/health" 2>/dev/null)
-AUTH=$(curl -sk --resolve "${DOMAIN}:443:127.0.0.1" --max-time 8 "https://${DOMAIN}/api/auth/status" 2>/dev/null)
+AUTH_RESPONSE=$(curl -sk --resolve "${DOMAIN}:443:127.0.0.1" --max-time 8 -w '\n%{http_code}' "https://${DOMAIN}/api/auth/status" 2>/dev/null || true)
+AUTH_HTTP="${AUTH_RESPONSE##*$'\n'}"
+AUTH_BODY="${AUTH_RESPONSE%$'\n'*}"
+AUTH_OK=0
+if printf '%s' "$AUTH_BODY" | /usr/bin/node "$INSTALL_DIR/scripts/check-auth-status.cjs" "$AUTH_HTTP"; then
+  AUTH_OK=1
+fi
 CERT_ISSUER=$(echo | openssl s_client -servername "${DOMAIN}" -connect 127.0.0.1:443 2>/dev/null | openssl x509 -noout -issuer 2>/dev/null)
 
 # LiteLLM proxy on :4001 — only checked when the unit was installed (skipped
@@ -754,7 +767,7 @@ echo
 echo "loopback http  /api/health  : ${HEALTH_LB}"
 echo "loopback https /api/health  : ${HEALTH_HTTPS}"
 echo "public   https /api/health  : ${HEALTH_PUBLIC}"
-echo "auth status                 : ${AUTH}"
+echo "auth readiness              : ${AUTH_OK} (HTTP ${AUTH_HTTP})"
 echo "cert issuer                 : ${CERT_ISSUER}"
 echo "litellm service             : ${LITELLM_ACTIVE}"
 echo "litellm /health             : ${LITELLM_HEALTH}"
@@ -768,6 +781,10 @@ echo
 # Exit non-zero if any required service failed. Each gate emits its own
 # failure line so the operator sees exactly what's wrong before bailing.
 DEPLOY_OK=1
+if [ "$AUTH_OK" != "1" ]; then
+  echo "✗ authentication endpoint is not ready — check dashboard logs"
+  DEPLOY_OK=0
+fi
 if [ "${PRESERVE_CADDY:-0}" = "1" ]; then
   CADDY_HASH_AFTER=$(sudo -A sha256sum /etc/caddy/Caddyfile | awk '{print $1}')
   CADDY_PID_AFTER=$(systemctl show caddy -p MainPID --value)
