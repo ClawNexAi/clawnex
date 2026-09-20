@@ -80,7 +80,7 @@ For SSH-driven deploys from a workstation that already has the ClawNex repo chec
   --version v0.10.0-alpha-2026-05-01
 ```
 
-The script handles tarball upload, deep clean, install, build, Caddyfile regeneration, systemd unit reinstall, and the `/api/health` probe in one go. Add `--dry-run` to print every command without executing. See `docs/12-deployment-guide.md §6.2a` for the full flag list and the OpenClaw-preservation guarantees.
+The script handles packaging, tarball upload, deep clean, install, build, Caddyfile regeneration, systemd unit reinstall, and health checks. For a fresh app installation with working HTTPS already configured, add `--no-preserve-data --preserve-caddy`: the database and app secrets are reset, while the validated Caddyfile, certificates, and running Caddy service are retained. OpenClaw and Hermes installations remain outside the wipe scope. `--no-deep-clean` alone does not preserve Caddy. Package from a clean checkout of the intended branch. Add `--dry-run` to preview the plan (requires an existing tarball). See `docs/12-deployment-guide.md §6.2a` for details.
 
 The throwaway `/tmp/deploy-prod-legacy.sh` from earlier QA cycles is **deprecated** — do not use it. Anything you'd reach for there is now in `scripts/deploy-prod.sh`.
 

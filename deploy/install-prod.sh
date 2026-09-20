@@ -11,7 +11,7 @@
 #
 # Requires: sudo, Linux host (Ubuntu / Debian — apt-based)
 # Usage:
-#   ./deploy/install-prod.sh <public-domain>
+#   ./deploy/install-prod.sh <public-domain> [--preserve-caddy]
 #   e.g. ./deploy/install-prod.sh app.example.com
 #
 # Pre-requisites:
@@ -61,6 +61,14 @@ if [ "$#" -lt 1 ]; then
 fi
 
 PUBLIC_DOMAIN="$1"
+shift
+PRESERVE_CADDY=0
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --preserve-caddy) PRESERVE_CADDY=1; shift ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
 
 # CX-G6 fix (2026-04-26 adversarial review): validate the domain BEFORE any
 # file write or sudo invocation. Without this an attacker who tricks the
@@ -118,6 +126,16 @@ else
     trap "kill $SUDO_KEEPALIVE_PID 2>/dev/null" EXIT
     SUDO="sudo"
     echo -e "  ${GREEN}✓${NC} sudo cached (background keepalive PID ${SUDO_KEEPALIVE_PID})"
+fi
+
+# Preservation is opt-in and requires the existing proxy contract to be valid.
+# Do this before editing the app environment or rebuilding.
+if [ "$PRESERVE_CADDY" = "1" ]; then
+    $SUDO caddy validate --config /etc/caddy/Caddyfile
+    $SUDO systemctl is-active --quiet caddy
+    $SUDO grep -Fxq "${PUBLIC_DOMAIN} {" /etc/caddy/Caddyfile
+    $SUDO grep -Eq '^[[:space:]]*reverse_proxy 127[.]0[.]0[.]1:5001[[:space:]]*\{' /etc/caddy/Caddyfile
+    $SUDO grep -Eq '^[[:space:]]*header_up X-Forwarded-For \{remote_host\}[[:space:]]*$' /etc/caddy/Caddyfile
 fi
 
 if [ ! -f "$INSTALL_DIR/.env.local" ]; then
@@ -238,6 +256,7 @@ echo ""
 # Install Caddy from official repo
 # ---------------------------------------------------------------------------
 echo -e "${BOLD}[4/8] Installing Caddy${NC}"
+if [ "$PRESERVE_CADDY" != "1" ]; then
 if command -v caddy &>/dev/null; then
     echo -e "  ${GREEN}✓${NC} Caddy already installed: $(caddy version | head -1)"
 else
@@ -374,6 +393,9 @@ else
     echo -e "      Then re-run this installer; the Caddyfile will pick up the directive automatically."
 fi
 echo ""
+else
+    echo "  Existing Caddy installation and configuration retained"
+fi
 
 # ---------------------------------------------------------------------------
 # systemd unit for the dashboard
@@ -630,6 +652,7 @@ fi
 # BEFORE clawnex-litellm + clawnex-dashboard restarts. See
 # scripts/deploy-prod.sh and verify-post-deploy-rehydrate.ts §4.
 
+if [ "$PRESERVE_CADDY" != "1" ]; then
 $SUDO systemctl enable caddy
 # Use RESTART (not start) — Debian's apt install of Caddy auto-starts the
 # service with the default file_server Caddyfile, so a plain `start` is a
@@ -639,6 +662,7 @@ $SUDO systemctl enable caddy
 # state cleanly so we use restart for determinism.)
 $SUDO systemctl restart caddy
 sleep 5
+fi
 if ! $SUDO systemctl is-active --quiet caddy; then
     echo -e "  ${RED}✗${NC} caddy failed to start. Check: $SUDO journalctl -u caddy -n 30"
     exit 1

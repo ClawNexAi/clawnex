@@ -878,6 +878,29 @@ curl http://127.0.0.1:5001/api/health | python3 -m json.tool
 
 ### 6.2a Canonical remote deploy: `scripts/deploy-prod.sh` (added 2026-05-01, v0.14.5 enhancements 2026-05-08)
 
+**v0.15.10: fresh application with existing HTTPS infrastructure.** Add
+`--preserve-caddy --no-preserve-data` when the existing Caddy configuration is
+already correct. This still wipes `~/clawnex`, including its database and old
+application secrets, and reinstalls the app and its system services. It requires
+first-run onboarding. OpenClaw and Hermes installations are outside the wipe
+scope. Caddy's configuration, certificate storage, and running service are kept.
+Before the wipe, the script requires an active Caddy service, valid configuration,
+the requested domain, the loopback port-5001 upstream, and the trusted
+X-Forwarded-For override. It verifies the Caddyfile checksum and service PID after
+deployment. `--no-deep-clean` alone does **not** prevent Caddy regeneration.
+
+Build from a clean checkout of the intended Git commit: packaging copies files
+from disk, not from Git. The current version is packaged automatically into
+`deploy/clawnex-v<VERSION>-deploy.tar.gz`; `--version` does not select a branch.
+The public deployment uses system-level `clawnex-dashboard`, `clawnex-litellm`,
+and `caddy` units. Application build failures stop deployment; public and local
+HTTPS health must both return 200. A fresh install has no old database rollback.
+
+```bash
+scripts/deploy-prod.sh --host user@host --domain qa.example.com \
+  --no-preserve-data --preserve-caddy --sudo-pass-env SUDO_PASSWORD
+```
+
 For SSH-driven deploys to a remote host (staging host / <qa-host> / customer servers / Tailscale-only test boxes), ClawNex now ships a single durable script at `scripts/deploy-prod.sh`. It supersedes the throwaway `/tmp/deploy-prod-legacy.sh` that previous QA cycles passed around — the old path is **deprecated and should not be used**.
 
 **v0.14.5 enhancements (2026-05-08):**
