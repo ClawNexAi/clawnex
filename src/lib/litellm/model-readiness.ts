@@ -64,7 +64,13 @@ export async function checkProxyModelReadiness(options: ProxyModelReadinessOptio
         metadata: { clawnex_test: 'provider-readiness' },
       }),
     });
-    if (!response.ok) return { ready: false, status: 'inference-failed' };
+    if (!response.ok) {
+      // Classify the known local failure without returning upstream bodies
+      // (which can contain provider details or credentials) to the browser.
+      const failure = await response.text().catch(() => '');
+      return { ready: false, status: failure.includes('scan_error_fail_closed')
+        ? 'shield-unavailable' : 'inference-failed' };
+    }
     const data = await response.json();
     const choice = data?.choices?.[0];
     const message = choice?.message;

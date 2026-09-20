@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { isAuthenticatedProxyService } from '@/lib/proxy-service-auth';
 import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/guard';
 import { requireLocalhost } from '@/lib/middleware/localhost-guard';
 import { shieldScan, outboundScan, getPersistedWhitelist } from "@/lib/shield/scanner";
@@ -29,12 +30,13 @@ export const runtime = "nodejs";
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
-  if (isRbacEnabled()) {
+  const proxyService = isAuthenticatedProxyService(request);
+  if (!proxyService && isRbacEnabled()) {
     const auth = requireSession(request);
     if (auth instanceof NextResponse) return auth;
     const perm = requirePermission(auth.operator, 'shield:scan');
     if (perm) return perm;
-  } else {
+  } else if (!proxyService) {
     const blocked = requireLocalhost(request);
     if (blocked) return blocked;
   }

@@ -162,11 +162,17 @@ def _extract_text(messages, excluded_roles=None):
     return "\n".join(parts)
 
 
+def _service_headers():
+    secret = os.environ.get("CLAWNEX_INGEST_SECRET", "")
+    return {"x-clawnex-ingest-secret": secret} if secret else {}
+
+
 def _scan(text, direction="inbound"):
     try:
         resp = httpx.post(
             f"{CLAWNEX_API}/api/shield/scan",
             json={"text": text, "source": "litellm-proxy", "direction": direction},
+            headers=_service_headers(),
             timeout=10,
         )
         if resp.status_code == 200:
@@ -333,7 +339,7 @@ def _is_block_mode_on():
     rather than being downgraded to a log-only event.
     """
     try:
-        resp = httpx.get(f"{CLAWNEX_API}/api/proxy/block-mode", timeout=3)
+        resp = httpx.get(f"{CLAWNEX_API}/api/proxy/block-mode", headers=_service_headers(), timeout=3)
         if resp.status_code == 200:
             return resp.json().get("blockMode") == "on"
         if _fail_closed():
@@ -355,7 +361,7 @@ def _is_break_glass_active():
     Errors always return False regardless of policy.
     """
     try:
-        resp = httpx.get(f"{CLAWNEX_API}/api/break-glass/status", timeout=3)
+        resp = httpx.get(f"{CLAWNEX_API}/api/break-glass/status", headers=_service_headers(), timeout=3)
         if resp.status_code == 200:
             return resp.json().get("active", False)
     except Exception as e:

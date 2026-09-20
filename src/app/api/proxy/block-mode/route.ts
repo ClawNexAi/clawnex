@@ -5,6 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { isAuthenticatedProxyService } from '@/lib/proxy-service-auth';
 import { isRbacEnabled, requireSession, requirePermission, getOperatorFromRequest } from '@/lib/rbac/guard';
 import { requireLocalhost } from "@/lib/middleware/localhost-guard";
 import { getSetting, setSetting } from "@/lib/services/config-service";
@@ -16,12 +17,13 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  if (isRbacEnabled()) {
+  const proxyService = isAuthenticatedProxyService(request);
+  if (!proxyService && isRbacEnabled()) {
     const auth = requireSession(request);
     if (auth instanceof NextResponse) return auth;
     const perm = requirePermission(auth.operator, 'shield:read');
     if (perm) return perm;
-  } else {
+  } else if (!proxyService) {
     const guard = requireLocalhost(request);
     if (guard) return guard;
   }

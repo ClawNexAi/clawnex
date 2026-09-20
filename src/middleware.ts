@@ -20,6 +20,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { RBAC_BUILD_ENABLED } from './lib/rbac/build-config';
 import { PUBLIC_ORIGIN_BUILD } from './lib/auth/build-origin';
+import { isProxyServiceEndpoint } from './lib/proxy-service-paths';
 
 /**
  * Generate a fresh CSP nonce per request and attach it to both:
@@ -316,7 +317,11 @@ export function middleware(request: NextRequest) {
     '/.well-known/',
   ];
 
-  const isPublic = publicPaths.some((p) => pathname.startsWith(p));
+  // Like ingest, these exact method/path pairs validate their service secret
+  // in the Node handler. Header presence here is NOT authentication.
+  const serviceCandidate = isProxyServiceEndpoint(pathname, request.method) &&
+    request.headers.has('x-clawnex-ingest-secret');
+  const isPublic = serviceCandidate || publicPaths.some((p) => pathname.startsWith(p));
   if (isPublic) {
     return applySecurityHeaders(
       NextResponse.next({ request: { headers: reqHeaders } }),

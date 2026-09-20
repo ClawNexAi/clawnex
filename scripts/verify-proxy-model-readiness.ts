@@ -55,6 +55,10 @@ async function main() {
     completionStatus = 401;
     const rejected = await checkProxyModelReadiness({ configPath, modelAlias: 'fixture-model', port: 4001, approved: true, fetchImpl: proxy });
     assert.equal(rejected.ready, false);
+    completionStatus = 400;
+    completionBody = { error: { message: 'Request blocked by ClawNex Prompt Shield. Detections: scan_error_fail_closed' } };
+    const shieldFailure = await checkProxyModelReadiness({ configPath, modelAlias: 'fixture-model', port: 4001, approved: true, fetchImpl: proxy });
+    assert.equal(shieldFailure.status, 'shield-unavailable');
     completionStatus = 200;
     completionBody = { choices: [] };
     const malformed = await checkProxyModelReadiness({ configPath, modelAlias: 'fixture-model', port: 4001, approved: true, fetchImpl: proxy });
