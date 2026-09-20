@@ -3551,6 +3551,40 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   // the old config until manual Restart. Surface that contract explicitly
   // via this banner — the reviewer's required pre-Docker condition.
   const [restartHintVisible, setRestartHintVisible] = useState(false);
+  const [proxyRestartBusy, setProxyRestartBusy] = useState(false);
+  const [proxyRestartNotice, setProxyRestartNotice] = useState<string | null>(null);
+  const proxyRestartRevision = useRef(0);
+  const markProxyRestartNeeded = useCallback(() => {
+    proxyRestartRevision.current++;
+    setProxyRestartNotice(null);
+    setRestartHintVisible(true);
+  }, []);
+  const restartProviderProxy = async () => {
+    if (proxyRestartBusy || !restartHintVisible) return;
+    const revision = proxyRestartRevision.current;
+    setProxyRestartBusy(true);
+    setProxyRestartNotice(null);
+    try {
+      const response = await fetch('/api/system/litellm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'restart' }),
+      });
+      const result = await response.json();
+      if (!response.ok || result.ok !== true) {
+        setProxyRestartNotice(result.error || 'Restart failed. Retry or review the service in Infrastructure.');
+        return;
+      }
+      setProxyTestMessage({});
+      if (proxyRestartRevision.current === revision) {
+        setRestartHintVisible(false);
+        setProxyRestartNotice('Restart requested. Wait for LiteLLM to start, then test the selected model through the proxy.');
+      } else {
+        setProxyRestartNotice('Configuration changed during restart. Apply the latest changes before testing.');
+      }
+    } catch {
+      setProxyRestartNotice('Could not confirm the restart. Check Infrastructure before retrying.');
+    } finally { setProxyRestartBusy(false); }
+  };
   const [providerSaveError, setProviderSaveError] = useState<string | null>(null);
   const [proxyTestModel, setProxyTestModel] = useState<Record<string, string>>({});
   const [proxyTestBusy, setProxyTestBusy] = useState<string | null>(null);
@@ -3825,6 +3859,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
             'invalid-configuration': { tone: 'error', title: 'Proxy test failed', detail: 'The proxy configuration is missing or invalid. Correct it before testing.' },
             'proxy-unavailable': { tone: 'error', title: 'Proxy test failed', detail: 'Cannot inspect the running proxy. Check LiteLLM service status and its management credential.' },
             'inference-failed': { tone: 'error', title: 'Proxy test failed', detail: 'The selected model did not return a successful response. Check its provider credentials and availability.' },
+            'shield-unavailable': { tone: 'error', title: 'ClawNex Shield unavailable', detail: 'The proxy could not complete its Shield scan, so ClawNex blocked the test before provider inference. Check the internal Shield connection and service authentication.' },
             'inference-timeout': { tone: 'error', title: 'Proxy test timed out', detail: 'The provider did not complete the test within 125 seconds. It may be overloaded, cold-starting, or temporarily unavailable.' },
             'invalid-response': { tone: 'error', title: 'Proxy test failed', detail: 'The provider returned an incomplete response. The connection is not confirmed.' },
             'configuration-changed': { tone: 'warning', title: 'Result not retained', detail: 'Configuration changed during the test. Review the changes and test again.' },
@@ -3854,7 +3889,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
         });
       const result = await response.json();
       if (response.ok || result.saved || result.removed) await fetchConfig();
-      if (response.ok && result.synced === true) setRestartHintVisible(true);
+      if (response.ok && result.synced === true) markProxyRestartNeeded();
       else setProviderSaveError(result.error || 'Model change could not be synchronized. Refresh configuration before retrying.');
     } catch {
       setProviderSaveError('Could not confirm the model change. Refresh configuration before retrying.');
@@ -3878,13 +3913,13 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
       if (res.ok && data.configSynced !== false) {
         // Surface the manual-Restart contract — see comment on
         // restartHintVisible state for the full reasoning.
-        setRestartHintVisible(true);
+        markProxyRestartNeeded();
         if (data.provider) testProvider({ ...data.provider, baseUrl: data.provider.base_url, apiKey: data.provider.api_key || "", models: [] });
       } else {
         setProviderSaveError(data.error || 'Provider could not be saved. Check configuration and try again.');
       }
     } catch { setProviderSaveError('Could not confirm the save result. Refresh the provider list before retrying to avoid adding it twice.'); }
-  }, [newProviderName, newProviderUrl, newProviderType, newProviderKey, fetchConfig, testProvider]);
+  }, [newProviderName, newProviderUrl, newProviderType, newProviderKey, fetchConfig, testProvider, markProxyRestartNeeded]);
 
   const saveProviderEdit = useCallback(async () => {
     if (!editingProvider || !editingProvider.name.trim() || !editingProvider.baseUrl.trim()) return;
@@ -3910,12 +3945,12 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
         setEditingProvider(null);
         await fetchConfig();
       }
-      if (response.ok && result.configSynced === true) setRestartHintVisible(true);
+      if (response.ok && result.configSynced === true) markProxyRestartNeeded();
       else setProviderSaveError(result.error || 'Provider could not be updated. Review the fields and try again.');
     } catch {
       setProviderSaveError('Could not confirm the update. Refresh the provider list before retrying.');
     } finally { setProviderEditBusy(false); }
-  }, [editingProvider, fetchConfig]);
+  }, [editingProvider, fetchConfig, markProxyRestartNeeded]);
 
   const removeProvider = useCallback((id: string) => {
     // v0.7.3: confirm before removing — single accidental click would drop
@@ -3945,14 +3980,14 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
           }
           if (res.ok && data.configSynced !== false) {
             // Same restart contract as add — see restartHintVisible comment.
-            setRestartHintVisible(true);
+            markProxyRestartNeeded();
           } else {
             setProviderSaveError(data.error || 'Provider removal could not be completed. Refresh and review its state.');
           }
         } catch { setProviderSaveError('Could not confirm removal. Refresh the provider list and verify proxy configuration before retrying.'); }
       },
     });
-  }, [fetchConfig, providers]);
+  }, [fetchConfig, providers, markProxyRestartNeeded]);
 
   const addGateway = useCallback(async () => {
     if (!newGatewayName.trim() || !newGatewayUrl.trim()) return;
@@ -4237,12 +4272,13 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
         {/* Restart-required banner — surfaces the manual-Restart contract
             after provider add/remove. Per the reviewer's 2026-05-09 conditional
             sign-off: provider save syncs config.yaml but does NOT auto-
-            restart LiteLLM. Operator must click Restart in Infrastructure
-            for the new routing to take effect. */}
+            restart LiteLLM. Offer the same authorized restart action here
+            while saved changes are pending. */}
         {providerSaveError && <div role="alert" style={{ color: C.warn, padding: 12 }}>{providerSaveError}</div>}
+        {proxyRestartNotice && <div role="status" style={{ color: C.txS, padding: 12 }}>{proxyRestartNotice}</div>}
         {restartHintVisible && (
           <div style={{
-            display: "flex", alignItems: "center", gap: 12,
+            display: "flex", alignItems: "center", flexWrap: "wrap", gap: 12,
             padding: "10px 14px", marginBottom: 12,
             background: `${C.warn}15`,
             border: `1px solid ${C.warn}55`,
@@ -4253,9 +4289,18 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
             <div style={{ flex: 1, fontSize: 12, color: C.tx, lineHeight: 1.5 }}>
               <strong>Provider saved. LiteLLM config synced.</strong>{" "}
               <span style={{ color: C.txS }}>
-                Click Restart in Infrastructure Health to apply routing changes — until you do, LiteLLM still serves the old model list.
+                Restart the proxy here to load these changes, then test the selected model. Routine service controls remain in Infrastructure.
               </span>
             </div>
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <button
+              onClick={restartProviderProxy}
+              disabled={proxyRestartBusy}
+              style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, fontFamily: F.mono,
+                background: C.cyan, color: '#06121f', border: 0, borderRadius: 6,
+                cursor: proxyRestartBusy ? 'wait' : 'pointer', opacity: proxyRestartBusy ? 0.6 : 1,
+                textTransform: 'uppercase', flexShrink: 0 }}
+            >{proxyRestartBusy ? 'Restarting…' : 'Restart LiteLLM proxy'}</button>
             {onNavigate && (
               <button
                 onClick={() => { setRestartHintVisible(false); onNavigate("infrastructure"); }}
@@ -4279,6 +4324,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
             >
               ×
             </button>
+            </div>
           </div>
         )}
         {providers.map(p => (
