@@ -51,6 +51,8 @@ async function main() {
     const event = listUnresolvedRoutingEvents().find(value => value.changeType === 'endpoint-changed');
     assert.equal(event?.current?.endpoint, 'https://changed.example/v1');
     assert.equal(event?.previous?.endpoint, 'http://127.0.0.1:4001/v1');
+    assert.equal(verifyRouting(summary).verificationSince, baseline,
+      'inventory snapshots and drift discovery do not move the post-operation evidence baseline');
     console.log('PASS: exact-instance successful evidence only; stable refresh baseline; no duplicate model denominator; readable drift states');
   } finally { getDb().close(); }
 }

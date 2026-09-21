@@ -407,27 +407,17 @@ export function verifyRouting(summary: ConnectorRoutingSummary, options: { since
 }
 
 function latestVerificationBaseline(connector: ConnectorId, sourceId: string): string | null {
+  // Verification proves traffic after the latest operator mutation. Inventory
+  // snapshots and drift events are observations; verify itself creates them
+  // immediately before this query, so treating them as a baseline would make
+  // valid traffic sent before the click impossible to count.
   const operation = queryOne<{ created_at: string }>(
     `SELECT created_at FROM connector_routing_operations
      WHERE connector = ? AND source_id = ? AND operation IN ('apply', 'revert', 'restart')
      ORDER BY created_at DESC LIMIT 1`,
     [connector, sourceId],
   );
-  const snapshot = queryOne<{ created_at: string }>(
-    `SELECT created_at FROM connector_routing_snapshots
-     WHERE connector = ? AND source_id = ? ORDER BY created_at DESC LIMIT 1`,
-    [connector, sourceId],
-  );
-  const event = queryOne<{ created_at: string }>(
-    `SELECT created_at FROM connector_routing_events
-     WHERE connector = ? AND source_id = ? AND resolved_at IS NULL
-     ORDER BY created_at DESC LIMIT 1`,
-    [connector, sourceId],
-  );
-  const candidates = [operation?.created_at, snapshot?.created_at, event?.created_at]
-    .filter((value): value is string => Boolean(value));
-  if (candidates.length === 0) return null;
-  return candidates.sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1) || null;
+  return operation?.created_at || null;
 }
 
 export function listUnresolvedRoutingEvents(limit = 50): RoutingDriftEvent[] {

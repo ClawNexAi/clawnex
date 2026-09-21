@@ -71,6 +71,7 @@ export async function POST(request: NextRequest) {
     );
     recordRoutingOperation({
       connector: 'openclaw',
+      sourceId: 'default',
       operation: 'restart',
       outcome: result.status,
       restartOutcome: result.status,
