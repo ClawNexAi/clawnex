@@ -97,7 +97,7 @@ interface HermesInstanceConfig {
 
 interface CodingAgentConnectorConfig {
   id: string;
-  type: 'opencode' | 'pi' | 'codex';
+  type: 'opencode' | 'pi' | 'codex' | 'claude';
   name: string;
   configPath: string;
   available: boolean;
@@ -4638,7 +4638,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   );
 
   const fleetConnectorsCard = (
-      <CollapsibleCard title={<span style={{ display: "flex", alignItems: "center", gap: 8 }}>FLEET CONNECTORS <span style={{ fontSize: 10, color: C.txT, fontFamily: F.mono }}>6 frameworks &middot; {(gateways.length > 0 ? 1 : 0) + hermesConnectorCount + codingAgentConnectors.filter(c => c.available).length + anythingLLMCount} connected</span></span>} accent={C.brand} defaultOpen={false}>
+      <CollapsibleCard title={<span style={{ display: "flex", alignItems: "center", gap: 8 }}>FLEET CONNECTORS <span style={{ fontSize: 10, color: C.txT, fontFamily: F.mono }}>7 frameworks &middot; {(gateways.length > 0 ? 1 : 0) + hermesConnectorCount + codingAgentConnectors.filter(c => c.available).length + anythingLLMCount} connected</span></span>} accent={C.brand} defaultOpen={false}>
         <div style={{ fontSize: 13, color: C.txS, marginBottom: 16 }}>Manage connections to agent frameworks. Each connector enables ClawNex to monitor, scan, and protect traffic from that framework.</div>
 
         {/* --- OpenClaw --- */}
@@ -4798,6 +4798,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
         <AnythingLLMFleetConnector onCountChange={setAnythingLLMCount} />
         <NativeAgentFleetConnector type="pi" title="Pi" configHint="~/.pi/agent/models.json" connectors={codingAgentConnectors} refresh={fetchConfig} />
         <NativeAgentFleetConnector type="codex" title="Codex" configHint="~/.codex/config.toml" connectors={codingAgentConnectors} refresh={fetchConfig} />
+        <NativeAgentFleetConnector type="claude" title="Claude Code" configHint="~/.claude/settings.json" connectors={codingAgentConnectors} refresh={fetchConfig} />
         <div style={{ fontSize: 12, color: C.txT, lineHeight: 1.5 }}>
           Additional fleet connectors are managed through released integrations only.
           ClawNex does not show disabled connector cards until an adapter is available.
@@ -5156,11 +5157,11 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
 
       {/* ── FLEET & ROUTING ──────────────────────────────────────────── */}
       <CategorySection title="FLEET & ROUTING" accent={C.cyan} storageKey="fleetRouting" focusCard={focusCard}
-        focusKeys={["openclawRouting", "hermesRouting", "opencodeRouting", "anythingllmRouting", "piRouting", "codexRouting"]}>
+        focusKeys={["openclawRouting", "hermesRouting", "opencodeRouting", "anythingllmRouting", "piRouting", "codexRouting", "claudeRouting"]}>
         {fleetConnectorsCard}
         <RoutingWorkflowPanel focusedCard={focusCard} connectors={['opencode']} refreshToken={codingAgentConnectorToken} />
         <AnythingLLMRoutingPanel focusedCard={focusCard} />
-        <RoutingWorkflowPanel focusedCard={focusCard} connectors={['pi', 'codex']} refreshToken={codingAgentConnectorToken} />
+        <RoutingWorkflowPanel focusedCard={focusCard} connectors={['pi', 'codex', 'claude']} refreshToken={codingAgentConnectorToken} />
         <OpenClawRoutingGuide focusedCard={focusCard} />
         <McpServerCard />
       </CategorySection>

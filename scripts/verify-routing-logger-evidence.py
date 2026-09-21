@@ -55,7 +55,7 @@ async def main():
         assert row.get('proxy_request_id') == (response.id if trusted else None), row
     assert not logger._completed_routing_identity(data, response), 'A consumed/forged identity cannot be replayed'
     os.environ['CLAWNEX_INGEST_SECRET'] = 'fixture-only-routing-identity-secret-32-bytes'
-    for connector, source in [('hermes', 'signed-instance-a'), ('hermes', 'signed-instance-b'), ('anythingllm', 'anythingllm-instance'), ('opencode', 'opencode:global')]:
+    for connector, source in [('hermes', 'signed-instance-a'), ('hermes', 'signed-instance-b'), ('anythingllm', 'anythingllm-instance'), ('pi', 'pi:global'), ('codex', 'codex:global'), ('claude', 'claude:global'), ('opencode', 'opencode:global')]:
         payload = base64.urlsafe_b64encode(json.dumps({'v': 1, 'connector': connector, 'sourceId': source, 'nonce': 'fixture'}).encode()).decode().rstrip('=')
         signature = base64.urlsafe_b64encode(hmac.new(os.environ['CLAWNEX_INGEST_SECRET'].encode(), ('clawnex-routing-v1:' + payload).encode(), hashlib.sha256).digest()).decode().rstrip('=')
         token = payload + '.' + signature

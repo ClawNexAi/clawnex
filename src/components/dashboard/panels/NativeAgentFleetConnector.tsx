@@ -4,7 +4,7 @@ import { C, F } from '../constants';
 import { Badge, Dot } from '../shared';
 
 export function NativeAgentFleetConnector({ type, title, configHint, connectors, refresh }: {
-  type: 'pi' | 'codex'; title: string; configHint: string;
+  type: 'pi' | 'codex' | 'claude'; title: string; configHint: string;
   connectors: Array<{ id: string; type: string; name: string; configPath: string; available: boolean; error: string | null }>;
   refresh: () => void | Promise<void>;
 }) {

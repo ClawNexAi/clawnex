@@ -4,8 +4,8 @@ import path from 'node:path';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import { getSetting, getProvider, listModels } from './config-service';
 
-export type NativeAgent = 'pi' | 'codex';
-export function isNativeAgent(value: unknown): value is NativeAgent { return value === 'pi' || value === 'codex'; }
+export type NativeAgent = 'pi' | 'codex' | 'claude';
+export function isNativeAgent(value: unknown): value is NativeAgent { return value === 'pi' || value === 'codex' || value === 'claude'; }
 export type FieldPath = Array<string | number>;
 export type ConfigObject = Record<string, any>;
 export interface NativeDocument { path: string; raw: string; data: ConfigObject }
@@ -15,11 +15,13 @@ export interface NativeProvider {
   models: Array<{ id: string; path: FieldPath; name: string }>;
   initial?: boolean;
   extra?: Array<{ path: FieldPath; value?: unknown; remove?: boolean }>;
+  headerFormat?: 'lines';
 }
-export const nativeLabels: Record<NativeAgent, string> = { pi: 'Pi', codex: 'Codex' };
+export const nativeLabels: Record<NativeAgent, string> = { pi: 'Pi', codex: 'Codex', claude: 'Claude Code' };
 export function nativeConfigPath(type: NativeAgent): string {
   if (type === 'pi') return path.join(process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi', 'agent'), 'models.json');
   if (type === 'codex') return path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'config.toml');
+  if (type === 'claude') return path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'settings.json');
   throw new Error('Unsupported native agent.');
 }
 export function assertNativePath(file: string, missing = false): void {
@@ -69,6 +71,26 @@ export function setField(data: ConfigObject, keys: FieldPath, value: unknown, pr
   if (present) parent[key] = value; else delete parent[key];
 }
 export function nativeProviders(type: NativeAgent, doc: NativeDocument): NativeProvider[] {
+  if (type === 'claude') {
+    const env = doc.data.env || {};
+    const roleKeys = ['ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL'];
+    const models: NativeProvider['models'] = [];
+    if (typeof doc.data.model === 'string') models.push({ id: doc.data.model, name: 'Default model', path: ['model'] });
+    for (const key of ['ANTHROPIC_MODEL', ...roleKeys]) if (typeof env[key] === 'string' && env[key]) models.push({ id: env[key], name: key, path: ['env', key] });
+    const cloud = ['CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY'].some(key => env[key] && env[key] !== '0' && env[key] !== 'false');
+    const common = { id: 'anthropic', name: 'Claude Code gateway', base: ['env', 'ANTHROPIC_BASE_URL'], credential: ['env', 'ANTHROPIC_AUTH_TOKEN'], headers: ['env', 'ANTHROPIC_CUSTOM_HEADERS'], headerFormat: 'lines' as const,
+      reason: 'Global Messages API routing only. Managed settings, project overrides, subscription sessions and cloud-provider modes are outside coverage.',
+      extra: [{ path: ['env', 'ANTHROPIC_API_KEY'], remove: true }] };
+    if (models.length || doc.data.apiKeyHelper || cloud) return [{ ...common, baseUrl: typeof env.ANTHROPIC_BASE_URL === 'string' ? env.ANTHROPIC_BASE_URL : 'https://api.anthropic.com',
+      supported: models.length > 0 && !doc.data.apiKeyHelper && !cloud && (!env.ANTHROPIC_CUSTOM_HEADERS || typeof env.ANTHROPIC_CUSTOM_HEADERS === 'string'), models }];
+    const chosen = getSetting('native-claude-initial-model');
+    const model = listModels().find(m => m.model_id === chosen), upstream = model && getProvider(model.provider_id);
+    if (!model || !upstream?.is_active || upstream.type === 'openclaw') return [];
+    return [{ ...common, initial: true, baseUrl: upstream.base_url, supported: true,
+      models: [{ id: model.model_id, name: 'Default model', path: ['model'] }],
+      extra: [...common.extra, ...['ANTHROPIC_MODEL', ...roleKeys].map(key => ({ path: ['env', key], value: model.model_id }))],
+      reason: 'Creates global Messages API routing. The chosen model is used for default, Sonnet, Opus, Haiku, fast and subagent slots; no other model is enabled.' }];
+  }
   if (type === 'codex') {
     const providers = Object.entries(doc.data.model_providers || {}).map(([id, p]: [string, any]): NativeProvider => {
       const models: NativeProvider['models'] = [];
@@ -104,4 +126,24 @@ export function nativeProviders(type: NativeAgent, doc: NativeDocument): NativeP
       base: ['providers', id, 'baseUrl'], credential: ['providers', id, 'apiKey'], headers: ['providers', id, 'headers'],
       models: models.map((m: any, index: number) => ({ id: String(m.id || ''), name: String(m.name || m.id || ''), path: ['providers', id, 'models', index, 'id'] })) };
   });
+}
+
+export function nativeHeaders(doc: NativeDocument, provider: NativeProvider): Record<string, unknown> {
+  const raw = field(doc.data, provider.headers);
+  if (provider.headerFormat === 'lines') {
+    if (typeof raw !== 'string') return {};
+    const result: Record<string, string> = {};
+    for (const line of raw.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      const colon = line.indexOf(':');
+      if (colon < 1) throw new Error('Malformed custom header.');
+      const key = line.slice(0, colon).trim().toLowerCase();
+      if (Object.hasOwn(result, key)) throw new Error('Duplicate custom header.');
+      result[key] = line.slice(colon + 1).trim();
+    }
+    return result;
+  }
+  if (!raw) return {};
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Provider headers must be an object.');
+  return raw as Record<string, unknown>;
 }

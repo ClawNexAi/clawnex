@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { isNativeAgent } from './native-agent-config';
+import { assertNativeProtocolReadiness } from './native-agent-readiness';
 import { randomUUID } from 'node:crypto';
 import { queryOne, run } from '../db';
 import { getRoutingModule } from './routing-modules';
@@ -105,6 +106,7 @@ async function executeLockedRoutingPlan(id: string, approved: boolean, actor: st
     const prerequisites = selectedRoutingPrerequisites(summary);
     if (prerequisites.length) throw new Error(prerequisites.join(' '));
     await assertSelectedLiveDeployments(summary);
+    await assertNativeProtocolReadiness(summary);
   }
   const claimed = run("UPDATE routing_change_plans SET status = 'applying' WHERE id = ? AND status = 'prepared'", [id]);
   if (claimed.changes !== 1) throw new Error('This routing plan is already being applied.');

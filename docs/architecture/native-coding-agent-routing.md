@@ -26,3 +26,13 @@ When no custom provider exists, the operator chooses a configured ClawNex model 
 The global selection does not override explicit project, command-line, environment or different-profile selections. Start a new Codex session after Apply/Restore. A configured endpoint is not evidence of successful traffic; Verify requires exact signed-instance evidence.
 
 Upstream schema: https://github.com/openai/codex/blob/rust-v0.155.1/codex-rs/core/config.schema.json
+
+## Claude Code
+
+Validated CLI: 2.1.278. Global `~/.claude/settings.json` (or the service's `CLAUDE_CONFIG_DIR`) is the managed boundary. Native Messages routing uses `env.ANTHROPIC_BASE_URL=http://127.0.0.1:4001`; Claude's SDK appends `/v1/messages`. `ANTHROPIC_AUTH_TOKEN` supplies local proxy access. The newline-delimited `ANTHROPIC_CUSTOM_HEADERS` setting carries the signed connector identity without an inference relay.
+
+Initial setup requires an explicit operator model choice. Reviewed Apply assigns that same choice to the default, Sonnet, Opus, Haiku, fast and subagent slots. Existing explicit model slots are mapped individually to operator-configured aliases. Credential helpers and cloud-provider modes are excluded; permissions, hooks, login files and project settings remain unchanged. Modified custom headers cause a restoration conflict instead of overwriting operator edits.
+
+Codex and Claude Apply perform small live Responses/Messages requests, respectively, before writing any configuration. A successful Chat Completions readiness receipt alone is not enough. This preflight is disclosed in the review dialog. Exact instance verification still requires a subsequent successful client request with its signed identity.
+
+Upstream contract: https://code.claude.com/docs/en/llm-gateway-connect

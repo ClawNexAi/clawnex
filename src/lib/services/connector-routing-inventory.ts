@@ -35,7 +35,7 @@ import { isNativeAgent } from './native-agent-config';
 
 export { resolveConfiguredProxyModel } from './configured-proxy-model';
 
-export type ConnectorId = "openclaw" | "hermes" | "opencode" | 'pi' | 'codex';
+export type ConnectorId = "openclaw" | "hermes" | "opencode" | 'pi' | 'codex' | 'claude';
 export type RoutingConnectorId = ConnectorId | 'anythingllm';
 export type RoutingItemType = "provider" | "model";
 export type RoutingCapability = "provider-routing" | "model-inventory" | "read-only" | "unsupported";
@@ -91,6 +91,7 @@ export interface ConnectorRoutingResponse {
   opencode: ConnectorRoutingSummary;
   pi: ConnectorRoutingSummary;
   codex: ConnectorRoutingSummary;
+  claude: ConnectorRoutingSummary;
   availableModels: Array<{ alias: string; name: string }>;
   driftTotal: number;
   scannedAt: string;
@@ -977,6 +978,7 @@ export function syncConnectorRoutingInventory(trigger = "sync"): ConnectorRoutin
   const opencode = persistDiscovery('opencode', discoverOpenCodeItems());
   const pi = persistDiscovery('pi', discoverNativeItems('pi'));
   const codex = persistDiscovery('codex', discoverNativeItems('codex'));
+  const claude = persistDiscovery('claude', discoverNativeItems('claude'));
   const snapshots = (summary: ConnectorRoutingSummary) => {
     const sources = [...new Set([summary.sourceId, ...summary.items.map(item => item.sourceId)])];
     return sources.map(sourceId => recordRoutingSnapshot(summary.connector,
@@ -987,18 +989,19 @@ export function syncConnectorRoutingInventory(trigger = "sync"): ConnectorRoutin
   const opencodeSnapshot = snapshots(opencode)[0];
   const piSnapshot = snapshots(pi)[0];
   const codexSnapshot = snapshots(codex)[0];
+  const claudeSnapshot = snapshots(claude)[0];
   const scannedAt = nowIso();
   return {
     litellmTarget: litellmTarget(),
     openclaw,
     hermes,
-    opencode, pi, codex,
+    opencode, pi, codex, claude,
     availableModels: listModels().filter(model => { const provider = getProvider(model.provider_id); return provider?.is_active && provider.type !== 'openclaw'; }).map(model => ({ alias: model.model_id, name: model.name || model.model_id })),
-    driftTotal: openclaw.drift.total + hermes.drift.total + opencode.drift.total + pi.drift.total + codex.drift.total,
+    driftTotal: openclaw.drift.total + hermes.drift.total + opencode.drift.total + pi.drift.total + codex.drift.total + claude.drift.total,
     scannedAt,
     reconciliation: {
       events: listUnresolvedRoutingEvents(),
-      lastSnapshotIds: { openclaw: openclawSnapshot.snapshotId, hermes: hermesSnapshot.snapshotId, opencode: opencodeSnapshot.snapshotId, pi: piSnapshot.snapshotId, codex: codexSnapshot.snapshotId },
+      lastSnapshotIds: { openclaw: openclawSnapshot.snapshotId, hermes: hermesSnapshot.snapshotId, opencode: opencodeSnapshot.snapshotId, pi: piSnapshot.snapshotId, codex: codexSnapshot.snapshotId, claude: claudeSnapshot.snapshotId },
     },
   };
 }
@@ -2020,7 +2023,7 @@ export function revertHermesRouting(scope: RoutingApplyScope = {}): RevertHermes
   };
 }
 
-export function getConnectorRoutingDriftSnapshot(): { total: number; openclaw: number; hermes: number; opencode: number; pi: number; lastChecked: string | null } {
+export function getConnectorRoutingDriftSnapshot(): { total: number; openclaw: number; hermes: number; opencode: number; pi: number; codex: number; claude: number; lastChecked: string | null } {
   const rows = queryAll<{ connector: ConnectorId; count: number }>(
     `SELECT connector, COUNT(*) AS count
      FROM connector_routing_items
@@ -2032,6 +2035,8 @@ export function getConnectorRoutingDriftSnapshot(): { total: number; openclaw: n
   const hermes = rows.find((row) => row.connector === "hermes")?.count || 0;
   const opencode = rows.find((row) => row.connector === 'opencode')?.count || 0;
   const pi = rows.find((row) => row.connector === 'pi')?.count || 0;
+  const codex = rows.find((row) => row.connector === 'codex')?.count || 0;
+  const claude = rows.find((row) => row.connector === 'claude')?.count || 0;
   const last = queryOne<{ ts: string }>("SELECT MAX(updated_at) AS ts FROM connector_routing_items");
-  return { total: openclaw + hermes + opencode + pi, openclaw, hermes, opencode, pi, lastChecked: last?.ts || null };
+  return { total: openclaw + hermes + opencode + pi + codex + claude, openclaw, hermes, opencode, pi, codex, claude, lastChecked: last?.ts || null };
 }

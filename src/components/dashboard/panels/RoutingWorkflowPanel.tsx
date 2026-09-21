@@ -13,6 +13,7 @@ const primaryButton = { ...button, background: C.brand, color: C.bg, borderColor
 const connectorPresentation: Record<ConnectorId, { title: string; accent: string; focusKey: string }> = {
   openclaw: { title: 'OpenClaw', accent: C.brand, focusKey: 'openclawRouting' },
   hermes: { title: 'Hermes', accent: C.purp, focusKey: 'hermesRouting' },
+  claude: { title: 'Claude Code', accent: C.cyan, focusKey: 'claudeRouting' },
   codex: { title: 'Codex', accent: C.cyan, focusKey: 'codexRouting' },
   pi: { title: 'Pi', accent: C.cyan, focusKey: 'piRouting' },
   opencode: { title: 'OpenCode', accent: C.cyan, focusKey: 'opencodeRouting' },
@@ -39,6 +40,8 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
 }) {
   const summary = data[connector];
   const sources = [...new Set(summary.items.filter(item => item.present).map(item => item.sourceId))];
+  const native = ['pi', 'codex', 'claude'].includes(connector);
+  if (native && !sources.length && summary.status === 'ok') sources.push(summary.sourceId);
   const [selectedSource, setSelectedSource] = useState('');
   const [initialModel, setInitialModel] = useState('');
   const sourceId = sources.includes(selectedSource) ? selectedSource : sources[0] || '';
@@ -89,7 +92,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   return <CollapsibleCard title={`${title.toUpperCase()} ROUTING`} accent={accent}
     defaultOpen={false} focusKey={focusKey} focusedCard={focusedCard}>
     <div style={{ fontSize: 12, fontFamily: F.disp, lineHeight: 1.6, overflowWrap: 'anywhere' }}>
-    {connector === 'codex' && (!groups.length || items.some(item => item.metadata.initialSetup)) && <div style={{ marginBottom: 12 }}>
+    {['codex', 'claude'].includes(connector) && summary.status === 'ok' && (!groups.length || items.some(item => item.metadata.initialSetup)) && <div style={{ marginBottom: 12 }}>
       <label style={{ color: C.tx, fontSize: 12 }}>Initial model
         <select aria-label={`${title} initial model`} value={initialModel} disabled={busy} onChange={e => setInitialModel(e.target.value)} style={{ display: 'block', width: '100%', maxWidth: 500, padding: '8px 10px', color: C.tx, background: C.srf, border: `1px solid ${C.brd}`, borderRadius: 6, fontSize: 13, fontFamily: F.mono, margin: '6px 0 8px' }}>
           <option value="">Choose a configured ClawNex model</option>
@@ -98,6 +101,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
       </label>
       <button style={button} disabled={busy || !initialModel} onClick={() => void run(async () => { await command({ action: 'choose-native-model', connector, modelAlias: initialModel }); setPlan(null); await refresh(); })}>Use selected model</button>
       <p style={{ color: C.txS, fontSize: 12, marginTop: 8 }}>Selection prepares a global provider. Review and Apply below writes its local proxy settings. Existing login, project settings and subscription credentials are preserved.</p>
+      {connector === 'claude' && <p style={{ color: C.txS, fontSize: 12 }}>The chosen model will fill the default, Sonnet, Opus, Haiku, fast and subagent slots. Claude Code requires a working Messages API route.</p>}
     </div>}
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
       <strong style={{ color: C.tx }}>{currentVerification?.status === 'verified' ? 'Routed models verified' : routed ? 'Configured · verification required' : 'Direct connection'}</strong>
@@ -105,14 +109,14 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
         onChange={event => { setSelectedSource(event.target.value); setMessage(''); setPlan(null); setPrerequisites([]); }}
         style={{ maxWidth: '100%', fontFamily: F.mono, fontSize: 13, padding: 8, color: C.tx, background: C.srf, border: `1px solid ${C.brd}`, borderRadius: 6 }}>
         {!sources.length && <option value="">No local instance found</option>}
-        {sources.map(source => <option key={source} value={source}>{source === 'default' ? 'Local instance' : summary.items.find(item => item.sourceId === source)?.metadata.profileName as string || source}</option>)}
+        {sources.map(source => <option key={source} value={source}>{source === 'default' ? 'Local instance' : summary.items.find(item => item.sourceId === source)?.metadata.profileName as string || (native ? `${title} global configuration` : source)}</option>)}
       </select>
     </div>
     <p style={{ color: C.txS, fontSize: 12, lineHeight: 1.6 }}>Prepare → Review → Apply → Verify<br />
       {routed} of {groups.length} provider routes configured through ClawNex. {excluded ? `${excluded} unsupported route(s) remain unchanged. Coverage is partial.` : ''}
       {' '}Connection status does not change your existing blocking, observe-only, or emergency-bypass policy.</p>
     <p style={{ color: C.txS, fontSize: 12 }}>Configure and test your upstream models first. Select provider routes below, then review the changes. Selecting a provider affects all of its models.</p>
-    {['pi', 'codex'].includes(connector) && <p style={{ color: C.txS, fontSize: 12 }}>{summary.detail}</p>}
+    {['pi', 'codex', 'claude'].includes(connector) && <p style={{ color: C.txS, fontSize: 12 }}>{summary.detail}</p>}
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
       <button aria-label={`Review ${title} connection changes`} style={pending ? primaryButton : button} disabled={busy || !sourceId || !pending} onClick={() => void review('apply')}>Review connection changes</button>
       <button aria-label={`Refresh ${title} configuration`} style={button} disabled={busy} onClick={() => void run(refresh)}>Refresh configuration</button>
@@ -146,13 +150,16 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
             {models.map(model => <div key={model} style={{ padding: '4px 0', overflowWrap: 'anywhere' }}>{model}</div>)}</details>
         </div>;
       })}
-      {!groups.length && <p style={{ color: C.txS }}>No supported local configuration found. Add the instance in Fleet Connectors, then refresh. Remote instances require supported configuration access; they are not treated as local.</p>}
+      {!groups.length && <p style={{ color: C.txS }}>{native ? summary.status === 'ok' && connector !== 'pi' ? 'Choose the initial model above, then review the proposed global connection.' : summary.detail : 'No supported local configuration found. Add the instance in Fleet Connectors, then refresh. Remote instances require supported configuration access; they are not treated as local.'}</p>}
     </details>
     <details style={{ marginTop: 12, color: C.txT, fontSize: 12 }}><summary>Technical details</summary><p>Instance: {sourceId || 'unavailable'}</p><p>Proxy: {data.litellmTarget}</p><p>{summary.detail}</p></details>
     </div>
     <ConfirmDialog open={plan !== null} title={`${plan?.operation === 'restore' ? 'Restore direct connection' : 'Apply reviewed connection changes'} — ${title}`}
       danger={plan?.operation === 'restore'} confirmLabel={plan?.operation === 'restore' ? 'Restore eligible routes' : 'Apply approved changes'}
       body={<><p>Instance: {plan?.sourceId}</p><p>{plan?.providers.length} provider route(s), {plan?.models.length} model(s). {plan?.exclusions} unsupported route(s) remain unchanged.</p>
+        {connector === 'codex' && <p>Codex uses the HTTP Responses API. The TOML file is rewritten with its values preserved; comments and formatting are normalized.</p>}
+        {connector === 'claude' && <p>Claude Code uses the local Messages API. Initial setup assigns the selected model to all model slots. Existing project and managed settings can override this global configuration.</p>}
+        {['codex', 'claude'].includes(connector) && <p>Apply first sends a small test request through this client's API protocol for every affected model. A failed test leaves agent configuration unchanged.</p>}
         <p>{plan?.operation === 'restore' ? 'Restore only connection settings and identity headers still owned by ClawNex. Preserve unrelated edits and report conflicts.' : 'Point the selected provider endpoints to LiteLLM and add a signed instance-identity header. Hermes connection settings are updated where required. Upstream credentials are not copied into the recovery journal.'}</p>
         <details><summary>Affected providers and models</summary><p style={{ overflowWrap: 'anywhere' }}>{plan?.providers.join(', ') || 'None'}</p><p style={{ overflowWrap: 'anywhere' }}>{plan?.models.join(', ') || 'None'}</p></details>
         {!!plan?.legacyPaths.length && <p>Legacy routing fields will also be reviewed for safe restoration: {plan.legacyPaths.join(', ')}. Edited or still-referenced fields are preserved.</p>}

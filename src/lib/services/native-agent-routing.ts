@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { queryAll, queryOne } from '@/lib/db';
-import { nativeDocuments, nativeConfigCheck, nativeLabels, nativeProviders, field, setField, assertNativePath, serializeNativeDocument, readNativeDocument, type NativeAgent, type FieldPath, type NativeDocument } from './native-agent-config';
+import { nativeDocuments, nativeConfigCheck, nativeLabels, nativeProviders, nativeHeaders, field, setField, assertNativePath, serializeNativeDocument, readNativeDocument, type NativeAgent, type FieldPath, type NativeDocument } from './native-agent-config';
 import { publishRoutingFile, removeRoutingJournal } from './routing-file-transaction';
 import { createRoutingIdentity, routingIdentityHash, ROUTING_IDENTITY_HEADER } from './routing-identity';
 import { stableRoutingFingerprint as hash } from './routing-reconciliation';
@@ -26,11 +26,11 @@ function readJournal(type: NativeAgent): Journal | null {
 }
 export function hasNativeOwnership(type: NativeAgent) { return !!readJournal(type)?.providers.length; }
 export function nativeOwnershipFingerprint(type: NativeAgent) { return hash(readJournal(type)); }
-function route(base: string): 'routed' | 'direct' | 'unsupported' {
+function route(base: string, type: NativeAgent): 'routed' | 'direct' | 'unsupported' {
   try {
     const u = new URL(base);
     if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.search || u.hash) return 'unsupported';
-    return u.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname) && u.port === (process.env.LITELLM_PORT || '4001') && u.pathname.replace(/\/$/, '') === '/v1' ? 'routed' : 'direct';
+    return u.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname) && u.port === (process.env.LITELLM_PORT || '4001') && u.pathname.replace(/\/$/, '') === (type === 'claude' ? '' : '/v1') ? 'routed' : 'direct';
   } catch { return 'unsupported'; }
 }
 export function discoverNativeItems(type: NativeAgent): { status: ConnectorRoutingSummary['status']; detail: string; sourceId: string; items: DiscoveredRoutingItem[] } {
@@ -45,13 +45,13 @@ export function discoverNativeItems(type: NativeAgent): { status: ConnectorRouti
     const items: DiscoveredRoutingItem[] = [];
     for (const p of nativeProviders(type, primary)) {
       const owner = owners.find(o => o.providerId === p.id);
-      const headers = field(primary.data, p.headers) as Record<string, unknown> | undefined;
+      const headers = nativeHeaders(primary, p);
       const token = headers && Object.entries(headers).find(([key]) => key.toLowerCase() === ROUTING_IDENTITY_HEADER)?.[1];
       const intact = owner ? owner.fields.every(f => {
         const doc = docs.find(d => d.path === f.file);
         return doc && hash(field(doc.data, f.path) ?? null) === f.afterHash;
       }) : null;
-      const currentRoute = route(p.baseUrl);
+      const currentRoute = route(p.baseUrl, type);
       const capability = p.supported && currentRoute !== 'unsupported' ? 'provider-routing' : 'unsupported';
       const metadata = { configPath: primary.path, configPaths: docs.map(d => d.path), connectorId: connector.id, profileName: connector.name,
         globalOnly: true, initialSetup: p.initial || false, note: p.reason, identityHash: owner?.identityHash || null,
@@ -130,12 +130,12 @@ export function applyNativeRouting(type: NativeAgent, scope: RoutingApplyScope =
       continue;
     }
     if (scope.restore || !selected.has(p.id)) continue;
-    if (!p.supported || route(p.baseUrl) !== 'direct') { skippedProviders.push({ providerId: p.id, reason: p.reason }); continue; }
+    if (!p.supported || route(p.baseUrl, type) !== 'direct') { skippedProviders.push({ providerId: p.id, reason: p.reason }); continue; }
     const key = process.env.LITELLM_MASTER_KEY;
     if (!key) throw new Error('Configure the local LiteLLM access key before applying routing.');
     const identity = createRoutingIdentity(type, `${type}:global`);
     if (!identity) throw new Error('Configure the ClawNex ingest secret before applying routing.');
-    const existingHeaders = field(primary.data, p.headers) as Record<string, unknown> | undefined;
+    const existingHeaders = nativeHeaders(primary, p);
     if (existingHeaders && Object.keys(existingHeaders).some(k => k.toLowerCase() === ROUTING_IDENTITY_HEADER)) throw new Error('The routing identity header is already operator-owned.');
     const record: OwnedProvider = { providerId: p.id, baseUrl: p.baseUrl, identityHash: identity.hash, fields: [], models: [] };
     for (const m of p.models) {
@@ -145,10 +145,13 @@ export function applyNativeRouting(type: NativeAgent, scope: RoutingApplyScope =
       capture(type, record, primary, m.path, configured.modelAlias);
       if (type === 'pi' && docs[1]?.data.defaultProvider === p.id && docs[1]?.data.defaultModel === m.id) capture(type, record, docs[1], ['defaultModel'], configured.modelAlias);
     }
-    capture(type, record, primary, p.base, `http://127.0.0.1:${process.env.LITELLM_PORT || '4001'}/v1`);
+    capture(type, record, primary, p.base, `http://127.0.0.1:${process.env.LITELLM_PORT || '4001'}${type === 'claude' ? '' : '/v1'}`);
     capture(type, record, primary, p.credential, type === 'pi' ? key.replace(/\$/g, '$$$$') : key);
     if (type === 'pi') capture(type, record, primary, ['providers', p.id, 'authHeader'], true);
-    capture(type, record, primary, [...p.headers, ROUTING_IDENTITY_HEADER], identity.token);
+    if (p.headerFormat === 'lines') {
+      const originalHeaders = field(primary.data, p.headers);
+      capture(type, record, primary, p.headers, `${typeof originalHeaders === 'string' && originalHeaders ? originalHeaders.trimEnd() + '\n' : ''}${ROUTING_IDENTITY_HEADER}: ${identity.token}`);
+    } else capture(type, record, primary, [...p.headers, ROUTING_IDENTITY_HEADER], identity.token);
     for (const extra of p.extra || []) capture(type, record, primary, extra.path, extra.value, extra.remove);
     journal.providers.push(record); routedProviders.push(p.id);
   }

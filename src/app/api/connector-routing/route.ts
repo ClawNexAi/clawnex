@@ -60,7 +60,7 @@ function writeGuard(request: NextRequest): NextResponse | null {
 }
 
 function parseConnector(value: unknown): ConnectorId {
-  if (value === "openclaw" || value === "hermes" || value === 'opencode' || value === 'pi' || value === 'codex') return value;
+  if (value === "openclaw" || value === "hermes" || value === 'opencode' || value === 'pi' || value === 'codex' || value === 'claude') return value;
   throw new Error("Unsupported routing connector");
 }
 
