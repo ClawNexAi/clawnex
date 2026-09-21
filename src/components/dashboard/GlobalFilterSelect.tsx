@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { C, F } from "./constants";
 
@@ -34,18 +34,23 @@ export function GlobalFilterSelect({
 }: GlobalFilterSelectProps) {
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [nativeAnchor, setNativeAnchor] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0, width: minWidth, maxHeight: 300 });
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
   const baseId = useId().replace(/:/g, "");
   const listboxId = `${baseId}-listbox`;
+  const anchorName = `--select-${baseId}`;
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   const selectedOption = options[selectedIndex] ?? options[0];
   const activeAccent = value === "all" ? C.txS : accent;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
+    const anchored = CSS.supports('position-anchor', anchorName)
+      && CSS.supports('position-try-fallbacks', 'flip-block');
+    setNativeAnchor(anchored);
     const updatePosition = () => {
       const trigger = triggerRef.current;
       if (!trigger) return;
@@ -65,21 +70,28 @@ export function GlobalFilterSelect({
       });
     };
     updatePosition();
-    window.requestAnimationFrame(() => listboxRef.current?.focus());
+    const focusFrame = window.requestAnimationFrame(() => listboxRef.current?.focus({ preventScroll: true }));
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (!rootRef.current?.contains(target) && !listboxRef.current?.contains(target)) setOpen(false);
     };
+    // Native anchors follow scrolling in the browser's layout/compositor, without
+    // React repositioning a detached menu after the trigger has already moved.
+    // Older browsers dismiss on external scroll rather than display a trailing menu.
+    const handleScroll = (event: Event) => {
+      if (!anchored && !listboxRef.current?.contains(event.target as Node)) setOpen(false);
+    };
     window.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("scroll", handleScroll, true);
     return () => {
+      window.cancelAnimationFrame(focusFrame);
       window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("scroll", handleScroll, true);
     };
-  }, [open, options]);
+  }, [open, options, anchorName]);
 
   useEffect(() => {
     if (highlightedIndex < options.length) return;
@@ -88,7 +100,14 @@ export function GlobalFilterSelect({
 
   useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
   useEffect(() => {
-    if (open) document.getElementById(`${baseId}-option-${highlightedIndex}`)?.scrollIntoView({ block: 'nearest' });
+    const menu = listboxRef.current;
+    const option = document.getElementById(`${baseId}-option-${highlightedIndex}`);
+    if (!open || !menu || !option) return;
+    // Scroll only the options, never the page or the panel containing the trigger.
+    const menuRect = menu.getBoundingClientRect();
+    const optionRect = option.getBoundingClientRect();
+    if (optionRect.top < menuRect.top) menu.scrollTop -= menuRect.top - optionRect.top;
+    else if (optionRect.bottom > menuRect.bottom) menu.scrollTop += optionRect.bottom - menuRect.bottom;
   }, [open, highlightedIndex, baseId]);
 
   const choose = (index: number) => {
@@ -140,6 +159,7 @@ export function GlobalFilterSelect({
           }
         }}
         style={{
+          anchorName,
           width: "100%", minHeight: 30, padding: variant === 'form' ? '8px 10px' : "4px 9px 4px 10px",
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
           background: open ? C.glassPanelNested : C.glassSurfTrans,
@@ -193,10 +213,17 @@ export function GlobalFilterSelect({
           }}
           style={{
             position: "fixed", top: menuPosition.top, left: menuPosition.left, zIndex: 1000,
+            ...(nativeAnchor ? {
+              positionAnchor: anchorName,
+              top: 'calc(anchor(bottom) + 5px)',
+              left: `clamp(8px, anchor(left), calc(100vw - ${menuPosition.width}px - 8px))`,
+              positionTryFallbacks: 'flip-block',
+              positionVisibility: 'anchors-visible',
+            } : {}),
             width: menuPosition.width, maxWidth: "calc(100vw - 16px)",
-            maxHeight: menuPosition.maxHeight, overflowY: "auto", padding: 5,
+            maxHeight: menuPosition.maxHeight, overflowY: "auto", overscrollBehavior: 'contain', padding: 5,
             background: C.bgS, border: `1px solid ${C.glassBorderCyanStrong}`, borderRadius: 6,
-            boxShadow: C.glassShadow, outline: "none",
+            boxShadow: C.glassShadow, outline: "none", transition: 'none',
           }}
         >
           {options.map((option, index) => {
