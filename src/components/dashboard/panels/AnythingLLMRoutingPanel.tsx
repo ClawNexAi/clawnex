@@ -5,13 +5,23 @@ import { C, F } from '../constants';
 import { Badge, Dot, CollapsibleCard } from '../shared';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { GlobalFilterSelect } from '../GlobalFilterSelect';
+import { Tooltip } from '../tooltip';
 import type { AnythingPlan, listAnythingConnectors, anythingModels } from '@/lib/services/anythingllm-routing';
 
 type Instance = ReturnType<typeof listAnythingConnectors>[number] & { available?: boolean; error?: string | null };
 type Data = { connectors: Instance[]; models: ReturnType<typeof anythingModels> };
+type ReadinessMessage = { tone: 'success' | 'warning' | 'error'; title: string; detail: string };
 const button = { padding: '8px 12px', borderRadius: 6, border: `1px solid ${C.cyan}66`, background: `${C.cyan}16`, color: C.cyan, fontFamily: F.disp, fontSize: 12, cursor: 'pointer' };
 const input = { padding: '8px 10px', color: C.tx, background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6, width: '100%', fontFamily: F.mono, fontSize: 13, boxSizing: 'border-box' as const };
 const row = { display: 'flex', gap: 8, flexWrap: 'wrap' as const, marginBottom: 14 };
+const actionButton = (disabled: boolean, color = C.cyan) => ({ ...button, color: disabled ? C.txT : color, borderColor: disabled ? C.glassBorderSubtle : `${color}66`, background: disabled ? C.glassSurfTrans : `${color}16`, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.45 : 1 });
+const tipButton = { border: 0, background: 'transparent', color: C.cyan, padding: '0 2px', fontSize: 12, lineHeight: 1, cursor: 'help' };
+
+function InfoTip({ label, content }: { label: string; content: React.ReactNode }) {
+  return <Tooltip placement="top" variant="detail" content={content}>
+    <button type="button" aria-label={`Help: ${label}`} style={tipButton}>ⓘ</button>
+  </Tooltip>;
+}
 async function command(body: Record<string, unknown>) {
   const response = await fetch('/api/config/anythingllm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const result = await response.json();
@@ -75,7 +85,7 @@ export function AnythingLLMFleetConnector({ onCountChange }: { onCountChange: (c
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: 8, marginBottom: 8 }}>
         <label style={{ color: C.txT, fontSize: 11 }}>NAME<input aria-label="AnythingLLM instance name" required maxLength={120} value={name} onChange={e => setName(e.target.value)} style={input} /></label>
         <label style={{ color: C.txT, fontSize: 11 }}>ADDRESS<input aria-label="AnythingLLM address" type="url" required placeholder="http://127.0.0.1:19322" value={managementUrl} onChange={e => setManagementUrl(e.target.value)} style={input} /></label>
-        <label style={{ color: C.txT, fontSize: 11 }}>DEVELOPER API KEY<input aria-label="AnythingLLM API key" aria-describedby="anythingllm-key-help" type="password" autoComplete="new-password" required value={apiKey} onChange={e => setApiKey(e.target.value)} style={input} /></label>
+        <label style={{ color: C.txT, fontSize: 11 }}><span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>DEVELOPER API KEY <InfoTip label="AnythingLLM Developer API key" content={<span>Create this key in <strong>AnythingLLM → Settings → Developer API</strong>, then paste it here. ClawNex uses it to read providers and workspaces and apply reviewed routing settings.</span>} /></span><input aria-label="AnythingLLM API key" aria-describedby="anythingllm-key-help" type="password" autoComplete="new-password" required value={apiKey} onChange={e => setApiKey(e.target.value)} style={input} /></label>
       </div>
       <p id="anythingllm-key-help" style={{ color: C.txS, fontSize: 11, marginBottom: 8 }}>Create this key in AnythingLLM Settings → Developer API. ClawNex uses it to read providers and workspaces and apply routing settings. Use the address of AnythingLLM on this host.</p>
       <button type="submit" disabled={!ready} style={{ ...fleetButton, width: '100%', background: ready ? C.cyan : C.glassSurfTrans, color: '#fff', cursor: ready ? 'pointer' : 'not-allowed' }}>{busy ? 'Connecting…' : '+ Add AnythingLLM'}</button>
@@ -92,6 +102,9 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
   const instance = data.connectors.find(c => c.id === selectedId) || data.connectors[0];
   const [busy, setBusy] = useState(false), [message, setMessage] = useState('');
   const [plan, setPlan] = useState<AnythingPlan | null>(null);
+  const [testTarget, setTestTarget] = useState<Data['models'][number] | null>(null);
+  const [readiness, setReadiness] = useState<Record<string, ReadinessMessage>>({});
+  const [restartBusy, setRestartBusy] = useState(false);
   const reviewOrigin = useRef<HTMLElement | null>(null);
   const run = async (task: () => Promise<void>) => { setBusy(true); setMessage(''); try { await task(); } catch (e) { setMessage(e instanceof Error ? e.message : 'Operation failed.'); } finally { setBusy(false); } };
   const select = (key: string, selected: boolean, model: string) => run(async () => { setPlan(null); await command({ action: 'select', id: instance.id, key, selected, model }); await refresh(); });
@@ -99,9 +112,64 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
     reviewOrigin.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     return run(async () => { const result: AnythingPlan = await command({ action: 'prepare', id: instance.id, operation }); await refresh(); setPlan(result); });
   };
-  const modelSelect = (key: string) => <GlobalFilterSelect ariaLabel={`ClawNex model for ${key}`} variant="form" minWidth={0} disabled={busy} style={{ width: '100%', maxWidth: 500 }} value={instance.choices[key]?.model || ''}
-    onChange={value => void select(key, instance.choices[key]?.selected || false, value)}
-    options={[{ value: '', label: 'Choose a configured ClawNex model' }, ...data.models.map(m => ({ value: m.alias, label: `${m.name}${m.ready ? ' · tested' : ' · test required'}` }))]} />;
+  const runModelTest = async (target: Data['models'][number]) => {
+    setBusy(true); setMessage('');
+    try {
+      const response = await fetch(`/api/config/providers/${encodeURIComponent(target.providerId)}/test`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'inference', modelAlias: target.alias, approved: true }),
+      });
+      const result = await response.json();
+      const failures: Record<string, ReadinessMessage> = {
+        'reload-required': { tone: 'warning', title: 'Request not sent', detail: 'LiteLLM has not loaded this configuration. Restart LiteLLM here, then test again.' },
+        'not-configured': { tone: 'warning', title: 'Request not sent', detail: 'Add this model to its provider and sync the configuration first.' },
+        'invalid-configuration': { tone: 'error', title: 'Proxy test failed', detail: 'The proxy configuration is missing or invalid.' },
+        'proxy-unavailable': { tone: 'error', title: 'Proxy test failed', detail: 'ClawNex cannot inspect the running LiteLLM proxy.' },
+        'inference-failed': { tone: 'error', title: 'Proxy test failed', detail: 'The selected model did not return a successful response.' },
+        'shield-unavailable': { tone: 'error', title: 'ClawNex Shield unavailable', detail: 'Shield could not scan the test, so the request was blocked before provider inference.' },
+        'inference-timeout': { tone: 'error', title: 'Proxy test timed out', detail: 'The provider did not complete the test within 125 seconds.' },
+        'invalid-response': { tone: 'error', title: 'Proxy test failed', detail: 'The provider returned an incomplete response.' },
+        'configuration-changed': { tone: 'warning', title: 'Result not retained', detail: 'Configuration changed during the test. Review it and test again.' },
+      };
+      setReadiness(previous => ({ ...previous, [target.alias]: response.ok && result.ready
+        ? { tone: 'success', title: 'Tested', detail: 'The model returned a successful response through ClawNex. Readiness is valid for 30 minutes unless configuration changes.' }
+        : failures[result.status] || { tone: 'error', title: 'Proxy test failed', detail: 'The connection test could not be completed.' } }));
+      await refresh();
+    } catch {
+      setReadiness(previous => ({ ...previous, [target.alias]: { tone: 'error', title: 'Test result unavailable', detail: 'ClawNex could not confirm the model test.' } }));
+    } finally { setBusy(false); }
+  };
+  const restartLiteLLM = async () => {
+    setRestartBusy(true);
+    try {
+      const response = await fetch('/api/system/litellm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restart' }) });
+      const result = await response.json();
+      if (!response.ok || result.ok !== true) throw new Error(result.error || 'Restart failed.');
+      setMessage('LiteLLM restart requested. Wait for it to start, then test the model again.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'LiteLLM restart could not be confirmed.'); }
+    finally { setRestartBusy(false); }
+  };
+  const modelSelect = (key: string) => {
+    const alias = instance.choices[key]?.model || '';
+    const selectedModel = data.models.find(model => model.alias === alias);
+    const result = alias ? readiness[alias] : undefined;
+    const tone = result?.tone === 'success' ? C.green : result?.tone === 'error' ? C.danger : C.warn;
+    return <div style={{ width: '100%', maxWidth: 500 }}>
+      <GlobalFilterSelect ariaLabel={`ClawNex model for ${key}`} variant="form" minWidth={0} disabled={busy} style={{ width: '100%' }} value={alias}
+        onChange={value => void select(key, instance.choices[key]?.selected || false, value)}
+        options={[{ value: '', label: 'Choose a configured ClawNex model' }, ...data.models.map(m => ({ value: m.alias, label: `${m.name} · ${m.ready ? '✓ Tested' : '⚠ Test required'}` }))]} />
+      {selectedModel && !selectedModel.ready && <div style={{ marginTop: 8, padding: '8px 10px', border: `1px solid ${tone}55`, borderRadius: 6, background: `${tone}0d` }}>
+        <div role={result?.tone === 'error' ? 'alert' : 'status'} style={{ color: tone, fontSize: 11, marginBottom: 6 }}>
+          <strong>{result ? `${result.tone === 'error' ? '✕' : '⚠'} ${result.title}` : '⚠ Test required'}</strong>{result ? ` — ${result.detail}` : ' — Test this exact model through ClawNex before applying the route.'}
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" disabled={busy} style={actionButton(busy)} onClick={event => { reviewOrigin.current = event.currentTarget; setTestTarget(selectedModel); }}>Test through ClawNex</button>
+          {result?.title === 'Request not sent' && result.detail.startsWith('LiteLLM') && <button type="button" disabled={restartBusy} style={actionButton(restartBusy, C.warn)} onClick={() => void restartLiteLLM()}>{restartBusy ? 'Restarting…' : 'Restart LiteLLM proxy'}</button>}
+        </div>
+      </div>}
+      {selectedModel?.ready && <div role="status" style={{ marginTop: 6, color: C.green, fontSize: 11 }}>✓ Tested through ClawNex. Readiness remains valid for 30 minutes unless configuration changes.</div>}
+    </div>;
+  };
   const owned = instance ? Object.keys(instance.ownership).length : 0;
   return <CollapsibleCard title="ANYTHINGLLM ROUTING" accent={C.cyan} defaultOpen={false} focusKey="anythingllmRouting" focusedCard={focusedCard}>
     <div style={{ fontFamily: F.disp, fontSize: 12, lineHeight: 1.6, overflowWrap: 'anywhere' }}>
@@ -112,10 +180,10 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
       <p style={{ color: C.txS, fontSize: 12, lineHeight: 1.6 }}>Select → Review → Apply → Send a chat → Verify. Default chat is selected initially; workspace overrides are opt-in. Selections alone do not change traffic.</p>
       <p style={{ color: C.tx, fontSize: 12 }}>Proxy base URL: <code>{instance.proxyBaseUrl}</code></p>
       <div style={row}>
-        <button style={button} disabled={busy} onClick={() => void review('apply')}>Review connection changes</button>
-        <button style={button} disabled={busy} onClick={() => void run(async () => { setPlan(null); await command({ action: 'refresh', id: instance.id }); await refresh(); setMessage('Workspaces refreshed. New overrides remain unselected.'); })}>Refresh workspaces</button>
-        <button style={button} disabled={busy || !owned} onClick={() => void run(async () => { const result = await command({ action: 'verify', id: instance.id }); await refresh(); setMessage(result.detail); })}>Verify connection</button>
-        <button style={{ ...button, color: C.warn }} disabled={busy || !owned} onClick={() => void review('restore')}>Restore direct connection</button>
+        <button style={actionButton(busy)} disabled={busy} onClick={() => void review('apply')}>Review connection changes</button>
+        <button style={actionButton(busy)} disabled={busy} onClick={() => void run(async () => { setPlan(null); await command({ action: 'refresh', id: instance.id }); await refresh(); setMessage('Workspaces refreshed. New overrides remain unselected.'); })}>Refresh workspaces</button>
+        <Tooltip content={owned ? 'Check the managed AnythingLLM route and loaded models.' : 'Unavailable because no AnythingLLM route is currently managed by ClawNex.'}><button aria-label={owned ? 'Verify AnythingLLM connection' : 'Verify connection unavailable because no AnythingLLM route is managed by ClawNex'} style={actionButton(busy || !owned)} disabled={busy || !owned} onClick={() => void run(async () => { const result = await command({ action: 'verify', id: instance.id }); await refresh(); setMessage(result.detail); })}>Verify connection</button></Tooltip>
+        <Tooltip content={owned ? 'Restore managed chat routes to their original provider and model.' : 'Unavailable because no managed AnythingLLM route remains to restore.'}><button aria-label={owned ? 'Restore AnythingLLM direct connection' : 'Restore direct connection unavailable because no managed AnythingLLM route remains'} style={actionButton(busy || !owned, C.warn)} disabled={busy || !owned} onClick={() => void review('restore')}>Restore direct connection</button></Tooltip>
       </div>
       {busy && <p role="status" style={{ color: C.txS }}>Working…</p>}
       {message && <p role="status" style={{ color: C.tx, lineHeight: 1.6 }}>{message}</p>}
@@ -124,7 +192,7 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
         <p style={{ color: C.txS, fontSize: 12 }}>Current: {instance.snapshot.provider} / {instance.snapshot.defaultModel || 'provider default'}</p>
         {modelSelect('default')}
       </div>
-      <h4 style={{ color: C.tx, fontSize: 13, fontWeight: 700, margin: '12px 0 8px' }}>Workspaces ({instance.snapshot.workspaces.length})</h4>
+      <h4 style={{ color: C.tx, fontSize: 13, fontWeight: 700, margin: '12px 0 8px', display: 'flex', alignItems: 'center', gap: 4 }}>Workspaces ({instance.snapshot.workspaces.length}) <InfoTip label="AnythingLLM workspaces" content={<span>AnythingLLM workspaces are separate chat areas. Each workspace can follow the instance-wide <strong>Default chat provider</strong> above or define its own provider and model override.</span>} /></h4>
       {!instance.snapshot.workspaces.length && <p style={{ color: C.txS }}>No workspaces yet. Create one in AnythingLLM, then refresh here.</p>}
       {instance.snapshot.workspaces.map(workspace => {
         const key = `workspace:${workspace.id}`, owner = instance.ownership[key];
@@ -134,9 +202,9 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
         return <div key={workspace.id} style={{ border: `1px solid ${C.brd}`, borderRadius: 6, padding: 12, marginBottom: 8 }}>
           <label style={{ display: 'flex', flexWrap: 'wrap', gap: 8, color: C.tx, alignItems: 'center', fontSize: 13 }}>
             {!inherited && <input type="checkbox" aria-label={`Route workspace ${workspace.name}`} disabled={busy || unsupported} checked={instance.choices[key]?.selected || false} onChange={e => void select(key, e.target.checked, instance.choices[key]?.model || '')} />}
-            <strong>{workspace.name}</strong><span style={{ marginLeft: 'auto', color: C.txS, fontSize: 12 }}>{inherited ? 'Uses default' : unsupported ? 'Model router · unsupported' : configured ? 'Configured · verify instance traffic' : workspace.provider === 'litellm' && instance.slotIntact ? 'Uses shared ClawNex connection' : 'Explicit override · outside managed route'}</span>
+            <strong>{workspace.name}</strong><span style={{ marginLeft: 'auto', color: C.txS, fontSize: 12 }}>{inherited ? <Tooltip placement="left" variant="detail" content={<span>This workspace has no provider or model override. It follows the <strong>Default chat provider</strong> and model shown above, including future changes to that default.</span>}><span>Uses default</span></Tooltip> : unsupported ? 'Model router · unsupported' : configured ? 'Configured · verify instance traffic' : workspace.provider === 'litellm' && instance.slotIntact ? 'Uses shared ClawNex connection' : 'Explicit override · outside managed route'}</span>
           </label>
-          <p style={{ color: C.txS, fontSize: 12 }}>{inherited ? `Follows ${instance.snapshot.provider} automatically.` : `Current: ${workspace.provider || 'default provider'} / ${workspace.model || 'provider default'}`}</p>
+          <p style={{ color: C.txS, fontSize: 12 }}>{inherited ? 'Follows the Default chat provider above.' : `Current: ${workspace.provider || 'default provider'} / ${workspace.model || 'provider default'}`}</p>
           {!inherited && !unsupported && modelSelect(key)}
           {(workspace.agentProvider || workspace.agentModel) && <p style={{ color: C.warn, fontSize: 12 }}>Agent override: {workspace.agentProvider || 'inherited provider'} / {workspace.agentModel || 'provider default'} — outside chat-routing coverage.</p>}
         </div>;
@@ -158,5 +226,8 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
         if (approved.prerequisites.length) { setMessage(approved.prerequisites.join(' ')); return; }
         void run(async () => { const result = await command({ action: 'execute', planId: approved.id, approved: true }); await refresh(); setMessage(result.detail); });
       }} />
+    <ConfirmDialog open={!!testTarget} title="Test connection through ClawNex" confirmLabel="Approve test" returnFocusTo={reviewOrigin.current}
+      body={<p>Send the harmless prompt “Reply with OK.” through ClawNex to <b>{testTarget?.alias}</b> using <b>{testTarget?.name.split(' / ')[0]}</b>? This makes one inference request and may incur provider charges. It does not change AnythingLLM routing.</p>}
+      onCancel={() => setTestTarget(null)} onConfirm={() => { const approved = testTarget; setTestTarget(null); if (approved) void runModelTest(approved); }} />
   </CollapsibleCard>;
 }

@@ -296,6 +296,21 @@ export function HelpPanel({ onNavigate }: { onNavigate: (tab: TabId) => void }) 
         </div>
       </CollapsibleCard>
 
+      <CollapsibleCard title="Connect AnythingLLM" accent={C.green} defaultOpen={false} count={5}>
+        <div style={{ fontSize: 13, color: C.txS, lineHeight: 1.7 }}>
+          <ol style={{ margin: "0 0 10px", paddingLeft: 22 }}>
+            <li>In AnythingLLM, open <strong style={{ color: C.tx }}>Settings → Developer API</strong>, create a key, and copy it.</li>
+            <li>In ClawNex, open <strong style={{ color: C.tx }}>Configuration → Fleet &amp; Routing → Fleet Connectors → AnythingLLM</strong>.</li>
+            <li>Enter a name, the AnythingLLM address on this host (for example <code style={{ color: C.cyan }}>http://127.0.0.1:19322</code>), and the Developer API key.</li>
+            <li>Select the default chat model, run its inline <strong style={{ color: C.tx }}>Test through ClawNex</strong> action, then review and apply the route.</li>
+            <li>Send a new AnythingLLM chat, verify the managed configuration, and confirm the request in Traffic Monitor.</li>
+          </ol>
+          <p style={{ margin: 0, fontSize: 12, color: C.txT }}>
+            The connector accepts localhost addresses because it manages a host-installed AnythingLLM instance. ClawNex encrypts the Developer API key and uses it to read providers and workspaces and apply reviewed routing settings. AnythingLLM workspaces marked <strong>Uses default</strong> inherit the instance-wide default chat provider and model.
+          </p>
+        </div>
+      </CollapsibleCard>
+
       <CollapsibleCard title="Sidebar Favorites & Recents" accent={C.warn} defaultOpen={false} count={2}>
         <div style={{ fontSize: 13, color: C.txS, lineHeight: 1.65 }}>
           <p style={{ margin: "0 0 8px" }}>

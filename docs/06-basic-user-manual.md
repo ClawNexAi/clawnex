@@ -74,7 +74,7 @@ On a fresh install, **Fleet Command** opens directly into the **Welcome Wizard**
 | 3. Enable Host Security | Click **Verify Now** — verifies the bundled scanner is available. Or click **Open Updates panel** for the manual path. | — (or Configuration → Updates) |
 | 4. Sync CVE database | Click **Sync Now** — pulls the feed in place | — |
 | 5. Sync Model Pricing | Click **Sync Now** — pulls the LiteLLM price snapshot in place | — |
-| 6. Configure agent routing | Click **Choose Routing** — opens Configuration → Fleet & Routing so you can select an OpenClaw, Hermes, or global OpenCode instance, review its provider/model changes, and apply them explicitly. The legacy all-provider OpenClaw wire remains available as a secondary compatibility action. | — (or Configuration → Fleet & Routing) |
+| 6. Configure agent routing | Click **Choose Routing** — opens Configuration → Fleet & Routing so you can select an OpenClaw, AnythingLLM, Hermes, or global OpenCode instance, review its provider/model changes, and apply them explicitly. For AnythingLLM, create the required key under **AnythingLLM → Settings → Developer API**, then add its localhost address and key under Fleet Connectors. The legacy all-provider OpenClaw wire remains available as a secondary compatibility action. | — (or Configuration → Fleet & Routing) |
 | 7. Run first shield test | Click **Open Shield Tests** | Prompt Shield |
 
 Every "Open Configuration" button deep-links into the specific card you need — that card auto-expands and scrolls into view so you don't have to hunt for it.

@@ -337,7 +337,15 @@ export async function executeAnythingPlan(planId: string, approved: boolean, act
       state.appliedAt = new Date().toISOString(); save(row.id, state);
       recordRoutingSnapshot('anythingllm', evidence(row, state), plan.operation);
       recordRoutingOperation({ connector: 'anythingllm', sourceId: row.id, actor, operation: plan.operation === 'restore' ? 'revert' : 'apply', outcome: 'applied', detail: `${plan.changes.length} chat routes updated.` });
-      const result = { ok: true, detail: `${plan.changes.length} chat route(s) updated. Send a new chat in AnythingLLM, then verify. The reserved LiteLLM connection remains available; original provider credentials were not changed.` };
+      const restored = plan.changes.map(change => {
+        const current = route(state.snapshot, change.key);
+        const model = change.key === 'default' ? state.snapshot.defaultModel : current?.model;
+        return `${change.name}: ${current?.provider || 'default provider'} / ${model || 'provider default'}`;
+      });
+      const detail = plan.operation === 'restore'
+        ? `${plan.changes.length} chat route(s) restored to the original connection${restored.length ? ` (${restored.join('; ')})` : ''}. No restart is required. Send a new chat in AnythingLLM to confirm the direct connection. No ClawNex-managed routes remain to verify or restore. The reserved LiteLLM connection remains available for reuse.`
+        : `${plan.changes.length} chat route(s) updated. Send a new chat in AnythingLLM, then verify. The reserved LiteLLM connection remains available; original provider credentials were not changed.`;
+      const result = { ok: true, detail };
       run("UPDATE routing_change_plans SET status = 'completed', result_json = ? WHERE id = ?", [JSON.stringify(result), planId]);
       return result;
     } catch (error) {

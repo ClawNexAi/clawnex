@@ -137,7 +137,7 @@ When you spot a concerning entry in the Traffic Monitor:
 
 ### 3.2A Connector Attribution and Verification
 
-OpenClaw, writable Hermes custom providers, and the global OpenCode connector can route supported model traffic through LiteLLM. ClawNex records the connector and source only when the request carries routing identity that ClawNex can verify; unverified caller-supplied attribution is ignored.
+OpenClaw, AnythingLLM, writable Hermes custom providers, and the global OpenCode connector can route supported model traffic through LiteLLM. ClawNex records the connector and source only when the request carries routing identity that ClawNex can verify; unverified caller-supplied attribution is ignored. AnythingLLM's built-in LiteLLM provider does not send an instance-identity header, so its Verify action confirms configuration and loaded models while Traffic Monitor provides separate request evidence.
 
 Use the shared workflow in Configuration → Fleet & Routing:
 
@@ -1290,6 +1290,7 @@ The Configuration panel consolidates released agent gateway connections into a s
 | Section | Status | Description |
 |---------|--------|-------------|
 | **OpenClaw** | LIVE | OpenClaw agent gateway — real-time session monitoring, agent fleet visibility, and traffic routing |
+| **AnythingLLM** | LIVE | Host-installed AnythingLLM — default chat and workspace routing through the local LiteLLM proxy |
 | **Hermes** | LIVE | Hermes-Agent (Nous Research) gateway — session scanning, token aggregation, and fleet filtering |
 
 Each released connector section is independently collapsible. Live connectors show connection status, instance management (add/remove), and health indicators. ClawNex does not show disabled connector placeholders for unreleased adapters.
@@ -1305,6 +1306,21 @@ OpenClaw 4.12 added a per-device authentication handshake on top of the existing
 **Backwards-compatible with 3.28.** Older OpenClaw gateways issue challenges without a `nonce`. ClawNex skips the device payload entirely in that case (a `if (nonce)` guard around the signing step), so the same connector code path connects to 3.x gateways exactly as it always did. There is no version flag to flip.
 
 **Where the keypair lives.** The Ed25519 private key is stored in the `config_defaults` row keyed `openclaw_device_private_key` (and the matching public key under `openclaw_device_public_key`). An uninstall removes them along with the rest of the ClawNex database. There is no "rotate device key" button yet — operators who need to invalidate a stolen key today should run `npm run db:reset` (warning: drops all ClawNex state) or delete the rows manually.
+
+### 18.2 AnythingLLM Connector and Routing
+
+AnythingLLM must run on the same host as ClawNex. To register it:
+
+1. Open **AnythingLLM → Settings → Developer API**, create a key, and copy it.
+2. Open **ClawNex → Configuration → Fleet & Routing → Fleet Connectors → AnythingLLM**.
+3. Enter a name, the local AnythingLLM origin (commonly `http://127.0.0.1:19322`), and the Developer API key.
+4. Choose **Add AnythingLLM**. ClawNex validates the key immediately and stores it encrypted.
+
+ClawNex uses the key to discover the instance-wide provider and its workspaces and to apply reviewed routing changes. A workspace marked **Uses default** has no chat-provider or chat-model override; it follows the **Default chat provider** shown above the workspace list, including later changes to that default.
+
+Before applying a route, select the exact ClawNex model and choose **Test through ClawNex**. The approved test sends one harmless inference request and may incur provider charges. A successful readiness result is valid for 30 minutes unless configuration changes. Then review, apply, send a new AnythingLLM chat, run **Verify connection**, and inspect Traffic Monitor for the new request.
+
+**Restore direct connection** returns managed chat routes to their original providers and models without changing the original credentials. No AnythingLLM restart is required. After the final restore, managed-route Verify and Restore actions are unavailable; send a new chat to confirm the direct connection still works. The reserved LiteLLM connection remains available for later reuse.
 
 ---
 

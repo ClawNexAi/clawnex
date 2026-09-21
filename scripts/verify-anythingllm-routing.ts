@@ -106,7 +106,8 @@ async function main() {
     failWrites = false;
     plan = await svc.prepareAnythingPlan(instance.id, 'apply');
     assert.deepEqual(plan.prerequisites, [], 'An interrupted unused-slot reservation can be retried safely');
-    await svc.executeAnythingPlan(plan.id, true, 'fixture');
+    const applyResult = await svc.executeAnythingPlan(plan.id, true, 'fixture');
+    assert.match(applyResult.detail, /Send a new chat in AnythingLLM, then verify/);
     const writesAfter = writes;
     await assert.rejects(svc.removeAnythingConnector(instance.id), /Restore the managed routes/);
     assert.equal(svc.listAnythingConnectors().length, 1);
@@ -152,7 +153,12 @@ async function main() {
     await assert.rejects(svc.executeAnythingPlan(plan.id, true, 'fixture'), /rejected/);
     assert(Object.keys(svc.listAnythingConnectors()[0].ownership).length > 0, 'Recovery ownership survives failed writes');
     failWrites = false;
-    plan = await svc.prepareAnythingPlan(instance.id, 'restore'); await svc.executeAnythingPlan(plan.id, true, 'fixture');
+    plan = await svc.prepareAnythingPlan(instance.id, 'restore');
+    const restoreResult = await svc.executeAnythingPlan(plan.id, true, 'fixture');
+    assert.match(restoreResult.detail, /restored to the original connection/);
+    assert.match(restoreResult.detail, /Default chat: generic-openai \/ original-model/);
+    assert.match(restoreResult.detail, /No ClawNex-managed routes remain to verify or restore/);
+    assert.doesNotMatch(restoreResult.detail, /then verify/);
     assert.equal(settings.LLMProvider, 'generic-openai'); assert.equal(workspaces[1].chatModel, 'gpt-test');
     assert.equal(workspaces[1].agentProvider, 'anthropic'); assert.equal(workspaces[2].chatModel, 'untouched-model');
     assert.equal(Object.keys(svc.listAnythingConnectors()[0].ownership).length, 0);
