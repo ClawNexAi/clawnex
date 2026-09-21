@@ -56,8 +56,8 @@ function writeGuard(request: NextRequest): NextResponse | null {
 }
 
 function parseConnector(value: unknown): ConnectorId {
-  if (value === "openclaw" || value === "hermes" || value === 'opencode') return value;
-  throw new Error("connector must be openclaw, hermes, or opencode");
+  if (value === "openclaw" || value === "hermes" || value === 'opencode' || value === 'pi') return value;
+  throw new Error("Unsupported routing connector");
 }
 
 function parseDesiredRoute(value: unknown): DesiredRoutingState {

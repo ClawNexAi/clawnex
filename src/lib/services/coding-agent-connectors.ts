@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { parseOpenCodeConfig } from './opencode-config';
 
-export type CodingAgentConnectorType = 'opencode';
+export type CodingAgentConnectorType = 'opencode' | 'pi';
 
 export interface CodingAgentConfigCheck {
   available: boolean;

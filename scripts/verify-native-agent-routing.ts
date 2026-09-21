@@ -1,0 +1,76 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'clawnex-native-routing-'));
+process.env.HOME = root;
+process.env.DATABASE_PATH = ':memory:';
+process.env.CLAWNEX_TEST_SKIP_DB_SEED = '1';
+process.env.CLAWNEX_AUDIT_STDOUT = 'false';
+process.env.CLAWNEX_INGEST_SECRET = 'native-fixture-secret-more-than-32-bytes';
+process.env.LITELLM_MASTER_KEY = 'fixture-proxy-secret';
+process.env.RBAC_ENABLED = 'false';
+process.env.NEXT_PUBLIC_RBAC_ENABLED = 'false';
+process.env.HOSTNAME = '127.0.0.1';
+process.env.OPENCLAW_HOME = path.join(root, '.openclaw');
+process.env.HERMES_HOME = path.join(root, '.hermes');
+process.env.CLAWNEX_LITELLM_CONFIG = path.join(root, 'litellm.yaml');
+fs.writeFileSync(process.env.CLAWNEX_LITELLM_CONFIG, 'model_list: []\n');
+const dir = path.join(root, '.pi', 'agent'); fs.mkdirSync(dir, { recursive: true });
+const file = path.join(dir, 'models.json'), settings = path.join(dir, 'settings.json');
+const before = { providers: { fixture: { baseUrl: 'http://127.0.0.1:20128/v1', api: 'openai-completions', apiKey: '$UPSTREAM_KEY', models: [{ id: 'chosen-model', name: 'Chosen model', contextWindow: 32768 }] } } };
+fs.writeFileSync(file, JSON.stringify(before));
+fs.writeFileSync(settings, JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'chosen-model', theme: 'dark' }));
+
+async function main() {
+  const { NextRequest } = await import('next/server');
+  const registry = await import('../src/app/api/config/coding-agent-connectors/route');
+  const api = await import('../src/app/api/connector-routing/route');
+  const config = await import('../src/lib/services/config-service');
+  const { getDb } = await import('../src/lib/db');
+  const { syncProvidersToYaml } = await import('../src/lib/litellm/sync');
+  const { testConfiguredProxyModel } = await import('../src/lib/services/provider-routing-readiness');
+  const { default: YAML } = await import('yaml');
+  const request = (body: unknown, url = '/api/connector-routing') => new NextRequest(`http://127.0.0.1:5001${url}`, { method: 'POST', headers: { origin: 'http://127.0.0.1:5001', 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const call = async (body: unknown) => { const r = await api.POST(request(body)); const d = await r.json(); assert.equal(r.status, 200, JSON.stringify(d)); return d; };
+  const added = await registry.POST(request({ type: 'pi', name: 'Pi Fixture' }, '/api/config/coding-agent-connectors'));
+  assert.equal(added.status, 201); const connector = (await added.json()).connector;
+  await config.addProvider({ id: 'fixture', name: 'Operator provider', type: 'openai', baseUrl: 'http://127.0.0.1:20128/v1', apiKey: 'fixture-upstream' });
+  config.addModel('fixture', 'openai/chosen-model');
+  syncProvidersToYaml({ db: getDb(), configPath: process.env.CLAWNEX_LITELLM_CONFIG });
+  globalThis.fetch = async input => String(input).endsWith('/model/info') ? Response.json({ data: YAML.parse(fs.readFileSync(process.env.CLAWNEX_LITELLM_CONFIG!, 'utf8')).model_list }) : Response.json({ id: 'fixture', choices: [{ message: { role: 'assistant', content: 'OK' }, finish_reason: 'stop' }] });
+  await testConfiguredProxyModel('fixture', 'openai/chosen-model', true);
+  const sync = await call({ action: 'sync' });
+  assert.equal(sync.pi.status, 'ok');
+  assert.ok(!JSON.stringify(sync.pi).includes('$UPSTREAM_KEY'));
+  await call({ action: 'select', connector: 'pi', itemIds: sync.pi.items.map((i: any) => i.id), desiredRoute: 'routed' });
+  const prepare = () => call({ action: 'prepare', connector: 'pi', sourceId: 'pi:global', operation: 'apply' });
+  const plan = (await prepare()).plan; assert.deepEqual(plan.prerequisites, []);
+  // Secondary settings are part of the reviewed state, not an unreviewed write.
+  fs.writeFileSync(settings, JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'chosen-model', theme: 'light' }));
+  assert.equal((await api.POST(request({ action: 'execute-plan', planId: plan.id, approved: true }))).status, 400);
+  const current = (await prepare()).plan;
+  await call({ action: 'execute-plan', planId: current.id, approved: true });
+  const routed = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.equal(routed.providers.fixture.baseUrl, 'http://127.0.0.1:4001/v1');
+  assert.equal(routed.providers.fixture.models[0].id, 'openai/chosen-model');
+  assert.equal(JSON.parse(fs.readFileSync(settings, 'utf8')).defaultModel, 'openai/chosen-model');
+  assert.equal(routed.providers.fixture.apiKey, 'fixture-proxy-secret');
+  assert.ok(routed.providers.fixture.headers['x-clawnex-routing-identity']);
+  const journal = fs.readFileSync(path.join(root, '.clawnex-pi-routing-managed.json'), 'utf8');
+  assert.ok(!journal.includes('$UPSTREAM_KEY') && !journal.includes('fixture-proxy-secret'));
+  const removal = () => registry.DELETE(new NextRequest(`http://127.0.0.1:5001/api/config/coding-agent-connectors?id=${connector.id}`, { method: 'DELETE', headers: { origin: 'http://127.0.0.1:5001' } }));
+  assert.equal((await removal()).status, 409);
+  const verify = await call({ action: 'verify', connector: 'pi', sourceId: 'pi:global' });
+  assert.notEqual(verify.verification.status, 'verified', 'configuration alone cannot prove Pi traffic');
+  // Preserve unrelated edits while restoring exact endpoint, credential and models.
+  routed.providers.fixture.note = 'operator edit'; fs.writeFileSync(file, JSON.stringify(routed));
+  const restore = (await call({ action: 'prepare', connector: 'pi', sourceId: 'pi:global', operation: 'restore' })).plan;
+  await call({ action: 'execute-plan', planId: restore.id, approved: true });
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { providers: { fixture: { ...before.providers.fixture, note: 'operator edit' } } });
+  assert.deepEqual(JSON.parse(fs.readFileSync(settings, 'utf8')), { defaultProvider: 'fixture', defaultModel: 'chosen-model', theme: 'light' });
+  assert.equal((await removal()).status, 200);
+  console.log('PASS: Pi shared review/apply/verify/restore, stale secondary-file review, encrypted recovery, and unrelated edit preservation');
+}
+main().finally(() => fs.rmSync(root, { recursive: true, force: true }));

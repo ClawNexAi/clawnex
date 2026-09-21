@@ -86,7 +86,7 @@ def _remember_routing_identity(auth, data):
         return
     connector = trusted.get("clawnex_routing_connector")
     source_id = trusted.get("clawnex_routing_source_id")
-    if connector not in {"openclaw", "hermes", "opencode", "anythingllm"} or not isinstance(source_id, str) or not 0 < len(source_id) <= 200:
+    if connector not in {"openclaw", "hermes", "opencode", "pi", "anythingllm"} or not isinstance(source_id, str) or not 0 < len(source_id) <= 200:
         return
     if len(_ROUTING_IDENTITIES) >= 4096:
         return  # bounded state: absence of proof is safer than guessed identity
@@ -289,11 +289,11 @@ def _source_for(model, data=None):
     metadata = data.get("metadata") if isinstance(data, dict) else None
     if isinstance(metadata, dict):
         connector = metadata.get("clawnex_connector") or metadata.get("connector")
-        if connector in {"hermes", "openclaw", "opencode"}:
+        if connector in {"hermes", "openclaw", "opencode", "pi"}:
             return connector
     if isinstance(data, dict):
         connector = data.get("x_clawnex_connector")
-        if connector in {"hermes", "openclaw", "opencode"}:
+        if connector in {"hermes", "openclaw", "opencode", "pi"}:
             return connector
     return "hermes" if model in _hermes_model_aliases() else "litellm"
 

@@ -39,7 +39,7 @@ const IngestSchema = z.object({
   status_code: z.number().int().min(0).max(999).default(200),
   error: z.string().max(1000).nullable().optional(),
   source: z.string().max(50).default("litellm"),
-  routing_connector: z.enum(['openclaw', 'hermes', 'opencode', 'anythingllm']).optional(),
+  routing_connector: z.enum(['openclaw', 'hermes', 'opencode', 'pi', 'anythingllm']).optional(),
   routing_source_id: z.string().min(1).max(200).optional(),
   proxy_request_id: z.string().min(1).max(200).optional(),
   routing_identity_hash: z.string().regex(/^[a-f0-9]{64}$/).optional(),

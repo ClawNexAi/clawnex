@@ -30,10 +30,11 @@ import { ROUTING_IDENTITY_HEADER, prepareIdentityHeader, identityHeaderMatches, 
 import { sealRoutingCredential, openRoutingCredential, type EncryptedRoutingCredential } from './routing-credential-recovery';
 import { discoverOpenCodeItems, openCodeRoutingOwnershipFingerprint, OPENCODE_SIDECAR_PATH } from './opencode-routing';
 import { resolveConfiguredProxyModel } from './configured-proxy-model';
+import { discoverNativeItems, nativeJournal, nativeOwnershipFingerprint } from './native-agent-routing';
 
 export { resolveConfiguredProxyModel } from './configured-proxy-model';
 
-export type ConnectorId = "openclaw" | "hermes" | "opencode";
+export type ConnectorId = "openclaw" | "hermes" | "opencode" | 'pi';
 export type RoutingConnectorId = ConnectorId | 'anythingllm';
 export type RoutingItemType = "provider" | "model";
 export type RoutingCapability = "provider-routing" | "model-inventory" | "read-only" | "unsupported";
@@ -87,6 +88,7 @@ export interface ConnectorRoutingResponse {
   openclaw: ConnectorRoutingSummary;
   hermes: ConnectorRoutingSummary;
   opencode: ConnectorRoutingSummary;
+  pi: ConnectorRoutingSummary;
   driftTotal: number;
   scannedAt: string;
   reconciliation: {
@@ -278,6 +280,7 @@ function discoverConnectorItems(connector: ConnectorId): {
 } {
   if (connector === 'openclaw') return discoverOpenClawItems();
   if (connector === 'hermes') return discoverHermesItems();
+  if (connector === 'pi') return discoverNativeItems(connector);
   return discoverOpenCodeItems();
 }
 
@@ -969,6 +972,7 @@ export function syncConnectorRoutingInventory(trigger = "sync"): ConnectorRoutin
   const openclaw = persistDiscovery("openclaw", discoverOpenClawItems());
   const hermes = persistDiscovery("hermes", discoverHermesItems());
   const opencode = persistDiscovery('opencode', discoverOpenCodeItems());
+  const pi = persistDiscovery('pi', discoverNativeItems('pi'));
   const snapshots = (summary: ConnectorRoutingSummary) => {
     const sources = [...new Set([summary.sourceId, ...summary.items.map(item => item.sourceId)])];
     return sources.map(sourceId => recordRoutingSnapshot(summary.connector,
@@ -977,17 +981,18 @@ export function syncConnectorRoutingInventory(trigger = "sync"): ConnectorRoutin
   const openclawSnapshot = snapshots(openclaw)[0];
   const hermesSnapshot = snapshots(hermes)[0];
   const opencodeSnapshot = snapshots(opencode)[0];
+  const piSnapshot = snapshots(pi)[0];
   const scannedAt = nowIso();
   return {
     litellmTarget: litellmTarget(),
     openclaw,
     hermes,
-    opencode,
-    driftTotal: openclaw.drift.total + hermes.drift.total + opencode.drift.total,
+    opencode, pi,
+    driftTotal: openclaw.drift.total + hermes.drift.total + opencode.drift.total + pi.drift.total,
     scannedAt,
     reconciliation: {
       events: listUnresolvedRoutingEvents(),
-      lastSnapshotIds: { openclaw: openclawSnapshot.snapshotId, hermes: hermesSnapshot.snapshotId, opencode: opencodeSnapshot.snapshotId },
+      lastSnapshotIds: { openclaw: openclawSnapshot.snapshotId, hermes: hermesSnapshot.snapshotId, opencode: opencodeSnapshot.snapshotId, pi: piSnapshot.snapshotId },
     },
   };
 }
@@ -1271,11 +1276,12 @@ export interface ApplyOpenClawRoutingResult {
 export interface RoutingApplyScope { sourceId?: string; expectedFiles?: Record<string, string>; restore?: boolean }
 
 export async function withConnectorRoutingLock<T>(connector: ConnectorId, task: () => T | Promise<T>): Promise<T> {
-  const journal = connector === 'openclaw' ? SELECTIVE_SIDECAR_PATH : connector === 'hermes' ? HERMES_SIDECAR_PATH : OPENCODE_SIDECAR_PATH;
+  const journal = connector === 'pi' ? nativeJournal(connector) : connector === 'openclaw' ? SELECTIVE_SIDECAR_PATH : connector === 'hermes' ? HERMES_SIDECAR_PATH : OPENCODE_SIDECAR_PATH;
   return await withRoutingOperationLock(journal, task);
 }
 
 export function routingOwnershipFingerprint(connector: ConnectorId): string {
+  if (connector === 'pi') return nativeOwnershipFingerprint(connector);
   if (connector === 'opencode') return openCodeRoutingOwnershipFingerprint();
   const file = connector === 'openclaw' ? SELECTIVE_SIDECAR_PATH : HERMES_SIDECAR_PATH;
   return stableHash(fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null);
@@ -2008,7 +2014,7 @@ export function revertHermesRouting(scope: RoutingApplyScope = {}): RevertHermes
   };
 }
 
-export function getConnectorRoutingDriftSnapshot(): { total: number; openclaw: number; hermes: number; opencode: number; lastChecked: string | null } {
+export function getConnectorRoutingDriftSnapshot(): { total: number; openclaw: number; hermes: number; opencode: number; pi: number; lastChecked: string | null } {
   const rows = queryAll<{ connector: ConnectorId; count: number }>(
     `SELECT connector, COUNT(*) AS count
      FROM connector_routing_items
@@ -2019,6 +2025,7 @@ export function getConnectorRoutingDriftSnapshot(): { total: number; openclaw: n
   const openclaw = rows.find((row) => row.connector === "openclaw")?.count || 0;
   const hermes = rows.find((row) => row.connector === "hermes")?.count || 0;
   const opencode = rows.find((row) => row.connector === 'opencode')?.count || 0;
+  const pi = rows.find((row) => row.connector === 'pi')?.count || 0;
   const last = queryOne<{ ts: string }>("SELECT MAX(updated_at) AS ts FROM connector_routing_items");
-  return { total: openclaw + hermes + opencode, openclaw, hermes, opencode, lastChecked: last?.ts || null };
+  return { total: openclaw + hermes + opencode + pi, openclaw, hermes, opencode, pi, lastChecked: last?.ts || null };
 }

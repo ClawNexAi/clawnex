@@ -13,6 +13,7 @@ const primaryButton = { ...button, background: C.brand, color: C.bg, borderColor
 const connectorPresentation: Record<ConnectorId, { title: string; accent: string; focusKey: string }> = {
   openclaw: { title: 'OpenClaw', accent: C.brand, focusKey: 'openclawRouting' },
   hermes: { title: 'Hermes', accent: C.purp, focusKey: 'hermesRouting' },
+  pi: { title: 'Pi', accent: C.cyan, focusKey: 'piRouting' },
   opencode: { title: 'OpenCode', accent: C.cyan, focusKey: 'opencodeRouting' },
 };
 
@@ -85,11 +86,12 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
 
   return <CollapsibleCard title={`${title.toUpperCase()} ROUTING`} accent={accent}
     defaultOpen={false} focusKey={focusKey} focusedCard={focusedCard}>
+    <div style={{ fontSize: 12, fontFamily: F.disp, lineHeight: 1.6, overflowWrap: 'anywhere' }}>
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
       <strong style={{ color: C.tx }}>{currentVerification?.status === 'verified' ? 'Routed models verified' : routed ? 'Configured · verification required' : 'Direct connection'}</strong>
       <select aria-label={`${title} instance`} disabled={busy || sources.length === 0} value={sourceId}
         onChange={event => { setSelectedSource(event.target.value); setMessage(''); setPlan(null); setPrerequisites([]); }}
-        style={{ maxWidth: '100%', padding: 8, color: C.tx, background: C.srf, border: `1px solid ${C.brd}`, borderRadius: 6 }}>
+        style={{ maxWidth: '100%', fontFamily: F.mono, fontSize: 13, padding: 8, color: C.tx, background: C.srf, border: `1px solid ${C.brd}`, borderRadius: 6 }}>
         {!sources.length && <option value="">No local instance found</option>}
         {sources.map(source => <option key={source} value={source}>{source === 'default' ? 'Local instance' : summary.items.find(item => item.sourceId === source)?.metadata.profileName as string || source}</option>)}
       </select>
@@ -134,6 +136,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
       {!groups.length && <p style={{ color: C.txS }}>No supported local configuration found. Add the instance in Fleet Connectors, then refresh. Remote instances require supported configuration access; they are not treated as local.</p>}
     </details>
     <details style={{ marginTop: 12, color: C.txT, fontSize: 12 }}><summary>Technical details</summary><p>Instance: {sourceId || 'unavailable'}</p><p>Proxy: {data.litellmTarget}</p><p>{summary.detail}</p></details>
+    </div>
     <ConfirmDialog open={plan !== null} title={`${plan?.operation === 'restore' ? 'Restore direct connection' : 'Apply reviewed connection changes'} — ${title}`}
       danger={plan?.operation === 'restore'} confirmLabel={plan?.operation === 'restore' ? 'Restore eligible routes' : 'Apply approved changes'}
       body={<><p>Instance: {plan?.sourceId}</p><p>{plan?.providers.length} provider route(s), {plan?.models.length} model(s). {plan?.exclusions} unsupported route(s) remain unchanged.</p>

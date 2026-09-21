@@ -28,6 +28,16 @@ function state(summary: ConnectorRoutingSummary) {
   for (const item of summary.items) {
     const file = item.metadata.configPath;
     if (typeof file !== 'string' || !item.present) continue;
+    if (summary.connector === 'pi' && Array.isArray(item.metadata.configPaths)) {
+      for (const additional of item.metadata.configPaths) {
+        if (typeof additional !== 'string') continue;
+        if (fs.existsSync(additional)) {
+          const stat = fs.lstatSync(additional);
+          if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 4 * 1024 * 1024) throw new Error('Unsupported agent configuration file.');
+        }
+        files[additional] = stableRoutingFingerprint(fs.existsSync(additional) ? fs.readFileSync(additional, 'utf8') : '');
+      }
+    }
     const stat = fs.lstatSync(file);
     if (!stat.isFile() || stat.nlink !== 1 || stat.size > 4 * 1024 * 1024) throw new Error('Unsupported configuration file. No routing changes were made.');
     files[file] = stableRoutingFingerprint(fs.readFileSync(file, 'utf8'));

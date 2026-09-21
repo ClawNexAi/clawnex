@@ -5,6 +5,7 @@ import {
 } from './connector-routing-inventory';
 import { inspectLitellmRouting, revertLitellmRouting } from './openclaw-routing-wire';
 import { applyOpenCodeDesiredRouting } from './opencode-routing';
+import { applyNativeRouting } from './native-agent-routing';
 
 /** Tool-specific parsing/writes stay behind this interface; approval and ordering
  * belong to the coordinator. A source ID is mandatory, never an all-instances write.
@@ -27,6 +28,15 @@ function inspect(id: ConnectorId, sourceId: string): ConnectorRoutingSummary {
 }
 
 const modules: Record<ConnectorId, RoutingModule> = {
+  pi: {
+    id: 'pi', inspect: sourceId => inspect('pi', sourceId),
+    apply: scope => applyNativeRouting('pi', { ...scope, restore: false }),
+    restore: scope => {
+      const summary = inspect('pi', scope.sourceId);
+      setConnectorRoutingSelections('pi', summary.items.filter(item => item.present && ['provider-routing', 'model-inventory'].includes(item.capability)).map(item => item.id), 'direct');
+      return applyNativeRouting('pi', { ...scope, restore: true });
+    },
+  },
   openclaw: {
     id: 'openclaw', inspect: sourceId => inspect('openclaw', sourceId),
     apply: scope => applyOpenClawDesiredRouting({ ...scope, restore: false }),
