@@ -91,6 +91,16 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
       window.dispatchEvent(new Event('clawnex:updates-refreshed'));
     });
   };
+  const restartOpenClaw = () => void run(async () => {
+    const response = await fetch('/api/openclaw/gateway/restart', { method: 'POST' });
+    const result = await response.json();
+    if (!response.ok || result.ok !== true) {
+      const manual = typeof result.manualCommand === 'string' && result.manualCommand
+        ? ` Manual command: ${result.manualCommand}` : '';
+      throw new Error(`${result.detail || result.error || 'OpenClaw restart could not be confirmed.'}${manual}`);
+    }
+    setMessage(`${result.detail} Send one new OpenClaw request, then verify the connection.`);
+  });
 
   return <CollapsibleCard title={`${title.toUpperCase()} ROUTING`} accent={accent}
     defaultOpen={false} focusKey={focusKey} focusedCard={focusedCard}>
@@ -119,6 +129,8 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
       <button aria-label={`Review ${title} connection changes`} style={pending ? primaryButton : button} disabled={busy || !sourceId || !pending} onClick={() => void review('apply')}>Review connection changes</button>
       <button aria-label={`Refresh ${title} configuration`} style={button} disabled={busy} onClick={() => void run(refresh)}>Refresh configuration</button>
+      {connector === 'openclaw' && <button aria-label="Restart OpenClaw instance" style={button}
+        disabled={busy || !sourceId || routed === 0 || pending} onClick={restartOpenClaw}>Restart OpenClaw instance</button>}
       <button aria-label={`Verify ${title} connection`} style={{ ...(verificationPending ? primaryButton : button), opacity: busy || !sourceId || !routed || pending ? 0.45 : 1 }} disabled={busy || !sourceId || routed === 0 || pending} onClick={() => void run(async () => {
         const result = await command({ action: 'verify', connector, sourceId });
         setVerification({ key: currentKey, result: result.verification });
