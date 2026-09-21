@@ -17,6 +17,8 @@ assert.match(source, /fetch\('\/api\/openclaw\/gateway\/restart', \{ method: 'PO
   'restart action calls the audited OpenClaw gateway restart endpoint');
 assert.match(source, /aria-label="Restart OpenClaw instance"/,
   'routed OpenClaw instances expose a restart control');
+assert.match(source, /disabled=\{busy \|\| !sourceId \|\| pending\} onClick=\{restartOpenClaw\}/,
+  'OpenClaw restart remains available after restoring the final routed provider');
 assert.match(source, /Send one new OpenClaw request, then verify the connection\./,
   'successful restart explains the final evidence step');
 assert.match(source, /Manual command:/,

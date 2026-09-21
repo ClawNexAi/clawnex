@@ -130,7 +130,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
       <button aria-label={`Review ${title} connection changes`} style={pending ? primaryButton : button} disabled={busy || !sourceId || !pending} onClick={() => void review('apply')}>Review connection changes</button>
       <button aria-label={`Refresh ${title} configuration`} style={button} disabled={busy} onClick={() => void run(refresh)}>Refresh configuration</button>
       {connector === 'openclaw' && <button aria-label="Restart OpenClaw instance" style={button}
-        disabled={busy || !sourceId || routed === 0 || pending} onClick={restartOpenClaw}>Restart OpenClaw instance</button>}
+        disabled={busy || !sourceId || pending} onClick={restartOpenClaw}>Restart OpenClaw instance</button>}
       <button aria-label={`Verify ${title} connection`} style={{ ...(verificationPending ? primaryButton : button), opacity: busy || !sourceId || !routed || pending ? 0.45 : 1 }} disabled={busy || !sourceId || routed === 0 || pending} onClick={() => void run(async () => {
         const result = await command({ action: 'verify', connector, sourceId });
         setVerification({ key: currentKey, result: result.verification });
