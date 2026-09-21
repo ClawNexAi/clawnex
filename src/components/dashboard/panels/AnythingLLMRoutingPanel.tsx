@@ -9,7 +9,7 @@ import type { AnythingPlan, listAnythingConnectors, anythingModels } from '@/lib
 type Instance = ReturnType<typeof listAnythingConnectors>[number];
 type Data = { connectors: Instance[]; models: ReturnType<typeof anythingModels> };
 const button = { padding: '8px 12px', borderRadius: 6, border: `1px solid ${C.cyan}66`, background: `${C.cyan}16`, color: C.cyan, fontFamily: F.disp, fontSize: 12, cursor: 'pointer' };
-const input = { padding: 9, color: C.tx, background: C.srf, border: `1px solid ${C.brd}`, borderRadius: 6, width: '100%', boxSizing: 'border-box' as const };
+const input = { padding: '8px 10px', color: C.tx, background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6, width: '100%', fontFamily: F.mono, fontSize: 13, boxSizing: 'border-box' as const };
 const row = { display: 'flex', gap: 8, flexWrap: 'wrap' as const, marginBottom: 14 };
 async function command(body: Record<string, unknown>) {
   const response = await fetch('/api/config/anythingllm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -40,7 +40,7 @@ export function AnythingLLMFleetConnector({ onCountChange }: { onCountChange: (c
   const [name, setName] = useState('AnythingLLM'), [managementUrl, setManagementUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   useEffect(() => { onCountChange(data.connectors.length); }, [data.connectors.length, onCountChange]);
-  return <details open={open} onToggle={event => setOpen(event.currentTarget.open)} style={{ marginBottom: 20 }}>
+  return <details open={open} onToggle={event => setOpen(event.currentTarget.open)} style={{ marginBottom: 20, fontSize: 12 }}>
     <summary style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: open ? 10 : 0, paddingBottom: 6, borderBottom: `1px solid ${C.glassBorderSubtle}`, cursor: 'pointer', listStyle: 'none' }}>
       <span aria-hidden="true" style={{ fontSize: 10, color: C.txT, display: 'inline-block', transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>{'▶'}</span>
       <span style={{ fontSize: 13, fontWeight: 800, color: C.cyan, letterSpacing: '0.04em' }}>ANYTHINGLLM</span>
@@ -81,9 +81,10 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
   </select>;
   const owned = instance ? Object.keys(instance.ownership).length : 0;
   return <CollapsibleCard title="ANYTHINGLLM ROUTING" accent={C.cyan} defaultOpen={false} focusKey="anythingllmRouting" focusedCard={focusedCard}>
+    <div style={{ fontFamily: F.disp, fontSize: 12, lineHeight: 1.6, overflowWrap: 'anywhere' }}>
     {error && <p role="alert" style={{ color: C.warn }}>{error}</p>}
     {!instance ? <p style={{ color: C.txS }}>Add an AnythingLLM instance in Fleet Connectors to configure chat routing.</p> : <>
-      <select aria-label="AnythingLLM instance" value={instance.id} disabled={busy} onChange={e => { setSelectedId(e.target.value); setPlan(null); setMessage(''); }} style={{ ...input, maxWidth: 500 }}>
+      <select aria-label="AnythingLLM instance" value={instance.id} disabled={busy} onChange={e => { setSelectedId(e.target.value); setPlan(null); setMessage(''); }} style={{ ...input, maxWidth: 500, marginBottom: 12 }}>
         {data.connectors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
       <p style={{ color: C.txS, fontSize: 12, lineHeight: 1.6 }}>Select → Review → Apply → Send a chat → Verify. Default chat is selected initially; workspace overrides are opt-in. Selections alone do not change traffic.</p>
@@ -97,11 +98,11 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
       {busy && <p role="status" style={{ color: C.txS }}>Working…</p>}
       {message && <p role="status" style={{ color: C.tx, lineHeight: 1.6 }}>{message}</p>}
       <div style={{ border: `1px solid ${C.brd}`, borderRadius: 6, padding: 12, marginBottom: 12 }}>
-        <label style={{ color: C.tx, display: 'flex', gap: 8, marginBottom: 8 }}><input type="checkbox" aria-label="Route AnythingLLM default chat" disabled={busy} checked={instance.choices.default.selected} onChange={e => void select('default', e.target.checked, instance.choices.default.model)} />Default chat provider</label>
+        <label style={{ color: C.tx, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 13 }}><input type="checkbox" aria-label="Route AnythingLLM default chat" disabled={busy} checked={instance.choices.default.selected} onChange={e => void select('default', e.target.checked, instance.choices.default.model)} />Default chat provider</label>
         <p style={{ color: C.txS, fontSize: 12 }}>Current: {instance.snapshot.provider} / {instance.snapshot.defaultModel || 'provider default'}</p>
         {modelSelect('default')}
       </div>
-      <h4 style={{ color: C.tx }}>Workspaces ({instance.snapshot.workspaces.length})</h4>
+      <h4 style={{ color: C.tx, fontSize: 13, fontWeight: 700, margin: '12px 0 8px' }}>Workspaces ({instance.snapshot.workspaces.length})</h4>
       {!instance.snapshot.workspaces.length && <p style={{ color: C.txS }}>No workspaces yet. Create one in AnythingLLM, then refresh here.</p>}
       {instance.snapshot.workspaces.map(workspace => {
         const key = `workspace:${workspace.id}`, owner = instance.ownership[key];
@@ -109,7 +110,7 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
         const unsupported = workspace.provider === 'anythingllm-router' || workspace.routerId !== null;
         const configured = !!owner && instance.slotIntact && workspace.provider === owner.after.provider && workspace.model === owner.after.model;
         return <div key={workspace.id} style={{ border: `1px solid ${C.brd}`, borderRadius: 6, padding: 12, marginBottom: 8 }}>
-          <label style={{ display: 'flex', gap: 8, color: C.tx, alignItems: 'center' }}>
+          <label style={{ display: 'flex', flexWrap: 'wrap', gap: 8, color: C.tx, alignItems: 'center', fontSize: 13 }}>
             {!inherited && <input type="checkbox" aria-label={`Route workspace ${workspace.name}`} disabled={busy || unsupported} checked={instance.choices[key]?.selected || false} onChange={e => void select(key, e.target.checked, instance.choices[key]?.model || '')} />}
             <strong>{workspace.name}</strong><span style={{ marginLeft: 'auto', color: C.txS, fontSize: 12 }}>{inherited ? 'Uses default' : unsupported ? 'Model router · unsupported' : configured ? 'Configured · verify instance traffic' : workspace.provider === 'litellm' && instance.slotIntact ? 'Uses shared ClawNex connection' : 'Explicit override · outside managed route'}</span>
           </label>
@@ -121,6 +122,7 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
       <p style={{ color: C.txS, fontSize: 12 }}>Verify checks the saved local proxy settings and loaded models. Confirm actual requests in Traffic Monitor; this provider does not send an instance identity header. Agent overrides and embeddings are outside chat-routing scope.</p>
       {instance.slotReserved && <p style={{ color: instance.slotIntact ? C.txS : C.warn, fontSize: 12 }}>{instance.slotIntact ? 'The separate LiteLLM connection is reserved for ClawNex. Restore returns managed chat routes to their original providers and retains this connection for reuse.' : 'The shared ClawNex connection changed in AnythingLLM. Resolve that conflict before applying or restoring routes.'}</p>}
     </>}
+    </div>
     <ConfirmDialog open={!!plan} title="Review AnythingLLM chat routing" confirmLabel={plan?.prerequisites.length ? 'Resolve prerequisites first' : 'Apply reviewed changes'} danger={plan?.operation === 'restore'} returnFocusTo={reviewOrigin.current}
       body={<><p>{plan?.changes.length} route changes. No application restart is required.</p>
         <p>Chat proxy: <code>{plan?.slot.base}</code></p>
