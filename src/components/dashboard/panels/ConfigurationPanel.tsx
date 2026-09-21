@@ -4794,11 +4794,11 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
           </div>}
         </div>
 
+        <AnythingLLMFleetConnector onCountChange={setAnythingLLMCount} />
         <div style={{ fontSize: 12, color: C.txT, lineHeight: 1.5 }}>
           Additional fleet connectors are managed through released integrations only.
           ClawNex does not show disabled connector cards until an adapter is available.
         </div>
-        <AnythingLLMFleetConnector onCountChange={setAnythingLLMCount} />
       </CollapsibleCard>
   );
 

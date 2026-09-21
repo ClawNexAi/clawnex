@@ -35,11 +35,16 @@ function useAnything() {
 
 export function AnythingLLMFleetConnector({ onCountChange }: { onCountChange: (count: number) => void }) {
   const { data, error } = useAnything();
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false), [message, setMessage] = useState('');
   const [name, setName] = useState('AnythingLLM'), [managementUrl, setManagementUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   useEffect(() => { onCountChange(data.connectors.length); }, [data.connectors.length, onCountChange]);
-  return <details style={{ marginBottom: 20 }}><summary style={{ color: C.cyan, fontWeight: 800, cursor: 'pointer', paddingBottom: 8 }}>ANYTHINGLLM · {data.connectors.length} registered</summary>
+  return <details open={open} onToggle={event => setOpen(event.currentTarget.open)} style={{ marginBottom: 20 }}>
+    <summary style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: open ? 10 : 0, paddingBottom: 6, borderBottom: `1px solid ${C.glassBorderSubtle}`, cursor: 'pointer', listStyle: 'none' }}>
+      <span aria-hidden="true" style={{ fontSize: 10, color: C.txT, display: 'inline-block', transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>{'▶'}</span>
+      <span style={{ fontSize: 13, fontWeight: 800, color: C.cyan, letterSpacing: '0.04em' }}>ANYTHINGLLM</span>
+    </summary>
     {data.connectors.map(instance => <p key={instance.id} style={{ color: C.tx, fontSize: 12 }}><strong>{instance.name}</strong> — {instance.managementUrl}<br />Registered · review chat routing below</p>)}
     <form onSubmit={event => { event.preventDefault(); setBusy(true); setMessage(''); void command({ action: 'add', name, managementUrl, apiKey }).then(() => {
       setApiKey(''); setMessage('Connected. Open AnythingLLM Routing to choose models and review changes.'); window.dispatchEvent(new Event('clawnex:anythingllm'));
