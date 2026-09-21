@@ -38,7 +38,7 @@ async function main() {
   assert.equal(added.status, 201); const connector = (await added.json()).connector;
   await config.addProvider({ id: 'fixture', name: 'Operator provider', type: 'openai', baseUrl: 'http://127.0.0.1:20128/v1', apiKey: 'fixture-upstream' });
   config.addModel('fixture', 'openai/chosen-model');
-  syncProvidersToYaml({ db: getDb(), configPath: process.env.CLAWNEX_LITELLM_CONFIG });
+  syncProvidersToYaml({ db: getDb(), configPath: process.env.CLAWNEX_LITELLM_CONFIG! });
   globalThis.fetch = async input => String(input).endsWith('/model/info') ? Response.json({ data: YAML.parse(fs.readFileSync(process.env.CLAWNEX_LITELLM_CONFIG!, 'utf8')).model_list }) : Response.json({ id: 'fixture', choices: [{ message: { role: 'assistant', content: 'OK' }, finish_reason: 'stop' }] });
   await testConfiguredProxyModel('fixture', 'openai/chosen-model', true);
   const sync = await call({ action: 'sync' });
