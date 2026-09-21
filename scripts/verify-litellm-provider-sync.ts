@@ -491,6 +491,10 @@ console.log("[13] ConfigurationPanel surfaces manual-Restart contract");
     src.includes("setRestartHintVisible(true)"),
     "Banner is shown after a successful provider add/remove",
   );
+  assert(
+    src.includes("if (result.status === 'reload-required') markProxyRestartNeeded()"),
+    "A stale proxy test restores the restart action after a page refresh",
+  );
 }
 
 // ---------------------------------------------------------------------------

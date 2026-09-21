@@ -3873,8 +3873,12 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
             body: JSON.stringify({ action: 'inference', modelAlias, approved: true }),
           });
           const result = await response.json();
+          // A page refresh clears the transient "provider changed" banner. If
+          // the running proxy reports an older revision, restore the restart
+          // action from the test result so the operator can recover in place.
+          if (result.status === 'reload-required') markProxyRestartNeeded();
           const messages: Record<string, { tone: "warning" | "error"; title: string; detail: string }> = {
-            'reload-required': { tone: 'warning', title: 'Request not sent', detail: 'LiteLLM has not loaded this configuration. Sync and reload LiteLLM, then test again.' },
+            'reload-required': { tone: 'warning', title: 'Request not sent', detail: 'LiteLLM has not loaded this configuration. Use Restart LiteLLM proxy above, then test again.' },
             'not-configured': { tone: 'warning', title: 'Request not sent', detail: 'Add this model to the provider and sync its configuration first.' },
             'invalid-configuration': { tone: 'error', title: 'Proxy test failed', detail: 'The proxy configuration is missing or invalid. Correct it before testing.' },
             'proxy-unavailable': { tone: 'error', title: 'Proxy test failed', detail: 'Cannot inspect the running proxy. Check LiteLLM service status and its management credential.' },
