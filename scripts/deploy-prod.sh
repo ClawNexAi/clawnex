@@ -54,9 +54,9 @@
 #     Tar clawnex.db + clawnex.db-wal + clawnex.db-shm to /tmp before the wipe;
 #     restore them after install but before the dashboard service restart.
 #     Operator accounts, sessions, configs, accepted-risk records, and the
-#     wizard-dismissed flag survive the redeploy. .env.local still rotates
-#     (new SETUP_SECRET / INGEST_SECRET each deploy) — preservation is scoped
-#     to the SQLite DB only.
+#     wizard-dismissed flag survive the redeploy. SETUP_SECRET still rotates,
+#     while runtime identity, session, encryption, and proxy credentials are
+#     retained so already-routed connectors remain valid.
 #
 # OpenClaw preservation is enforced explicitly: after the wipe, the script
 # verifies $HOME/.openclaw/openclaw.json still exists. If not, it aborts the
@@ -310,8 +310,18 @@ INSTALL_DIR="$HOME/clawnex"
 TARBALL="/tmp/cnx-bundle.tar.gz"
 DATA_PRESERVE_TAR="/tmp/clawnex-data-preserve.tar.gz"
 PRESERVED_EVIDENCE_ENCRYPTION_KEY=""
+PRESERVED_SESSION_SECRET=""
+PRESERVED_INGEST_SECRET=""
+PRESERVED_LITELLM_MASTER_KEY=""
 if [ "${PRESERVE_DATA:-0}" = "1" ] && [ -f "$INSTALL_DIR/.env.local" ]; then
   PRESERVED_EVIDENCE_ENCRYPTION_KEY=$(grep -E '^EVIDENCE_ENCRYPTION_KEY=' "$INSTALL_DIR/.env.local" | head -1 | cut -d= -f2- || true)
+  PRESERVED_SESSION_SECRET=$(grep -E '^SESSION_SECRET=' "$INSTALL_DIR/.env.local" | head -1 | cut -d= -f2- || true)
+  PRESERVED_INGEST_SECRET=$(grep -E '^CLAWNEX_INGEST_SECRET=' "$INSTALL_DIR/.env.local" | head -1 | cut -d= -f2- || true)
+  PRESERVED_LITELLM_MASTER_KEY=$(grep -E '^LITELLM_MASTER_KEY=' "$INSTALL_DIR/.env.local" | head -1 | cut -d= -f2- || true)
+  [[ "$PRESERVED_EVIDENCE_ENCRYPTION_KEY" =~ ^[a-f0-9]{64}$ ]] || PRESERVED_EVIDENCE_ENCRYPTION_KEY=""
+  [[ "$PRESERVED_SESSION_SECRET" =~ ^[a-f0-9]{64}$ ]] || PRESERVED_SESSION_SECRET=""
+  [[ "$PRESERVED_INGEST_SECRET" =~ ^[a-f0-9]{64}$ ]] || PRESERVED_INGEST_SECRET=""
+  [[ "$PRESERVED_LITELLM_MASTER_KEY" =~ ^sk-[a-f0-9]{48}$ ]] || PRESERVED_LITELLM_MASTER_KEY=""
 fi
 
 # Decode the password back from the base64 envelope. Failure here means an
@@ -510,16 +520,17 @@ echo "  extracted"
 echo "=== 6/8 .env.local ==="
 cd "$INSTALL_DIR"
 SETUP_SECRET=$(openssl rand -hex 32)
-INGEST_SECRET=$(openssl rand -hex 32)
+INGEST_SECRET="${PRESERVED_INGEST_SECRET:-$(openssl rand -hex 32)}"
 # Parity with setup.sh's .env.local generator. DAST-2 #4 (6f0789b)
 # added SESSION_SECRET to setup.sh, but this parallel writer was
 # missed — fresh deploys via deploy-prod.sh ended up without
 # SESSION_SECRET, forcing csrf-hmac.ts onto the SETUP_SECRET-derived
 # fallback path. LITELLM_MASTER_KEY was also never written here
-# (setup.sh:889 writes it). Both now generated fresh on every deploy.
-SESSION_SECRET=$(openssl rand -hex 32)
+# (setup.sh:889 writes it). Fresh installs generate both; preserved-data
+# deploys retain runtime secrets so existing sessions and routes stay valid.
+SESSION_SECRET="${PRESERVED_SESSION_SECRET:-$(openssl rand -hex 32)}"
 EVIDENCE_ENCRYPTION_KEY="${PRESERVED_EVIDENCE_ENCRYPTION_KEY:-$(openssl rand -hex 32)}"
-LITELLM_MASTER_KEY="sk-$(openssl rand -hex 24)"
+LITELLM_MASTER_KEY="${PRESERVED_LITELLM_MASTER_KEY:-sk-$(openssl rand -hex 24)}"
 cat > .env.local <<EOF
 RBAC_ENABLED=true
 NEXT_PUBLIC_RBAC_ENABLED=true
