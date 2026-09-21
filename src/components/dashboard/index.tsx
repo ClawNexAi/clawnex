@@ -27,6 +27,7 @@ import { Dot, CountBadge, Fresh, EmptyState, Badge } from "./shared";
 import { BrandWordmark } from "./BrandWordmark";
 import { Tooltip, TooltipsProvider, useTooltipsEnabled } from "./tooltip";
 import { CLAWNEX_VERSION_SHORT, CLAWNEX_CHANNEL } from "@/lib/version";
+import { handleDashboardUnauthorized } from "@/lib/dashboard/session-expiry";
 import { UpdateBadge } from "./UpdateBadge";
 import { GlobalFilterSelect, type GlobalFilterOption } from "./GlobalFilterSelect";
 
@@ -430,6 +431,12 @@ function SentinelDashboardInner() {
     (async () => {
       try {
         const res = await fetch('/api/auth/me');
+        if (handleDashboardUnauthorized(
+          res,
+          '/api/auth/me',
+          window.location.origin,
+          () => window.location.replace('/login?expired=1'),
+        )) return;
         if (res.ok) {
           const data = await res.json();
           const storageIdentity = String(data.id || data.username || "local").trim();
@@ -450,12 +457,12 @@ function SentinelDashboardInner() {
     })();
   }, []);
 
-  // Auto-inject CSRF header on mutation fetch calls when RBAC is active
+  // Auto-inject CSRF headers and evict an already-mounted dashboard when its
+  // server-side session disappears (for example after a fresh installation).
   useEffect(() => {
-    if (!operator) return; // Only when RBAC is active
-
     const originalFetch = window.fetch;
-    window.fetch = function(input: RequestInfo | URL, init?: RequestInit) {
+    let redirecting = false;
+    window.fetch = async function(input: RequestInfo | URL, init?: RequestInit) {
       const method = init?.method?.toUpperCase() || 'GET';
       if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
         const csrfToken = document.cookie.match(/clawnex_csrf=([^;]+)/)?.[1] || '';
@@ -467,11 +474,20 @@ function SentinelDashboardInner() {
           init = { ...init, headers };
         }
       }
-      return originalFetch.call(window, input, init);
+      const response = await originalFetch.call(window, input, init);
+      if (!redirecting && handleDashboardUnauthorized(
+        response,
+        input,
+        window.location.origin,
+        () => window.location.replace('/login?expired=1'),
+      )) {
+        redirecting = true;
+      }
+      return response;
     };
 
     return () => { window.fetch = originalFetch; };
-  }, [operator]);
+  }, []);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -484,16 +500,31 @@ function SentinelDashboardInner() {
   // Redirects to /login if the session has expired mid-use
   useEffect(() => {
     if (!operator) return; // Only check when RBAC is active and operator is set
+    let checking = false;
     const checkSession = async () => {
+      if (checking) return;
+      checking = true;
       try {
         const res = await fetch('/api/auth/me');
         if (res.status === 401) {
-          window.location.href = '/login?expired=1';
+          window.location.replace('/login?expired=1');
         }
-      } catch {}
+      } catch {} finally {
+        checking = false;
+      }
     };
+    const checkVisibleSession = () => {
+      if (document.visibilityState === 'visible') void checkSession();
+    };
+    void checkSession();
     const iv = setInterval(checkSession, 60000); // Check every 60 seconds
-    return () => clearInterval(iv);
+    window.addEventListener('focus', checkSession);
+    document.addEventListener('visibilitychange', checkVisibleSession);
+    return () => {
+      clearInterval(iv);
+      window.removeEventListener('focus', checkSession);
+      document.removeEventListener('visibilitychange', checkVisibleSession);
+    };
   }, [operator]);
 
   const toggleTheme = useCallback(() => {
