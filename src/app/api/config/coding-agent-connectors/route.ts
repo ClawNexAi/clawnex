@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
 import { NextRequest, NextResponse } from 'next/server';
 import { isRbacEnabled, requirePermission, requireSession } from '@/lib/rbac/guard';
 import { requireLocalhost } from '@/lib/middleware/localhost-guard';
@@ -33,14 +34,15 @@ function guard(request: NextRequest, permission: 'config:read' | 'config:write')
 
 function serialize(row: ConnectorRow) {
   const check = row.type === 'opencode' ? resolveOpenCodeGlobalConfig() : isNativeAgent(row.type) ? nativeConfigCheck(row.type) : { available: false, configPath: row.config_path, error: 'Unsupported connector type.' };
+  const available = check.available && fs.existsSync(check.configPath);
   return {
     id: row.id,
     type: row.type,
     name: row.name,
     configPath: check.configPath,
     active: row.is_active === 1,
-    status: check.available ? 'connected' : 'error',
-    available: check.available,
+    status: available ? 'connected' : check.error ? 'error' : 'not_configured',
+    available,
     error: check.error,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

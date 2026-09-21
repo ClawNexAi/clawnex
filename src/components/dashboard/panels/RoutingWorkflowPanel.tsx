@@ -59,6 +59,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   const currentKey = JSON.stringify(items.map(item => [item.id, item.fingerprint, item.desiredRoute]));
   const currentVerification = verification?.key === currentKey ? verification.result : null;
   const routed = groups.filter(([, rows]) => rows.some(row => row.currentRoute === 'routed')).length;
+  const recoveryOwned = native && items.some(item => typeof item.metadata.identityHash === 'string');
   const pending = items.some(item => ['provider-routing', 'model-inventory'].includes(item.capability) && item.desiredRoute !== item.currentRoute);
   const verificationPending = routed > 0 && !pending && currentVerification?.status !== 'verified';
   const excluded = groups.filter(([, rows]) => rows.every(row => ['read-only', 'unsupported'].includes(row.capability))).length;
@@ -124,7 +125,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
         const result = await command({ action: 'verify', connector, sourceId });
         setVerification({ key: currentKey, result: result.verification });
       })}>Verify connection</button>
-      <button aria-label={`Restore ${title} direct connection`} style={{ ...button, color: C.warn, borderColor: `${C.warn}66` }} disabled={busy || !sourceId || routed === 0} onClick={() => void review('restore')}>Restore direct connection</button>
+      <button aria-label={`Restore ${title} direct connection`} style={{ ...button, color: C.warn, borderColor: `${C.warn}66` }} disabled={busy || !sourceId || (routed === 0 && !recoveryOwned)} onClick={() => void review('restore')}>Restore direct connection</button>
     </div>
     {busy && <p role="status" style={{ color: C.txS }}>Working…</p>}
     {message && <p role="status" style={{ color: C.tx, fontSize: 12, lineHeight: 1.6 }}>{message}</p>}
@@ -159,6 +160,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
       body={<><p>Instance: {plan?.sourceId}</p><p>{plan?.providers.length} provider route(s), {plan?.models.length} model(s). {plan?.exclusions} unsupported route(s) remain unchanged.</p>
         {connector === 'codex' && <p>Codex uses the HTTP Responses API. The TOML file is rewritten with its values preserved; comments and formatting are normalized.</p>}
         {connector === 'claude' && <p>Claude Code uses the local Messages API. Initial setup assigns the selected model to all model slots. Existing project and managed settings can override this global configuration.</p>}
+        {native && plan?.operation === 'restore' && recoveryOwned && <p>Retained recovery records are checked even when the current endpoint has changed. Conflicting operator edits are preserved and reported.</p>}
         {['codex', 'claude'].includes(connector) && <p>Apply first sends a small test request through this client's API protocol for every affected model. A failed test leaves agent configuration unchanged.</p>}
         <p>{plan?.operation === 'restore' ? 'Restore only connection settings and identity headers still owned by ClawNex. Preserve unrelated edits and report conflicts.' : native ? 'Point the selected provider endpoints to local LiteLLM and add a signed instance-identity header. Original owned fields and credentials are stored in encrypted recovery records.' : 'Point the selected provider endpoints to LiteLLM and add a signed instance-identity header. Original credentials are retained in encrypted recovery records.'}</p>
         <details><summary>Affected providers and models</summary><p style={{ overflowWrap: 'anywhere' }}>{plan?.providers.join(', ') || 'None'}</p><p style={{ overflowWrap: 'anywhere' }}>{plan?.models.join(', ') || 'None'}</p></details>

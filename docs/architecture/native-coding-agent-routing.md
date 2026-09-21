@@ -36,3 +36,11 @@ Initial setup requires an explicit operator model choice. Reviewed Apply assigns
 Codex and Claude Apply perform small live Responses/Messages requests, respectively, before writing any configuration. A successful Chat Completions readiness receipt alone is not enough. This preflight is disclosed in the review dialog. Exact instance verification still requires a subsequent successful client request with its signed identity.
 
 Upstream contract: https://code.claude.com/docs/en/llm-gateway-connect
+
+## QA validation — 2026-09-21
+
+Native CLI requests through the existing operator-configured OmniRoute/GPT-OSS provider completed with exact signed-instance verification: Pi 505 tokens, Codex 6,645 tokens, and Claude Code 1,375 tokens. These are smoke-test observations, not model defaults. Each test restored the original agent configuration; Codex and Claude still require an operator model choice before initial Apply.
+
+The logger scans Responses input and Messages tool results, records native output/usage, and only attests completed exchanges. Oversized LiteLLM Responses IDs are stored as a stable SHA-256 correlation ID within the ingest limit. LiteLLM's Messages-to-Responses adapter requires a logging compatibility shim: retain completed Responses objects, unwrap terminal streaming events (including OpenAI SDK response objects), and process completed responses delivered through the stream callback. Partial stream events never count as proof. This compatibility code loads with the configured callback, including native CLI service startup.
+
+Validation includes the production build, shared OpenCode/registry/reconciliation/native-connector suites, logger identity/protocol fixtures, and a real disposable LiteLLM proxy proving Responses and Messages are blocked before upstream when Shield denies a request. Browser fixtures render the actual routing components at desktop and narrow widths; live authenticated QA visual review remains for the operator.

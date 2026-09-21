@@ -140,6 +140,22 @@ with tempfile.TemporaryDirectory(prefix='clawnex-native-routing-') as temp:
                 finally:
                     policy[failure] = False
                 assert policy['upstream_calls'] == before, 'Blocked/failed scanner traffic must not reach the upstream'
+            for endpoint, payload in [
+                ('responses', {'input': 'Fixture native policy test'}),
+                ('messages', {'messages': [{'role': 'user', 'content': 'Fixture native policy test'}], 'max_tokens': 16}),
+            ]:
+                policy['block'] = True
+                rows_before = len(records)
+                try:
+                    get_json(f'http://127.0.0.1:{proxy_port}/v1/{endpoint}', {'model': 'fixture-model', **payload}, {'x-clawnex-routing-identity': token})
+                    raise AssertionError('Native request must fail closed')
+                except urllib.error.HTTPError:
+                    pass
+                finally:
+                    policy['block'] = False
+                assert policy['upstream_calls'] == before, endpoint
+                assert any(row.get('blocked') and row.get('routing_source_id') == 'instance-b' for row in records[rows_before:]), endpoint
+            print('PASS: Responses and Messages are blocked before upstream with signed instance evidence')
             policy['bypass'] = True
             get_json(f'http://127.0.0.1:{proxy_port}/v1/chat/completions', {'model': 'fixture-model', 'messages': [{'role': 'user', 'content': 'Fixture bypass test'}]}, {'x-clawnex-routing-identity': token})
             assert policy['upstream_calls'] == before + 1

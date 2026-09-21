@@ -45,7 +45,7 @@ def _signed_routing_identity(data):
     candidates = []
     metadata = data.get('metadata') or {}
     params = data.get('litellm_params') or {}
-    for container in [data.get('proxy_server_request') or {}, metadata, params.get('metadata') or {}]:
+    for container in [data.get('proxy_server_request') or {}, metadata, data.get('litellm_metadata') or {}, params.get('metadata') or {}]:
         headers = container.get('headers') if isinstance(container, dict) else None
         if isinstance(headers, dict):
             for key in list(headers):
@@ -76,10 +76,11 @@ def _remember_routing_identity(auth, data):
     for handle, entry in list(_ROUTING_IDENTITIES.items()):
         if now - entry[0] > 600:
             _ROUTING_IDENTITIES.pop(handle, None)
-    metadata = data.get("metadata")
+    metadata_key = 'litellm_metadata' if 'litellm_metadata' in data else 'metadata'
+    metadata = data.get(metadata_key)
     if not isinstance(metadata, dict):
         metadata = {}
-        data["metadata"] = metadata
+        data[metadata_key] = metadata
     metadata.pop("clawnex_evidence_handle", None)
     trusted = _signed_routing_identity(data) or getattr(auth, "metadata", None)
     if not isinstance(trusted, dict):
@@ -96,22 +97,73 @@ def _remember_routing_identity(auth, data):
 
 
 def _consume_routing_identity(kwargs):
-    metadata = kwargs.get("metadata") or (kwargs.get("litellm_params") or {}).get("metadata") or {}
-    handle = metadata.get("clawnex_evidence_handle") if isinstance(metadata, dict) else None
+    containers = [kwargs.get('litellm_metadata'), kwargs.get('metadata'), (kwargs.get('litellm_params') or {}).get('metadata')]
+    handle = next((value.get('clawnex_evidence_handle') for value in containers
+                   if isinstance(value, dict) and isinstance(value.get('clawnex_evidence_handle'), str)), None)
     entry = _ROUTING_IDENTITIES.pop(handle, None) if isinstance(handle, str) else None
     if not entry or time.monotonic() - entry[0] > 600:
         return None
     return entry
 
 
+def _field(value, name, default=None):
+    return value.get(name, default) if isinstance(value, dict) else getattr(value, name, default)
+
+
+def _response_completed(response):
+    if _field(response, 'error') or _field(response, 'status') in {'failed', 'cancelled', 'incomplete', 'in_progress', 'queued'}:
+        return False
+    for choice in _field(response, 'choices', []) or []:
+        message = _field(choice, 'message')
+        if _field(message, 'content') or _field(message, 'tool_calls'):
+            return True
+    # Responses API: only a terminal response with meaningful output is proof.
+    if _field(response, 'status') == 'completed':
+        return any(_field(item, 'content') or _field(item, 'type') == 'function_call'
+                   for item in _field(response, 'output', []) or [])
+    # Anthropic Messages: streaming deltas are not completed exchanges.
+    return bool(_field(response, 'type') == 'message' and _field(response, 'stop_reason')
+                and _field(response, 'content'))
+
+
+def _response_text(response):
+    parts = []
+    for choice in _field(response, 'choices', []) or []:
+        parts.append(_content_text(_field(_field(choice, 'message'), 'content')))
+    for item in _field(response, 'output', []) or []:
+        parts.append(_content_text(_field(item, 'content')))
+        if _field(item, 'type') == 'function_call':
+            parts.append(_field(item, 'arguments', '') or '')
+    parts.append(_content_text(_field(response, 'content')))
+    return '\n'.join(part for part in parts if part)
+
+
+def _request_messages(data):
+    messages = data.get('messages')
+    if messages:
+        return messages
+    value = data.get('input')
+    if value is None:
+        value = (data.get('optional_params') or {}).get('input')
+    if isinstance(value, str):
+        return [{'role': 'user', 'content': value}]
+    if isinstance(value, list):
+        return [({'role': 'tool', 'content': item.get('output', '')}
+                 if isinstance(item, dict) and item.get('type') == 'function_call_output' else item)
+                for item in value]
+    return []
+
+
 def _completed_routing_identity(kwargs, response_obj):
     entry = _consume_routing_identity(kwargs)
-    request_id = getattr(response_obj, "id", None)
-    choices = getattr(response_obj, "choices", None) or []
-    completed = any(getattr(getattr(choice, "message", None), "content", None) or
-                    getattr(getattr(choice, "message", None), "tool_calls", None) for choice in choices)
+    request_id = _field(response_obj, "id")
+    completed = _response_completed(response_obj)
     if not entry or not completed or not isinstance(request_id, str) or not request_id:
         return {}
+    if len(request_id) > 200:
+        # LiteLLM Responses IDs embed routing state and can exceed the ingest
+        # bound. Preserve stable correlation without storing that opaque state.
+        request_id = 'sha256:' + hashlib.sha256(request_id.encode()).hexdigest()
     return {"source": entry[1], "routing_connector": entry[1], "routing_source_id": entry[2], "proxy_request_id": request_id,
             "model": entry[3], **({'routing_identity_hash': entry[4]} if entry[4] else {})}
 
@@ -143,6 +195,23 @@ def _scan_error_verdict(err: Exception) -> dict:
     }
 
 
+def _content_text(content):
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ''
+    parts = []
+    for block in content:
+        text = _field(block, 'text') or _field(block, 'thinking') or _field(block, 'refusal')
+        if isinstance(text, str):
+            parts.append(text)
+        if _field(block, 'type') == 'tool_result':
+            parts.append(_content_text(_field(block, 'content')))
+        if _field(block, 'type') == 'tool_use':
+            parts.append(json.dumps(_field(block, 'input', {})))
+    return '\n'.join(parts)
+
+
 def _extract_text(messages, excluded_roles=None):
     parts = []
     if not messages:
@@ -151,14 +220,9 @@ def _extract_text(messages, excluded_roles=None):
         if isinstance(msg, dict) and msg.get("role") in (excluded_roles or set()):
             continue
         content = msg.get("content", "") if isinstance(msg, dict) else ""
-        if isinstance(content, str):
-            parts.append(content)
-        elif isinstance(content, list):
-            for block in content:
-                if isinstance(block, dict):
-                    text = block.get("text") or block.get("thinking") or ""
-                    if text:
-                        parts.append(text)
+        text = _content_text(content)
+        if text:
+            parts.append(text)
     return "\n".join(parts)
 
 
@@ -304,7 +368,7 @@ def _claim_event(data, response_obj):
     event_id = None
     if isinstance(data, dict):
         event_id = data.get("litellm_call_id") or data.get("request_id")
-    event_id = event_id or getattr(response_obj, "id", None)
+    event_id = event_id or _field(response_obj, "id")
     if not event_id:
         usage = getattr(response_obj, "usage", None)
         event_id = "fallback:" + hashlib.sha256(
@@ -374,10 +438,43 @@ def _valid_verdict(value, fallback="REVIEW"):
     return value if value in {"ALLOW", "REVIEW", "BLOCK", "BYPASSED"} else fallback
 
 
+def _install_messages_logging_compatibility():
+    """Retain Responses objects from LiteLLM's Messages-to-Responses adapter.
+
+    The adapter keeps call_type=anthropic_messages, so the SDK otherwise tries
+    to validate a Responses object as AnthropicResponse and drops callbacks.
+    Install with the configured callback, including when launched by the CLI.
+    """
+    from litellm.litellm_core_utils.litellm_logging import Logging
+    from litellm.types.llms.openai import ResponsesAPIResponse
+    original = Logging._handle_anthropic_messages_response_logging
+    if getattr(original, '_clawnex_responses_compatible', False):
+        return
+
+    def compatible(self, result):
+        if isinstance(result, ResponsesAPIResponse):
+            return result
+        # Streaming Messages-to-Responses completes with an event wrapper.
+        # The nested response, not the event, is the usage/completion record.
+        if _field(result, 'type') == 'response.completed':
+            response = _field(result, 'response')
+            if isinstance(response, ResponsesAPIResponse):
+                return response
+            if hasattr(response, 'model_dump'):
+                response = response.model_dump()
+            if isinstance(response, dict) and response.get('object') == 'response':
+                return ResponsesAPIResponse(**response)
+        return original(self, result)
+
+    compatible._clawnex_responses_compatible = True
+    Logging._handle_anthropic_messages_response_logging = compatible
+
+
 class ClawNexLogger(CustomLogger):
 
     def __init__(self):
         super().__init__()
+        _install_messages_logging_compatibility()
         print(f"[ClawNex Logger] Initialized — API: {CLAWNEX_API}")
 
     async def async_pre_call_hook(
@@ -394,14 +491,13 @@ class ClawNexLogger(CustomLogger):
         """
         try:
             _remember_routing_identity(user_api_key_dict, data)
-            messages = data.get("messages", [])
+            messages = _request_messages(data)
             if not messages:
                 return None
 
             # Break-glass: skip scan, log as bypassed, allow through
             if _is_break_glass_active():
-                handle = data.get('metadata', {}).pop('clawnex_evidence_handle', None)
-                _ROUTING_IDENTITIES.pop(handle, None)
+                _consume_routing_identity(data)
                 model = data.get("model", "unknown")
                 _ingest({
                     "direction": "inbound",
@@ -486,6 +582,16 @@ class ClawNexLogger(CustomLogger):
         """Async version — called by LiteLLM 1.84.10 proxy."""
         self.log_success_event(kwargs, response_obj, start_time, end_time)
 
+    async def async_log_stream_event(self, kwargs, response_obj, start_time, end_time):
+        # The Messages adapter dispatches a terminal Responses object through
+        # the stream callback. Ignore deltas; only a completed response counts.
+        if _response_completed(response_obj):
+            self.log_success_event(kwargs, response_obj, start_time, end_time)
+
+    def log_stream_event(self, kwargs, response_obj, start_time, end_time):
+        if _response_completed(response_obj):
+            self.log_success_event(kwargs, response_obj, start_time, end_time)
+
     async def async_log_failure_event(self, kwargs, response_obj, start_time, end_time):
         """Async version — called by LiteLLM 1.84.10 proxy."""
         self.log_failure_event(kwargs, response_obj, start_time, end_time)
@@ -510,7 +616,7 @@ class ClawNexLogger(CustomLogger):
             if not _claim_event(kwargs, response_obj):
                 return
             model = kwargs.get("model", "unknown")
-            messages = kwargs.get("messages", [])
+            messages = _request_messages(kwargs)
             latency_ms = int((end_time - start_time).total_seconds() * 1000) if end_time and start_time else 0
             bypassed = _is_break_glass_active()
 
@@ -519,21 +625,18 @@ class ClawNexLogger(CustomLogger):
             inbound_result = _scan(inbound_text, "inbound") if inbound_text.strip() and not bypassed else {"verdict": "ALLOW", "score": 0, "detections": []}
 
             # Extract response
-            response_text = ""
-            if hasattr(response_obj, "choices") and response_obj.choices:
-                choice = response_obj.choices[0]
-                if hasattr(choice, "message") and hasattr(choice.message, "content"):
-                    response_text = choice.message.content or ""
+            response_text = _response_text(response_obj)
 
             # Scan outbound
             outbound_result = _scan(response_text, "outbound") if response_text.strip() and not bypassed else {"verdict": "ALLOW", "score": 0, "detections": []}
 
             # Tokens
             input_tokens = output_tokens = total_tokens = 0
-            if hasattr(response_obj, "usage") and response_obj.usage:
-                input_tokens = getattr(response_obj.usage, "prompt_tokens", 0) or 0
-                output_tokens = getattr(response_obj.usage, "completion_tokens", 0) or 0
-                total_tokens = getattr(response_obj.usage, "total_tokens", 0) or 0
+            usage = _field(response_obj, 'usage')
+            if usage:
+                input_tokens = _field(usage, 'prompt_tokens', _field(usage, 'input_tokens', 0)) or 0
+                output_tokens = _field(usage, 'completion_tokens', _field(usage, 'output_tokens', 0)) or 0
+                total_tokens = _field(usage, 'total_tokens', input_tokens + output_tokens) or 0
             cost_usd = _response_cost(response_obj, kwargs)
 
             # Verdicts

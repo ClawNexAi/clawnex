@@ -19,6 +19,12 @@ sys.modules['litellm.integrations'] = types.ModuleType('litellm.integrations')
 sys.modules['litellm.integrations.custom_logger'] = custom_logger
 sys.modules['httpx'] = types.ModuleType('httpx')
 sys.modules['yaml'] = types.ModuleType('yaml')
+sdk_logging = types.ModuleType('litellm.litellm_core_utils.litellm_logging')
+sdk_logging.Logging = type('Logging', (), {'_handle_anthropic_messages_response_logging': lambda self, result: ('native', result)})
+sdk_openai = types.ModuleType('litellm.types.llms.openai')
+sdk_openai.ResponsesAPIResponse = type('ResponsesAPIResponse', (), {'__init__': lambda self, **kwargs: self.__dict__.update(kwargs)})
+sys.modules[sdk_logging.__name__] = sdk_logging
+sys.modules[sdk_openai.__name__] = sdk_openai
 spec = importlib.util.spec_from_file_location('routing_logger_fixture', pathlib.Path(__file__).resolve().parents[1] / 'litellm/clawnex_logger.py')
 logger = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(logger)
@@ -70,6 +76,39 @@ async def main():
         forged = {'proxy_server_request': {'headers': {'x-clawnex-routing-identity': token + 'forged'}}}
         assert logger._signed_routing_identity(forged) is None
 
+    for protocol, request, response in [
+        ('responses', {'input': [{'role': 'developer', 'content': 'Trusted'}, {'role': 'user', 'content': [{'type': 'input_text', 'text': 'Native prompt'}]}, {'type': 'function_call_output', 'output': 'Tool result'}]},
+         types.SimpleNamespace(id='native-responses-' + 'x' * 300, status='completed', output=[types.SimpleNamespace(type='message', content=[types.SimpleNamespace(type='output_text', text='Native reply')])], usage=types.SimpleNamespace(input_tokens=10, output_tokens=4, total_tokens=14))),
+        ('messages', {'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': 'Native prompt'}, {'type': 'tool_result', 'content': [{'type': 'text', 'text': 'Tool result'}]}]}]},
+         {'id': 'native-messages', 'type': 'message', 'stop_reason': 'end_turn', 'content': [{'type': 'text', 'text': 'Native reply'}], 'usage': {'input_tokens': 10, 'output_tokens': 4}}),
+    ]:
+        scanned.clear()
+        logger._scan = lambda text, direction: scanned.append((direction, text)) or {'verdict': 'ALLOW', 'score': 0, 'detections': []}
+        native_data = {'model': 'shared-model', **request, 'litellm_metadata': {}, 'metadata': {'user_id': 'fixture-user'}, 'proxy_server_request': {'headers': {'x-clawnex-routing-identity': token}}}
+        await callback.async_pre_call_hook(types.SimpleNamespace(metadata={}), None, native_data, protocol)
+        assert native_data['metadata'] == {'user_id': 'fixture-user'}, 'Evidence must not enter upstream native metadata'
+        assert scanned == [('inbound', 'Native prompt\nTool result')], scanned
+        callback_data = {**native_data, 'messages': native_data.get('messages', []), 'litellm_params': {'metadata': native_data.pop('litellm_metadata')}}
+        callback_data.pop('litellm_metadata', None)
+        count_before = len(rows)
+        await callback.async_log_stream_event(callback_data, {'type': 'response.output_text.delta', 'delta': 'partial'}, datetime.now(), datetime.now())
+        assert len(rows) == count_before, 'Stream deltas neither ingest nor consume signed completion evidence'
+        await callback.async_log_stream_event(callback_data, response, datetime.now(), datetime.now())
+        assert rows[-1]['routing_source_id'] == 'opencode:global', rows[-1]
+        assert len(rows[-1]['proxy_request_id']) <= 200
+        assert rows[-1]['total_tokens'] == 14 and rows[-1]['input_tokens'] == 10 and rows[-1]['output_tokens'] == 4, rows[-1]
+        assert ('outbound', 'Native reply') in scanned, scanned
+        assert not logger._completed_routing_identity(native_data, response), 'Native proof cannot be replayed'
+        assert not logger._response_completed({'id': 'bad', 'status': 'incomplete', 'output': [{'content': [{'text': 'partial'}]}]})
+        assert not logger._response_completed({'id': 'bad', 'type': 'message', 'content': [{'text': 'partial'}]})
+        logger._scan = lambda *args: {'verdict': 'BLOCK', 'score': 29, 'detections': []}
+        logger._is_block_mode_on = lambda: True
+        native_data['proxy_server_request']['headers']['x-clawnex-routing-identity'] = token
+        result = await callback.async_pre_call_hook(types.SimpleNamespace(metadata={}), None, native_data, protocol)
+        assert result.startswith('Request blocked'), protocol
+        assert rows[-1]['blocked'] and rows[-1]['routing_source_id'] == 'opencode:global'
+    print('PASS: Responses and Messages scan native prompts/tool results/replies, count usage, attest completed exchanges, and block before upstream')
+
     logger._scan = lambda *args: {
         'verdict': 'BLOCK',
         'score': 29,
@@ -90,5 +129,15 @@ async def main():
     print('PASS: signed headers distinguish instances without changing proxy keys; forged signatures are rejected and tokens are stripped')
     print('PASS: authenticated key identities remain distinct for the same model; client metadata cannot attest origin')
     print('PASS: blocked requests preserve authenticated routing identity without an upstream response')
+
+    completed = sdk_openai.ResponsesAPIResponse()
+    assert sdk_logging.Logging()._handle_anthropic_messages_response_logging(completed) is completed
+    event = types.SimpleNamespace(type='response.completed', response=completed)
+    assert sdk_logging.Logging()._handle_anthropic_messages_response_logging(event) is completed
+    openai_response = types.SimpleNamespace(model_dump=lambda: {'object': 'response', 'status': 'completed', 'id': 'sdk-native'})
+    native_event = types.SimpleNamespace(type='response.completed', response=openai_response)
+    assert sdk_logging.Logging()._handle_anthropic_messages_response_logging(native_event).id == 'sdk-native'
+    assert sdk_logging.Logging()._handle_anthropic_messages_response_logging({'type': 'message'}) == ('native', {'type': 'message'})
+    print('PASS: Messages-to-Responses logging preserves completed Responses and delegates native Messages unchanged')
 
 asyncio.run(main())
