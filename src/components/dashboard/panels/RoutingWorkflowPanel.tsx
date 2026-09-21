@@ -61,6 +61,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   const currentVerification = verification?.key === currentKey ? verification.result : null;
   const routed = groups.filter(([, rows]) => rows.some(row => row.currentRoute === 'routed')).length;
   const recoveryOwned = native && items.some(item => typeof item.metadata.identityHash === 'string');
+  const restoreAvailable = routed > 0 || recoveryOwned;
   const pending = items.some(item => ['provider-routing', 'model-inventory'].includes(item.capability) && item.desiredRoute !== item.currentRoute);
   const verificationPending = routed > 0 && !pending && currentVerification?.status !== 'verified';
   const excluded = groups.filter(([, rows]) => rows.every(row => ['read-only', 'unsupported'].includes(row.capability))).length;
@@ -122,7 +123,12 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
         const result = await command({ action: 'verify', connector, sourceId });
         setVerification({ key: currentKey, result: result.verification });
       })}>Verify connection</button>
-      <button aria-label={`Restore ${title} direct connection`} style={{ ...button, color: C.warn, borderColor: `${C.warn}66` }} disabled={busy || !sourceId || (routed === 0 && !recoveryOwned)} onClick={() => void review('restore')}>Restore direct connection</button>
+      <button aria-label={`Restore ${title} direct connection`}
+        title={restoreAvailable ? 'Restore ClawNex-managed routes to their saved direct connection' : 'No ClawNex-managed route is available to restore'}
+        style={{ ...button, color: C.warn, borderColor: `${C.warn}66`,
+          opacity: busy || !sourceId || !restoreAvailable ? 0.45 : 1,
+          cursor: busy || !sourceId || !restoreAvailable ? 'not-allowed' : 'pointer' }}
+        disabled={busy || !sourceId || !restoreAvailable} onClick={() => void review('restore')}>Restore direct connection</button>
     </div>
     {busy && <p role="status" style={{ color: C.txS }}>Working…</p>}
     {message && <p role="status" style={{ color: C.tx, fontSize: 12, lineHeight: 1.6 }}>{message}</p>}
@@ -141,7 +147,11 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
                 await command({ action: 'select', connector, itemIds: writable.map(row => row.id), desiredRoute: checked ? 'routed' : 'direct' });
                 await refresh();
               }); }} />
-            <RoutingProviderLabel providerId={providerId} displayName={providerDisplayName} />
+            {writable.length ? <>
+              <span style={{ color: C.txS, fontSize: 11 }}>Route</span>
+              <RoutingProviderLabel providerId={providerId} displayName={providerDisplayName} />
+              <span style={{ color: C.txS, fontSize: 11 }}>through ClawNex</span>
+            </> : <RoutingProviderLabel providerId={providerId} displayName={providerDisplayName} />}
             <span style={{ marginLeft: 'auto', color: C.txS, fontSize: 11 }}>{!writable.length ? 'Not supported · unchanged' : rows.some(row => row.currentRoute === 'routed') ? 'Configured' : 'Direct'}</span>
           </label>
           <details style={{ marginTop: 8, color: C.txS, fontSize: 12 }}><summary>{models.length} affected model(s)</summary>
