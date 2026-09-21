@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { C, F } from '../constants';
 import { CollapsibleCard } from '../shared';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { GlobalFilterSelect } from '../GlobalFilterSelect';
 import type { ConnectorId, ConnectorRoutingResponse, ConnectorRoutingItem } from '@/lib/services/connector-routing-inventory';
 import type { RoutingPlan } from '@/lib/services/routing-workflow';
 import type { RoutingVerification } from '@/lib/services/routing-reconciliation';
@@ -94,24 +95,20 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
     defaultOpen={false} focusKey={focusKey} focusedCard={focusedCard}>
     <div style={{ fontSize: 12, fontFamily: F.disp, lineHeight: 1.6, overflowWrap: 'anywhere' }}>
     {['codex', 'claude'].includes(connector) && summary.status === 'ok' && (!groups.length || items.some(item => item.metadata.initialSetup)) && <div style={{ marginBottom: 12 }}>
-      <label style={{ color: C.tx, fontSize: 12 }}>Initial model
-        <select aria-label={`${title} initial model`} value={initialModel} disabled={busy} onChange={e => setInitialModel(e.target.value)} style={{ display: 'block', width: '100%', maxWidth: 500, padding: '8px 10px', color: C.tx, background: C.srf, border: `1px solid ${C.brd}`, borderRadius: 6, fontSize: 13, fontFamily: F.mono, margin: '6px 0 8px' }}>
-          <option value="">Choose a configured ClawNex model</option>
-          {data.availableModels.map(model => <option key={model.alias} value={model.alias}>{model.name}</option>)}
-        </select>
-      </label>
+      <div style={{ color: C.tx, fontSize: 12 }}>Initial model
+        <GlobalFilterSelect ariaLabel={`${title} initial model`} variant="form" minWidth={0} value={initialModel} disabled={busy} onChange={setInitialModel}
+          style={{ width: '100%', maxWidth: 500, margin: '6px 0 8px' }}
+          options={[{ value: '', label: 'Choose a configured ClawNex model' }, ...data.availableModels.map(model => ({ value: model.alias, label: model.name }))]} />
+      </div>
       <button style={button} disabled={busy || !initialModel} onClick={() => void run(async () => { await command({ action: 'choose-native-model', connector, modelAlias: initialModel }); setPlan(null); await refresh(); })}>Use selected model</button>
       <p style={{ color: C.txS, fontSize: 12, marginTop: 8 }}>Selection prepares a global provider. Review and Apply below writes its local proxy settings. Existing login, project settings and subscription credentials are preserved.</p>
       {connector === 'claude' && <p style={{ color: C.txS, fontSize: 12 }}>The chosen model will fill the default, Sonnet, Opus, Haiku, fast and subagent slots. Claude Code requires a working Messages API route.</p>}
     </div>}
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
       <strong style={{ color: C.tx }}>{currentVerification?.status === 'verified' ? 'Routed models verified' : routed ? 'Configured · verification required' : 'Direct connection'}</strong>
-      <select aria-label={`${title} instance`} disabled={busy || sources.length === 0} value={sourceId}
-        onChange={event => { setSelectedSource(event.target.value); setMessage(''); setPlan(null); setPrerequisites([]); }}
-        style={{ maxWidth: '100%', fontFamily: F.mono, fontSize: 13, padding: 8, color: C.tx, background: C.srf, border: `1px solid ${C.brd}`, borderRadius: 6 }}>
-        {!sources.length && <option value="">No local instance found</option>}
-        {sources.map(source => <option key={source} value={source}>{source === 'default' ? 'Local instance' : summary.items.find(item => item.sourceId === source)?.metadata.profileName as string || (native ? `${title} global configuration` : source)}</option>)}
-      </select>
+      <GlobalFilterSelect ariaLabel={`${title} instance`} variant="form" minWidth={0} disabled={busy || sources.length === 0} value={sourceId}
+        onChange={value => { setSelectedSource(value); setMessage(''); setPlan(null); setPrerequisites([]); }}
+        options={sources.length ? sources.map(source => ({ value: source, label: source === 'default' ? 'Local instance' : summary.items.find(item => item.sourceId === source)?.metadata.profileName as string || (native ? `${title} global configuration` : source) })) : [{ value: '', label: 'No local instance found' }]} />
     </div>
     <p style={{ color: C.txS, fontSize: 12, lineHeight: 1.6 }}>Prepare → Review → Apply → Verify<br />
       {routed} of {groups.length} provider routes configured through ClawNex. {excluded ? `${excluded} unsupported route(s) remain unchanged. Coverage is partial.` : ''}

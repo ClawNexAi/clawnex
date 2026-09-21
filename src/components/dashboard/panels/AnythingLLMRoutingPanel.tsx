@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { C, F } from '../constants';
 import { Badge, Dot, CollapsibleCard } from '../shared';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { GlobalFilterSelect } from '../GlobalFilterSelect';
 import type { AnythingPlan, listAnythingConnectors, anythingModels } from '@/lib/services/anythingllm-routing';
 
 type Instance = ReturnType<typeof listAnythingConnectors>[number] & { available?: boolean; error?: string | null };
@@ -98,19 +99,16 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
     reviewOrigin.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     return run(async () => { const result: AnythingPlan = await command({ action: 'prepare', id: instance.id, operation }); await refresh(); setPlan(result); });
   };
-  const modelSelect = (key: string) => <select aria-label={`ClawNex model for ${key}`} disabled={busy} style={{ ...input, maxWidth: 500 }} value={instance.choices[key]?.model || ''}
-    onChange={e => void select(key, instance.choices[key]?.selected || false, e.target.value)}>
-    <option value="">Choose a configured ClawNex model</option>
-    {data.models.map(m => <option key={`${m.providerId}:${m.alias}`} value={m.alias}>{m.name}{m.ready ? ' · tested' : ' · test required'}</option>)}
-  </select>;
+  const modelSelect = (key: string) => <GlobalFilterSelect ariaLabel={`ClawNex model for ${key}`} variant="form" minWidth={0} disabled={busy} style={{ width: '100%', maxWidth: 500 }} value={instance.choices[key]?.model || ''}
+    onChange={value => void select(key, instance.choices[key]?.selected || false, value)}
+    options={[{ value: '', label: 'Choose a configured ClawNex model' }, ...data.models.map(m => ({ value: m.alias, label: `${m.name}${m.ready ? ' · tested' : ' · test required'}` }))]} />;
   const owned = instance ? Object.keys(instance.ownership).length : 0;
   return <CollapsibleCard title="ANYTHINGLLM ROUTING" accent={C.cyan} defaultOpen={false} focusKey="anythingllmRouting" focusedCard={focusedCard}>
     <div style={{ fontFamily: F.disp, fontSize: 12, lineHeight: 1.6, overflowWrap: 'anywhere' }}>
     {error && <p role="alert" style={{ color: C.warn }}>{error}</p>}
     {!instance ? <p style={{ color: C.txS }}>Add an AnythingLLM instance in Fleet Connectors to configure chat routing.</p> : <>
-      <select aria-label="AnythingLLM instance" value={instance.id} disabled={busy} onChange={e => { setSelectedId(e.target.value); setPlan(null); setMessage(''); }} style={{ ...input, maxWidth: 500, marginBottom: 12 }}>
-        {data.connectors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-      </select>
+      <GlobalFilterSelect ariaLabel="AnythingLLM instance" variant="form" minWidth={0} value={instance.id} disabled={busy} onChange={value => { setSelectedId(value); setPlan(null); setMessage(''); }} style={{ width: '100%', maxWidth: 500, marginBottom: 12 }}
+        options={data.connectors.map(c => ({ value: c.id, label: c.name }))} />
       <p style={{ color: C.txS, fontSize: 12, lineHeight: 1.6 }}>Select → Review → Apply → Send a chat → Verify. Default chat is selected initially; workspace overrides are opt-in. Selections alone do not change traffic.</p>
       <p style={{ color: C.tx, fontSize: 12 }}>Proxy base URL: <code>{instance.proxyBaseUrl}</code></p>
       <div style={row}>

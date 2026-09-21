@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { C, F } from "./constants";
 
@@ -16,6 +16,9 @@ interface GlobalFilterSelectProps {
   onChange: (value: string) => void;
   accent?: string;
   minWidth?: number;
+  disabled?: boolean;
+  variant?: 'filter' | 'form';
+  style?: CSSProperties;
 }
 
 export function GlobalFilterSelect({
@@ -25,10 +28,13 @@ export function GlobalFilterSelect({
   onChange,
   accent = C.cyan,
   minWidth = 160,
+  disabled = false,
+  variant = 'filter',
+  style,
 }: GlobalFilterSelectProps) {
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
-  const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0, width: minWidth });
+  const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0, width: minWidth, maxHeight: 300 });
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
@@ -45,11 +51,17 @@ export function GlobalFilterSelect({
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
       const longestLabel = options.reduce((longest, option) => Math.max(longest, option.label.length), 0);
-      const width = Math.min(Math.max(rect.width, longestLabel * 8 + 52), 440, window.innerWidth - 16);
+      const width = Math.min(Math.max(rect.width, Math.min(longestLabel * 8 + 52, 440)), window.innerWidth - 16);
+      const below = window.innerHeight - rect.bottom - 13;
+      const above = rect.top - 13;
+      const upwards = below < Math.min(300, options.length * 34 + 10) && above > below;
+      const maxHeight = Math.max(40, Math.min(300, upwards ? above : below));
+      const height = Math.min(maxHeight, listboxRef.current?.scrollHeight || options.length * 34 + 10);
       setMenuPosition({
         left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
-        top: rect.bottom + 5,
+        top: upwards ? Math.max(8, rect.top - height - 5) : rect.bottom + 5,
         width,
+        maxHeight,
       });
     };
     updatePosition();
@@ -74,9 +86,14 @@ export function GlobalFilterSelect({
     setHighlightedIndex(Math.max(0, options.length - 1));
   }, [highlightedIndex, options.length]);
 
+  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
+  useEffect(() => {
+    if (open) document.getElementById(`${baseId}-option-${highlightedIndex}`)?.scrollIntoView({ block: 'nearest' });
+  }, [open, highlightedIndex, baseId]);
+
   const choose = (index: number) => {
     const option = options[index];
-    if (!option) return;
+    if (!option || disabled) return;
     onChange(option.value);
     setOpen(false);
     window.requestAnimationFrame(() => triggerRef.current?.focus());
@@ -88,15 +105,17 @@ export function GlobalFilterSelect({
   };
 
   const openFromTrigger = (index: number) => {
+    if (disabled || !options.length) return;
     setHighlightedIndex(Math.max(0, Math.min(index, options.length - 1)));
     setOpen(true);
   };
 
   return (
-    <div ref={rootRef} style={{ position: "relative", minWidth }}>
+    <div ref={rootRef} style={{ position: "relative", minWidth, maxWidth: '100%', ...style }}>
       <button
         ref={triggerRef}
         type="button"
+        disabled={disabled || !options.length}
         aria-label={`${ariaLabel}: ${selectedOption?.label ?? "No selection"}`}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -121,12 +140,12 @@ export function GlobalFilterSelect({
           }
         }}
         style={{
-          width: "100%", minHeight: 30, padding: "4px 9px 4px 10px",
+          width: "100%", minHeight: 30, padding: variant === 'form' ? '8px 10px' : "4px 9px 4px 10px",
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
           background: open ? C.glassPanelNested : C.glassSurfTrans,
           border: `1px solid ${open || value !== "all" ? `${activeAccent}88` : C.glassSurfBorder}`,
-          borderRadius: 6, color: activeAccent, cursor: "pointer",
-          fontFamily: F.mono, fontSize: 14, textAlign: "left",
+          borderRadius: 6, color: variant === 'form' ? C.tx : activeAccent, cursor: disabled ? 'not-allowed' : "pointer", opacity: disabled ? 0.6 : 1,
+          fontFamily: F.mono, fontSize: variant === 'form' ? 13 : 14, textAlign: "left",
           boxShadow: open ? `0 0 0 2px ${activeAccent}18` : "none",
           transition: "background 120ms ease, border-color 120ms ease, box-shadow 120ms ease",
         }}
@@ -139,7 +158,7 @@ export function GlobalFilterSelect({
         </span>
       </button>
 
-      {open && createPortal(
+      {open && !disabled && createPortal(
         <div
           ref={listboxRef}
           id={listboxId}
@@ -169,12 +188,13 @@ export function GlobalFilterSelect({
               triggerRef.current?.focus();
             } else if (event.key === "Tab") {
               setOpen(false);
+              triggerRef.current?.focus();
             }
           }}
           style={{
             position: "fixed", top: menuPosition.top, left: menuPosition.left, zIndex: 1000,
             width: menuPosition.width, maxWidth: "calc(100vw - 16px)",
-            maxHeight: 300, overflowY: "auto", padding: 5,
+            maxHeight: menuPosition.maxHeight, overflowY: "auto", padding: 5,
             background: C.bgS, border: `1px solid ${C.glassBorderCyanStrong}`, borderRadius: 6,
             boxShadow: C.glassShadow, outline: "none",
           }}
@@ -197,7 +217,7 @@ export function GlobalFilterSelect({
                   background: highlighted ? `${accent}18` : selected ? C.glassSurfTrans : "transparent",
                   border: `1px solid ${highlighted ? `${accent}44` : "transparent"}`,
                   color: selected ? accent : C.txS, cursor: "pointer",
-                  fontFamily: F.mono, fontSize: 13, whiteSpace: "nowrap",
+                  fontFamily: F.mono, fontSize: 13, whiteSpace: "normal", overflowWrap: 'anywhere',
                 }}
               >
                 <span>{option.label}</span>
