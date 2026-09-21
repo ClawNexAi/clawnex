@@ -28,6 +28,15 @@ function inspect(id: ConnectorId, sourceId: string): ConnectorRoutingSummary {
 }
 
 const modules: Record<ConnectorId, RoutingModule> = {
+  codex: {
+    id: 'codex', inspect: sourceId => inspect('codex', sourceId),
+    apply: scope => applyNativeRouting('codex', { ...scope, restore: false }),
+    restore: scope => {
+      const summary = inspect('codex', scope.sourceId);
+      setConnectorRoutingSelections('codex', summary.items.filter(item => item.present && ['provider-routing', 'model-inventory'].includes(item.capability)).map(item => item.id), 'direct');
+      return applyNativeRouting('codex', { ...scope, restore: true });
+    },
+  },
   pi: {
     id: 'pi', inspect: sourceId => inspect('pi', sourceId),
     apply: scope => applyNativeRouting('pi', { ...scope, restore: false }),

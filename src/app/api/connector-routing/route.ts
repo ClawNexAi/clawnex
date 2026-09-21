@@ -31,6 +31,10 @@ import {
 import { recordRoutingOperation, resolveRoutingEvents, verifyRouting } from "@/lib/services/routing-reconciliation";
 import { prepareRoutingPlan, executeRoutingPlan } from '@/lib/services/routing-workflow';
 import { getRoutingModule } from '@/lib/services/routing-modules';
+import { isNativeAgent, nativeDocuments, nativeProviders } from '@/lib/services/native-agent-config';
+import { hasNativeOwnership } from '@/lib/services/native-agent-routing';
+import { setSetting } from '@/lib/services/config-service';
+import { queryOne } from '@/lib/db';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,7 +60,7 @@ function writeGuard(request: NextRequest): NextResponse | null {
 }
 
 function parseConnector(value: unknown): ConnectorId {
-  if (value === "openclaw" || value === "hermes" || value === 'opencode' || value === 'pi') return value;
+  if (value === "openclaw" || value === "hermes" || value === 'opencode' || value === 'pi' || value === 'codex') return value;
   throw new Error("Unsupported routing connector");
 }
 
@@ -93,6 +97,21 @@ export async function POST(request: NextRequest) {
 
   try {
     const action = body.action;
+    if (action === 'choose-native-model') {
+      const connector = parseConnector(body.connector);
+      if (!isNativeAgent(connector) || connector === 'pi') throw new Error('This connector uses its existing provider models.');
+      if (!queryOne('SELECT id FROM coding_agent_connectors WHERE type = ? AND is_active = 1', [connector])) throw new Error('Add the connector first.');
+      if (hasNativeOwnership(connector)) throw new Error('Restore the managed connection before choosing initial configuration.');
+      const doc = nativeDocuments(connector)[0];
+      if (nativeProviders(connector, doc).some(p => !p.initial)) throw new Error('Existing provider models are managed through provider selection.');
+      const available = syncConnectorRoutingInventory().availableModels;
+      if (typeof body.modelAlias !== 'string' || !available.some(m => m.alias === body.modelAlias)) throw new Error('Choose an operator-configured ClawNex model.');
+      setSetting(`native-${connector}-initial-model`, body.modelAlias);
+      const inventory = syncConnectorRoutingInventory('model-selection');
+      const summary = setConnectorRoutingSelections(connector, inventory[connector].items.filter(i => i.present).map(i => i.id), 'routed');
+      logEvent('config', 'native_routing_model_selected', connector, 'dashboard', 'Operator selected the model for a reviewed native configuration.');
+      return NextResponse.json({ ok: true, summary });
+    }
     if (action === 'prepare') {
       const connector = parseConnector(body.connector);
       if (typeof body.sourceId !== 'string' || !body.sourceId) throw new Error('Select one instance to review.');

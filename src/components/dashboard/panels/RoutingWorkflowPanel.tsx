@@ -13,6 +13,7 @@ const primaryButton = { ...button, background: C.brand, color: C.bg, borderColor
 const connectorPresentation: Record<ConnectorId, { title: string; accent: string; focusKey: string }> = {
   openclaw: { title: 'OpenClaw', accent: C.brand, focusKey: 'openclawRouting' },
   hermes: { title: 'Hermes', accent: C.purp, focusKey: 'hermesRouting' },
+  codex: { title: 'Codex', accent: C.cyan, focusKey: 'codexRouting' },
   pi: { title: 'Pi', accent: C.cyan, focusKey: 'piRouting' },
   opencode: { title: 'OpenCode', accent: C.cyan, focusKey: 'opencodeRouting' },
 };
@@ -39,6 +40,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   const summary = data[connector];
   const sources = [...new Set(summary.items.filter(item => item.present).map(item => item.sourceId))];
   const [selectedSource, setSelectedSource] = useState('');
+  const [initialModel, setInitialModel] = useState('');
   const sourceId = sources.includes(selectedSource) ? selectedSource : sources[0] || '';
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -87,6 +89,16 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   return <CollapsibleCard title={`${title.toUpperCase()} ROUTING`} accent={accent}
     defaultOpen={false} focusKey={focusKey} focusedCard={focusedCard}>
     <div style={{ fontSize: 12, fontFamily: F.disp, lineHeight: 1.6, overflowWrap: 'anywhere' }}>
+    {connector === 'codex' && (!groups.length || items.some(item => item.metadata.initialSetup)) && <div style={{ marginBottom: 12 }}>
+      <label style={{ color: C.tx, fontSize: 12 }}>Initial model
+        <select aria-label={`${title} initial model`} value={initialModel} disabled={busy} onChange={e => setInitialModel(e.target.value)} style={{ display: 'block', width: '100%', maxWidth: 500, padding: '8px 10px', color: C.tx, background: C.srf, border: `1px solid ${C.brd}`, borderRadius: 6, fontSize: 13, fontFamily: F.mono, margin: '6px 0 8px' }}>
+          <option value="">Choose a configured ClawNex model</option>
+          {data.availableModels.map(model => <option key={model.alias} value={model.alias}>{model.name}</option>)}
+        </select>
+      </label>
+      <button style={button} disabled={busy || !initialModel} onClick={() => void run(async () => { await command({ action: 'choose-native-model', connector, modelAlias: initialModel }); setPlan(null); await refresh(); })}>Use selected model</button>
+      <p style={{ color: C.txS, fontSize: 12, marginTop: 8 }}>Selection prepares a global provider. Review and Apply below writes its local proxy settings. Existing login, project settings and subscription credentials are preserved.</p>
+    </div>}
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
       <strong style={{ color: C.tx }}>{currentVerification?.status === 'verified' ? 'Routed models verified' : routed ? 'Configured · verification required' : 'Direct connection'}</strong>
       <select aria-label={`${title} instance`} disabled={busy || sources.length === 0} value={sourceId}
@@ -100,6 +112,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
       {routed} of {groups.length} provider routes configured through ClawNex. {excluded ? `${excluded} unsupported route(s) remain unchanged. Coverage is partial.` : ''}
       {' '}Connection status does not change your existing blocking, observe-only, or emergency-bypass policy.</p>
     <p style={{ color: C.txS, fontSize: 12 }}>Configure and test your upstream models first. Select provider routes below, then review the changes. Selecting a provider affects all of its models.</p>
+    {['pi', 'codex'].includes(connector) && <p style={{ color: C.txS, fontSize: 12 }}>{summary.detail}</p>}
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
       <button aria-label={`Review ${title} connection changes`} style={pending ? primaryButton : button} disabled={busy || !sourceId || !pending} onClick={() => void review('apply')}>Review connection changes</button>
       <button aria-label={`Refresh ${title} configuration`} style={button} disabled={busy} onClick={() => void run(refresh)}>Refresh configuration</button>

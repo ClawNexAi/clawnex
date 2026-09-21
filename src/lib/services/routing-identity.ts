@@ -6,7 +6,7 @@ export interface RoutingIdentityOwnership { identityHash?: string; identityConta
 /** This is an instance attestation, not a replacement for proxy access control.
  * The tool holds the signed value; recovery journals hold only its hash.
  */
-export function createRoutingIdentity(connector: 'openclaw' | 'hermes' | 'opencode' | 'pi' | 'anythingllm', sourceId: string): { token: string; hash: string } | null {
+export function createRoutingIdentity(connector: 'openclaw' | 'hermes' | 'opencode' | 'pi' | 'codex' | 'anythingllm', sourceId: string): { token: string; hash: string } | null {
   const secret = process.env.CLAWNEX_INGEST_SECRET;
   if (!secret || Buffer.byteLength(secret) < 32) return null;
   const payload = Buffer.from(JSON.stringify({ v: 1, connector, sourceId, nonce: randomBytes(16).toString('hex') })).toString('base64url');
@@ -20,7 +20,7 @@ export function routingIdentityHash(value: string): string {
 }
 
 export function prepareIdentityHeader(headers: Record<string, unknown>, ownership: RoutingIdentityOwnership,
-  connector: 'openclaw' | 'hermes' | 'opencode' | 'pi', sourceId: string): string | null {
+  connector: 'openclaw' | 'hermes' | 'opencode' | 'pi' | 'codex', sourceId: string): string | null {
   const existingKey = Object.keys(headers).find(key => key.toLowerCase() === ROUTING_IDENTITY_HEADER);
   if (existingKey) {
     const value = headers[existingKey];

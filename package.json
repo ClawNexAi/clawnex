@@ -60,6 +60,7 @@
     "react-dom": "18.3.1",
     "resend": "4.1.2",
     "safe-regex2": "5.1.1",
+    "smol-toml": "^1.8.0",
     "utf-8-validate": "6.0.6",
     "uuid": "13.0.2",
     "ws": "8.21.0",

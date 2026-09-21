@@ -16,3 +16,13 @@ Validated contract: `@earendil-works/pi-coding-agent` 0.86.1 on QA.
 Upstream contract: https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md
 
 Validation: `npx tsx scripts/verify-native-agent-routing.ts` and the existing OpenCode lifecycle suite. Fixtures never contact real providers.
+
+## Codex
+
+Validated CLI: `codex-cli` 0.155.1. Global `~/.codex/config.toml` (or the service's `CODEX_HOME`) is the managed boundary. Explicit custom Responses providers, the global model and explicit profile model references are supported. Built-in subscription providers, command-backed authentication, query parameters and environment-sourced HTTP headers are not automatically rewired.
+
+When no custom provider exists, the operator chooses a configured ClawNex model in the routing pane. This stores a draft only. Review and Apply creates the `clawnex` provider, selects it globally, uses the local proxy bearer credential and signed HTTP header, and disables WebSocket transport so requests use the monitored HTTP Responses route. Existing login credentials, sandbox/approval policy and project settings are untouched. TOML is parsed and serialized; values are preserved, but formatting/comments are normalized on writes. Restore removes only owned fields that still match, retaining unrelated changes.
+
+The global selection does not override explicit project, command-line, environment or different-profile selections. Start a new Codex session after Apply/Restore. A configured endpoint is not evidence of successful traffic; Verify requires exact signed-instance evidence.
+
+Upstream schema: https://github.com/openai/codex/blob/rust-v0.155.1/codex-rs/core/config.schema.json

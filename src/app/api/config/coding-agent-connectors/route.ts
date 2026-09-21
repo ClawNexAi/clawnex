@@ -6,7 +6,7 @@ import { queryAll, queryOne, run } from '@/lib/db';
 import { logEvent } from '@/lib/services/audit-logger';
 import { resolveOpenCodeGlobalConfig, type CodingAgentConnectorType } from '@/lib/services/coding-agent-connectors';
 import { hasOpenCodeRoutingOwnership } from '@/lib/services/opencode-routing';
-import { nativeConfigCheck } from '@/lib/services/native-agent-config';
+import { nativeConfigCheck, isNativeAgent } from '@/lib/services/native-agent-config';
 import { hasNativeOwnership } from '@/lib/services/native-agent-routing';
 
 export const runtime = 'nodejs';
@@ -32,7 +32,7 @@ function guard(request: NextRequest, permission: 'config:read' | 'config:write')
 }
 
 function serialize(row: ConnectorRow) {
-  const check = row.type === 'opencode' ? resolveOpenCodeGlobalConfig() : row.type === 'pi' ? nativeConfigCheck(row.type) : { available: false, configPath: row.config_path, error: 'Unsupported connector type.' };
+  const check = row.type === 'opencode' ? resolveOpenCodeGlobalConfig() : isNativeAgent(row.type) ? nativeConfigCheck(row.type) : { available: false, configPath: row.config_path, error: 'Unsupported connector type.' };
   return {
     id: row.id,
     type: row.type,
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
   if (denied) return denied;
   try {
     const body = await request.json() as { type?: unknown; name?: unknown };
-    if (body.type !== 'opencode' && body.type !== 'pi') return NextResponse.json({ error: 'Unsupported coding-agent connector type.' }, { status: 400 });
+    if (body.type !== 'opencode' && !isNativeAgent(body.type)) return NextResponse.json({ error: 'Unsupported coding-agent connector type.' }, { status: 400 });
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) return NextResponse.json({ error: 'Connector name is required.' }, { status: 400 });
     const check = body.type === 'opencode' ? resolveOpenCodeGlobalConfig() : nativeConfigCheck(body.type);
@@ -85,7 +85,7 @@ export async function DELETE(request: NextRequest) {
   const existing = queryOne<ConnectorRow>('SELECT * FROM coding_agent_connectors WHERE id = ?', [id]);
   if (!existing) return NextResponse.json({ error: 'Connector not found.' }, { status: 404 });
   try {
-    if (existing.type === 'opencode' ? hasOpenCodeRoutingOwnership() : existing.type === 'pi' && hasNativeOwnership(existing.type)) {
+    if (existing.type === 'opencode' ? hasOpenCodeRoutingOwnership() : isNativeAgent(existing.type) && hasNativeOwnership(existing.type)) {
       return NextResponse.json({ error: 'Restore the direct connection before removing this connector.' }, { status: 409 });
     }
   } catch {

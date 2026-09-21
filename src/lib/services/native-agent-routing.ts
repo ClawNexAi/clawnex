@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { queryAll, queryOne } from '@/lib/db';
-import { nativeDocuments, nativeConfigCheck, nativeLabels, nativeProviders, field, setField, assertNativePath, type NativeAgent, type FieldPath, type NativeDocument } from './native-agent-config';
+import { nativeDocuments, nativeConfigCheck, nativeLabels, nativeProviders, field, setField, assertNativePath, serializeNativeDocument, readNativeDocument, type NativeAgent, type FieldPath, type NativeDocument } from './native-agent-config';
 import { publishRoutingFile, removeRoutingJournal } from './routing-file-transaction';
 import { createRoutingIdentity, routingIdentityHash, ROUTING_IDENTITY_HEADER } from './routing-identity';
 import { stableRoutingFingerprint as hash } from './routing-reconciliation';
@@ -54,7 +54,7 @@ export function discoverNativeItems(type: NativeAgent): { status: ConnectorRouti
       const currentRoute = route(p.baseUrl);
       const capability = p.supported && currentRoute !== 'unsupported' ? 'provider-routing' : 'unsupported';
       const metadata = { configPath: primary.path, configPaths: docs.map(d => d.path), connectorId: connector.id, profileName: connector.name,
-        globalOnly: true, note: p.reason, identityHash: owner?.identityHash || null,
+        globalOnly: true, initialSetup: p.initial || false, note: p.reason, identityHash: owner?.identityHash || null,
         identityFingerprint: typeof token === 'string' ? routingIdentityHash(token) : null,
         identityIntact: owner ? intact && typeof token === 'string' && routingIdentityHash(token) === owner.identityHash : null };
       items.push({ connector: type, sourceId, itemType: 'provider', providerId: p.id, modelId: '', displayName: p.name, baseUrl: p.baseUrl || null,
@@ -72,11 +72,11 @@ export function discoverNativeItems(type: NativeAgent): { status: ConnectorRouti
   } catch { return { status: 'error', detail: `${name} configuration or recovery ownership cannot be read safely.`, sourceId, items: [] }; }
 }
 function context(type: NativeAgent, provider: string, file: string, keys: FieldPath) { return JSON.stringify([type, provider, file, keys]); }
-function capture(type: NativeAgent, owner: OwnedProvider, doc: NativeDocument, keys: FieldPath, value: unknown) {
+function capture(type: NativeAgent, owner: OwnedProvider, doc: NativeDocument, keys: FieldPath, value: unknown, remove = false) {
   const before = field(doc.data, keys);
   const absentParents = keys.slice(0, -1).map((_, i) => keys.slice(0, i + 1)).filter(p => field(doc.data, p) === undefined);
   owner.fields.push({ file: doc.path, path: keys, before: sealRoutingCredential(nativeJournal(type), context(type, owner.providerId, doc.path, keys), { present: before !== undefined, value: before ?? null, absentParents }), afterHash: hash(value ?? null) });
-  setField(doc.data, keys, value);
+  setField(doc.data, keys, value, !remove);
 }
 function original(type: NativeAgent, owner: OwnedProvider, f: OwnedField): { present: boolean; value: unknown; absentParents?: FieldPath[] } {
   return openRoutingCredential(nativeJournal(type), context(type, owner.providerId, f.file, f.path), f.before) as { present: boolean; value: unknown; absentParents?: FieldPath[] };
@@ -91,8 +91,8 @@ function commit(type: NativeAgent, docs: NativeDocument[], journal: Journal, pre
   if (hash(readJournal(type)) !== hash(previous)) throw new Error('Recovery ownership changed during review.');
   publishRoutingFile(nativeJournal(type), JSON.stringify(journal, null, 2), 0o600);
   for (const d of docs) {
-    const content = JSON.stringify(d.data, null, 2) + '\n';
-    if (JSON.stringify(d.raw ? JSON.parse(d.raw) : {}) === JSON.stringify(d.data)) continue;
+    const content = serializeNativeDocument(d);
+    if (JSON.stringify(readNativeDocument(d.path, !d.raw).data) === JSON.stringify(d.data)) continue;
     if ((fs.existsSync(d.path) ? fs.readFileSync(d.path, 'utf8') : '') !== d.raw) throw new Error('Configuration changed during write. Recovery ownership retained.');
     fs.mkdirSync(path.dirname(d.path), { recursive: true, mode: 0o700 });
     const stat = fs.existsSync(d.path) ? fs.statSync(d.path) : undefined;
@@ -146,9 +146,10 @@ export function applyNativeRouting(type: NativeAgent, scope: RoutingApplyScope =
       if (type === 'pi' && docs[1]?.data.defaultProvider === p.id && docs[1]?.data.defaultModel === m.id) capture(type, record, docs[1], ['defaultModel'], configured.modelAlias);
     }
     capture(type, record, primary, p.base, `http://127.0.0.1:${process.env.LITELLM_PORT || '4001'}/v1`);
-    capture(type, record, primary, p.credential, key.replace(/\$/g, '$$$$'));
+    capture(type, record, primary, p.credential, type === 'pi' ? key.replace(/\$/g, '$$$$') : key);
     if (type === 'pi') capture(type, record, primary, ['providers', p.id, 'authHeader'], true);
     capture(type, record, primary, [...p.headers, ROUTING_IDENTITY_HEADER], identity.token);
+    for (const extra of p.extra || []) capture(type, record, primary, extra.path, extra.value, extra.remove);
     journal.providers.push(record); routedProviders.push(p.id);
   }
   const changed = routedProviders.length + restoredProviders.length > 0;
