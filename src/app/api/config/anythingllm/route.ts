@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getOperatorFromRequest, isRbacEnabled, requirePermission, requireSession, validateCsrf } from '@/lib/rbac/guard';
 import { requireLocalhost } from '@/lib/middleware/localhost-guard';
-import { addAnythingConnector, anythingModels, executeAnythingPlan, listAnythingConnectors, prepareAnythingPlan, refreshAnythingConnector, selectAnythingRoute, verifyAnythingConnector } from '@/lib/services/anythingllm-routing';
+import { addAnythingConnector, anythingModels, executeAnythingPlan, listAnythingConnections, removeAnythingConnector, prepareAnythingPlan, refreshAnythingConnector, selectAnythingRoute, verifyAnythingConnector } from '@/lib/services/anythingllm-routing';
 import { logEvent } from '@/lib/services/audit-logger';
 
 export const runtime = 'nodejs';
@@ -16,12 +16,13 @@ function guard(request: NextRequest, write = false) {
 }
 export async function GET(request: NextRequest) {
   const denied = guard(request); if (denied) return denied;
-  return NextResponse.json({ connectors: listAnythingConnectors(), models: anythingModels() });
+  return NextResponse.json({ connectors: await listAnythingConnections(), models: anythingModels() });
 }
 const id = z.string().uuid();
 const schema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('add'), name: z.string().min(1).max(120), managementUrl: z.string().max(2048), apiKey: z.string().min(1).max(4096) }),
   z.object({ action: z.literal('refresh'), id }),
+  z.object({ action: z.literal('remove'), id }),
   z.object({ action: z.literal('select'), id, key: z.string().max(100), selected: z.boolean(), model: z.string().max(500) }),
   z.object({ action: z.literal('prepare'), id, operation: z.enum(['apply', 'restore']) }),
   z.object({ action: z.literal('execute'), planId: id, approved: z.boolean() }),
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest) {
     switch (body.action) {
       case 'add': result = await addAnythingConnector(body); break;
       case 'refresh': result = await refreshAnythingConnector(body.id); break;
+      case 'remove': result = await removeAnythingConnector(body.id); break;
       case 'select': result = await selectAnythingRoute(body.id, body.key, body.selected, body.model); break;
       case 'prepare': result = await prepareAnythingPlan(body.id, body.operation); break;
       case 'execute': result = await executeAnythingPlan(body.planId, body.approved, actor); break;

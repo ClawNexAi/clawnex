@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { C, F } from '../constants';
-import { CollapsibleCard } from '../shared';
+import { Badge, Dot, CollapsibleCard } from '../shared';
 import { ConfirmDialog } from '../ConfirmDialog';
 import type { AnythingPlan, listAnythingConnectors, anythingModels } from '@/lib/services/anythingllm-routing';
 
-type Instance = ReturnType<typeof listAnythingConnectors>[number];
+type Instance = ReturnType<typeof listAnythingConnectors>[number] & { available?: boolean; error?: string | null };
 type Data = { connectors: Instance[]; models: ReturnType<typeof anythingModels> };
 const button = { padding: '8px 12px', borderRadius: 6, border: `1px solid ${C.cyan}66`, background: `${C.cyan}16`, color: C.cyan, fontFamily: F.disp, fontSize: 12, cursor: 'pointer' };
 const input = { padding: '8px 10px', color: C.tx, background: C.glassSurfTrans, border: `1px solid ${C.glassBorderSubtle}`, borderRadius: 6, width: '100%', fontFamily: F.mono, fontSize: 13, boxSizing: 'border-box' as const };
@@ -34,31 +34,55 @@ function useAnything() {
 }
 
 export function AnythingLLMFleetConnector({ onCountChange }: { onCountChange: (count: number) => void }) {
-  const { data, error } = useAnything();
+  const { data, error, refresh } = useAnything();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false), [message, setMessage] = useState('');
   const [name, setName] = useState('AnythingLLM'), [managementUrl, setManagementUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
+  const ready = !!name.trim() && !!managementUrl.trim() && !!apiKey.trim() && !busy;
+  const live = !error && data.connectors.some(instance => instance.available);
+  const fleetButton = { padding: '8px 16px', borderRadius: 6, border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
+  const update = async (body: Record<string, unknown>) => {
+    setBusy(true); setMessage('');
+    try {
+      await command(body); setApiKey(''); await refresh();
+      window.dispatchEvent(new Event('clawnex:anythingllm'));
+    } catch (e) { setMessage(e instanceof Error ? e.message : 'Connector operation failed.'); }
+    finally { setBusy(false); }
+  };
   useEffect(() => { onCountChange(data.connectors.length); }, [data.connectors.length, onCountChange]);
-  return <details open={open} onToggle={event => setOpen(event.currentTarget.open)} style={{ marginBottom: 20, fontSize: 12 }}>
-    <summary style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: open ? 10 : 0, paddingBottom: 6, borderBottom: `1px solid ${C.glassBorderSubtle}`, cursor: 'pointer', listStyle: 'none' }}>
+  return <div style={{ marginBottom: 20, fontSize: 12 }}>
+    <div role="button" tabIndex={0} aria-expanded={open} onClick={() => setOpen(!open)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setOpen(!open); } }} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: open ? 10 : 0, paddingBottom: 6, borderBottom: `1px solid ${C.glassBorderSubtle}`, cursor: 'pointer' }}>
       <span aria-hidden="true" style={{ fontSize: 10, color: C.txT, display: 'inline-block', transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>{'▶'}</span>
       <span style={{ fontSize: 13, fontWeight: 800, color: C.cyan, letterSpacing: '0.04em' }}>ANYTHINGLLM</span>
-    </summary>
-    {data.connectors.map(instance => <p key={instance.id} style={{ color: C.tx, fontSize: 12 }}><strong>{instance.name}</strong> — {instance.managementUrl}<br />Registered · review chat routing below</p>)}
-    <form onSubmit={event => { event.preventDefault(); setBusy(true); setMessage(''); void command({ action: 'add', name, managementUrl, apiKey }).then(() => {
-      setApiKey(''); setMessage('Connected. Open AnythingLLM Routing to choose models and review changes.'); window.dispatchEvent(new Event('clawnex:anythingllm'));
-    }).catch(e => setMessage(e.message)).finally(() => setBusy(false)); }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, margin: '12px 0' }}>
-        <label style={{ color: C.txS, fontSize: 12 }}>Instance name<input aria-label="AnythingLLM instance name" required maxLength={120} value={name} onChange={e => setName(e.target.value)} style={input} /></label>
-        <label style={{ color: C.txS, fontSize: 12 }}>AnythingLLM address<input aria-label="AnythingLLM address" type="url" required placeholder="http://127.0.0.1:19322" value={managementUrl} onChange={e => setManagementUrl(e.target.value)} style={input} /></label>
-        <label style={{ color: C.txS, fontSize: 12 }}>AnythingLLM developer API key<input aria-label="AnythingLLM API key" type="password" autoComplete="new-password" required value={apiKey} onChange={e => setApiKey(e.target.value)} style={input} /></label>
+      <Badge color={live ? C.green : C.txT} label={live ? 'LIVE' : data.connectors.length || error ? 'ERROR' : 'NOT CONFIGURED'} />
+    </div>
+    {open && <>
+    {data.connectors.map(instance => <div key={instance.id} style={{ padding: '12px 14px', marginBottom: 8, background: C.glassSurfTrans, borderRadius: 8, border: `1px solid ${C.glassBorderSubtle}`, borderLeft: `3px solid ${instance.available && !error ? C.green : C.danger}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Dot color={instance.available && !error ? C.green : C.danger} glow={!!instance.available && !error} size={8} />
+          <span style={{ fontSize: 14, fontWeight: 700, color: C.tx }}>{instance.name}</span>
+          <Badge color={instance.available && !error ? C.green : C.danger} label={instance.available && !error ? 'CONNECTED' : 'ERROR'} />
+        </div>
+        <button disabled={busy} onClick={() => void update({ action: 'remove', id: instance.id })} style={{ ...fleetButton, background: C.danger, color: '#fff', padding: '4px 10px', fontSize: 12 }}>Remove</button>
       </div>
-      <p style={{ color: C.txS, fontSize: 12 }}>For AnythingLLM installed on the same host as ClawNex. Create an API key in AnythingLLM Settings → Developer API. Registration only discovers configuration; chat routes directly to the local LiteLLM proxy.</p>
-      <div style={row}><button type="submit" disabled={busy} style={button}>{busy ? 'Connecting…' : 'Add AnythingLLM'}</button></div>
+      <div style={{ fontSize: 12, color: C.txT, fontFamily: F.mono, overflowWrap: 'anywhere' }}>{instance.managementUrl}</div>
+      {instance.error && <p role="alert" style={{ color: C.danger, fontSize: 11 }}>{instance.error}</p>}
+    </div>)}
+    {!data.connectors.length && !error && <form onSubmit={event => { event.preventDefault(); if (ready) void update({ action: 'add', name, managementUrl, apiKey }); }} style={{ padding: 14, background: `${C.cyan}06`, borderRadius: 8, border: `1px dashed ${C.cyan}33`, marginTop: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: 8, marginBottom: 8 }}>
+        <label style={{ color: C.txT, fontSize: 11 }}>NAME<input aria-label="AnythingLLM instance name" required maxLength={120} value={name} onChange={e => setName(e.target.value)} style={input} /></label>
+        <label style={{ color: C.txT, fontSize: 11 }}>ADDRESS<input aria-label="AnythingLLM address" type="url" required placeholder="http://127.0.0.1:19322" value={managementUrl} onChange={e => setManagementUrl(e.target.value)} style={input} /></label>
+        <label style={{ color: C.txT, fontSize: 11 }}>DEVELOPER API KEY<input aria-label="AnythingLLM API key" aria-describedby="anythingllm-key-help" type="password" autoComplete="new-password" required value={apiKey} onChange={e => setApiKey(e.target.value)} style={input} /></label>
+      </div>
+      <p id="anythingllm-key-help" style={{ color: C.txS, fontSize: 11, marginBottom: 8 }}>Create this key in AnythingLLM Settings → Developer API. ClawNex uses it to read providers and workspaces and apply routing settings. Use the address of AnythingLLM on this host.</p>
+      <button type="submit" disabled={!ready} style={{ ...fleetButton, width: '100%', background: ready ? C.cyan : C.glassSurfTrans, color: '#fff', cursor: ready ? 'pointer' : 'not-allowed' }}>{busy ? 'Connecting…' : '+ Add AnythingLLM'}</button>
     </form>
-    {(error || message) && <p role="status" style={{ color: C.txS }}>{error || message}</p>}
-  </details>;
+    }
+    {(error || message) && <p role="alert" style={{ color: C.danger, fontSize: 11 }}>{error || message}</p>}
+    </>}
+  </div>;
 }
 
 export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string | null }) {

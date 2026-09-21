@@ -14,6 +14,7 @@ delete process.env.LITELLM_CONFIG_PATH;
 const settings: Record<string, unknown> = { LLMProvider: 'generic-openai', GenericOpenAiModelPref: 'original-model', GenericOpenAiKey: true };
 const workspaces: Array<Record<string, unknown>> = [];
 let failWrites = false;
+let failReads = false;
 let writes = 0;
 let info: unknown[] = [];
 const server = http.createServer(async (req, res) => {
@@ -27,6 +28,7 @@ const server = http.createServer(async (req, res) => {
     return send({ id: 'fixture-completion', choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }] });
   }
   if (req.headers.authorization !== 'Bearer fixture-management-key') { res.statusCode = 401; return send({ error: 'unauthorized' }); }
+  if (failReads && req.method === 'GET') { res.statusCode = 401; return send({ error: 'unauthorized' }); }
   if (req.url === '/api/v1/system') return send({ settings: { ...settings, LiteLLMApiKey: Boolean(settings.LiteLLMApiKey) } });
   if (req.url === '/api/v1/workspaces') return send({ workspaces });
   if (req.url === '/api/v1/system/update-env') {
@@ -72,6 +74,13 @@ async function main() {
     const stored = queryOne<{ credentials: string }>('SELECT credentials FROM anythingllm_connectors WHERE id = ?', [instance.id])!;
     assert(!stored.credentials.includes('fixture-management-key'));
     assert(!JSON.stringify(svc.listAnythingConnectors()).includes('fixture-management-key'));
+    assert.equal((await svc.listAnythingConnections())[0].available, true);
+    failReads = true;
+    const failedConnection = (await svc.listAnythingConnections())[0];
+    assert.equal(failedConnection.available, false);
+    assert.match(failedConnection.error || '', /401/);
+    assert(!JSON.stringify(failedConnection).includes('fixture-management-key'));
+    failReads = false;
     workspaces.push({ id: 1, slug: 'inherit', name: 'Inherited', chatProvider: null, chatModel: null },
       { id: 2, slug: 'explicit', name: 'Selected override', chatProvider: 'openai', chatModel: 'gpt-test', agentProvider: 'anthropic', agentModel: 'agent-model' },
       { id: 3, slug: 'untouched', name: 'Unselected override', chatProvider: 'generic-openai', chatModel: 'untouched-model' },
@@ -99,6 +108,8 @@ async function main() {
     assert.deepEqual(plan.prerequisites, [], 'An interrupted unused-slot reservation can be retried safely');
     await svc.executeAnythingPlan(plan.id, true, 'fixture');
     const writesAfter = writes;
+    await assert.rejects(svc.removeAnythingConnector(instance.id), /Restore the managed routes/);
+    assert.equal(svc.listAnythingConnectors().length, 1);
     await svc.executeAnythingPlan(plan.id, true, 'fixture');
     assert.equal(writes, writesAfter, 'Repeated approved plan is idempotent');
     assert.equal(settings.LLMProvider, 'litellm');
@@ -165,6 +176,16 @@ async function main() {
     assert(plan.prerequisites.some(p => p.includes('overrides its model')));
     await svc.selectAnythingRoute(instance.id, 'workspace:6', true, 'fixture-model');
     plan = await svc.prepareAnythingPlan(instance.id, 'apply'); assert.deepEqual(plan.prerequisites, []);
+    run('UPDATE anythingllm_connectors SET locked_until = ? WHERE id = ?', [Date.now() + 60_000, instance.id]);
+    await assert.rejects(svc.removeAnythingConnector(instance.id), /Another AnythingLLM operation/);
+    run('UPDATE anythingllm_connectors SET locked_until = 0 WHERE id = ?', [instance.id]);
+    const beforeRemoval = JSON.stringify({ settings, workspaces }), removalWrites = writes;
+    await svc.removeAnythingConnector(instance.id);
+    assert.equal(svc.listAnythingConnectors().length, 0);
+    assert.equal(writes, removalWrites);
+    assert.equal(JSON.stringify({ settings, workspaces }), beforeRemoval, 'Removing registration never modifies AnythingLLM');
+    await assert.rejects(svc.executeAnythingPlan(plan.id, true, 'fixture'), /not found|Another AnythingLLM/);
+    console.log('PASS: live API status, redacted failures, ownership/lock-protected removal, and stale-plan rejection after removal');
     console.log('PASS: AnythingLLM host-only discovery, direct local proxy URL, encrypted management credentials, workspace inheritance/opt-in, stable selections, review conflicts, idempotent apply, truthful verification, failure recovery, and restore.');
   } finally { getDb().close(); server.closeAllConnections(); server.close(); fs.rmSync(root, { recursive: true, force: true }); }
 }

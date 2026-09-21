@@ -169,6 +169,25 @@ function view(row: Row, state: State) {
 export function listAnythingConnectors() {
   return queryAll<Row>('SELECT * FROM anythingllm_connectors ORDER BY name').map(row => view(row, JSON.parse(row.state_json)));
 }
+export async function listAnythingConnections() {
+  return Promise.all(queryAll<Row>('SELECT * FROM anythingllm_connectors ORDER BY name').map(async row => {
+    const instance = view(row, JSON.parse(row.state_json));
+    try {
+      await discover(row);
+      return { ...instance, available: true, error: null };
+    } catch (error) {
+      return { ...instance, available: false, error: error instanceof Error ? error.message : 'AnythingLLM is unavailable.' };
+    }
+  }));
+}
+export async function removeAnythingConnector(id: string) {
+  return locked(id, async () => {
+    const { state } = load(id);
+    if (Object.keys(state.ownership).length) throw new Error('Restore the managed routes in AnythingLLM Routing before removing this connector.');
+    run('DELETE FROM anythingllm_connectors WHERE id = ?', [id]);
+    return { removed: true };
+  });
+}
 export async function addAnythingConnector(input: { name: string; managementUrl: string; apiKey: string }) {
   if (!input.name.trim() || input.name.length > 120 || !input.apiKey.trim() || input.apiKey.length > 4096) throw new Error('Enter a name and AnythingLLM developer API key.');
   const id = randomUUID();
