@@ -408,6 +408,7 @@ The five **actions** in plain English: **Score** (default) feeds the threat scor
 
 - Fleet Connectors supports OpenClaw, Hermes, AnythingLLM, OpenCode, Pi, Codex, and Claude Code on the same host.
 - Configure and test upstream models in **AI & Models → Model Providers** before routing a connector.
+- Each supported routing panel also places the shared amber **Test model** action beside every affected model. It turns green and reads **Model verified** after success. OpenClaw, Hermes, OpenCode, Pi, Codex, Claude Code, AnythingLLM, and future connectors using the shared workflow inherit the same control.
 - Supported routing panels follow one sequence: select the provider route, choose **Review connection changes**, approve the exact changes, restart or start a new client session when instructed, send a new request, and choose **Verify connection**.
 - Routing is applied at provider endpoint level when a client shares one provider across several models. The panel lists all affected models before approval.
 - **Restore direct connection** restores only fields still owned by ClawNex. Later operator edits are preserved and reported as conflicts.

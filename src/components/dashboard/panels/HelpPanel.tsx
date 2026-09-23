@@ -305,6 +305,7 @@ export function HelpPanel({ onNavigate }: { onNavigate: (tab: TabId) => void }) 
             <li>Select the default chat model and choose the amber <strong style={{ color: C.tx }}>Test model</strong> action. When it turns green and reads <strong style={{ color: C.tx }}>Model verified</strong>, review and apply the route.</li>
             <li>Send a new AnythingLLM chat, verify the managed configuration, and confirm the request in Traffic Monitor.</li>
           </ol>
+          <p style={{ margin: '8px 0 0', fontSize: 12, color: C.txS }}>The same model control appears beside affected models in OpenClaw, Hermes, OpenCode, Pi, Codex, Claude Code, and future connectors that use the shared routing workflow.</p>
           <p style={{ margin: 0, fontSize: 12, color: C.txT }}>
             The connector accepts localhost addresses because it manages a host-installed AnythingLLM instance. ClawNex encrypts the Developer API key and uses it to read providers and workspaces and apply reviewed routing settings. AnythingLLM workspaces marked <strong>Uses default</strong> inherit the instance-wide default chat provider and model.
           </p>

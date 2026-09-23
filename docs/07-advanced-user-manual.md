@@ -142,7 +142,7 @@ OpenClaw, AnythingLLM, writable Hermes custom providers, and the global OpenCode
 Use the shared workflow in Configuration → Fleet & Routing:
 
 1. Sync inventory and select one connector instance. Coding-agent connectors manage their supported global configuration; project, environment, command-line, sandbox, and existing-session overrides remain outside coverage.
-2. Select provider/model rows and set their desired route.
+2. Select provider/model rows, set their desired route, and use the inline **Test model** action beside every affected model. A successful test changes the control to **Model verified** for 30 minutes unless configuration changes.
 3. Choose **Review connection changes** and inspect the fingerprinted plan.
 4. Approve the plan, restart the affected agent when prompted, and send a new request.
 5. Choose **Verify** and confirm Traffic Monitor shows the expected connector, source, route, and verified identity.

@@ -25,6 +25,7 @@ import { addModel, addProvider, getProvider, listModels, updateProvider } from "
 import { syncProvidersToYaml } from "@/lib/litellm/sync";
 import { resolveLiteLLMConfigPath } from '@/lib/litellm/paths';
 import { getDb } from "@/lib/db/index";
+import { configuredRoutingModel, hasCurrentProviderReadiness } from './provider-routing-readiness';
 import { commitRoutingFile, publishRoutingFile, removeRoutingJournal, withRoutingOperationLock } from './routing-file-transaction';
 import { ROUTING_IDENTITY_HEADER, prepareIdentityHeader, identityHeaderMatches, routingIdentityHash, type RoutingIdentityOwnership } from './routing-identity';
 import { sealRoutingCredential, openRoutingCredential, type EncryptedRoutingCredential } from './routing-credential-recovery';
@@ -92,7 +93,8 @@ export interface ConnectorRoutingResponse {
   pi: ConnectorRoutingSummary;
   codex: ConnectorRoutingSummary;
   claude: ConnectorRoutingSummary;
-  availableModels: Array<{ alias: string; name: string }>;
+  availableModels: Array<{ providerId: string; alias: string; name: string; ready: boolean }>;
+  modelReadiness: Record<string, { providerId: string; modelAlias: string; providerName: string; ready: boolean }>;
   driftTotal: number;
   scannedAt: string;
   reconciliation: {
@@ -991,12 +993,31 @@ export function syncConnectorRoutingInventory(trigger = "sync"): ConnectorRoutin
   const codexSnapshot = snapshots(codex)[0];
   const claudeSnapshot = snapshots(claude)[0];
   const scannedAt = nowIso();
+  const allItems = [openclaw, hermes, opencode, pi, codex, claude].flatMap(summary => summary.items);
+  const modelReadiness = Object.fromEntries(allItems.filter(item => item.present && item.itemType === 'model').flatMap(item => {
+    const target = configuredRoutingModel(item);
+    if (!target) return [];
+    const provider = getProvider(target.providerId);
+    return [[item.id, {
+      providerId: target.providerId,
+      modelAlias: target.modelAlias,
+      providerName: provider?.name || target.providerId,
+      ready: hasCurrentProviderReadiness(target.providerId, target.modelAlias),
+    }]];
+  }));
+  const availableModels = listModels().flatMap(model => {
+    const provider = getProvider(model.provider_id);
+    if (!provider?.is_active || provider.type === 'openclaw') return [];
+    return [{ providerId: model.provider_id, alias: model.model_id, name: model.name || model.model_id,
+      ready: hasCurrentProviderReadiness(model.provider_id, model.model_id) }];
+  });
   return {
     litellmTarget: litellmTarget(),
     openclaw,
     hermes,
     opencode, pi, codex, claude,
-    availableModels: listModels().filter(model => { const provider = getProvider(model.provider_id); return provider?.is_active && provider.type !== 'openclaw'; }).map(model => ({ alias: model.model_id, name: model.name || model.model_id })),
+    availableModels,
+    modelReadiness,
     driftTotal: openclaw.drift.total + hermes.drift.total + opencode.drift.total + pi.drift.total + codex.drift.total + claude.drift.total,
     scannedAt,
     reconciliation: {

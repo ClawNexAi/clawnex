@@ -10,7 +10,7 @@ import type { ConnectorRoutingSummary as Summary, RoutingConnectorId } from './c
 type ConnectorRoutingSummary = Summary<RoutingConnectorId>;
 import { resolveConfiguredProxyModel } from './configured-proxy-model';
 
-function proxyTarget(item: ConnectorRoutingSummary['items'][number]) {
+export function configuredRoutingModel(item: ConnectorRoutingSummary['items'][number]) {
   const recordedAlias = typeof item.metadata.proxyModelAlias === 'string' ? item.metadata.proxyModelAlias : null;
   return resolveConfiguredProxyModel(recordedAlias || item.modelId, {
     providerId: item.providerId,
@@ -75,7 +75,7 @@ export function selectedRoutingPrerequisites(summary: ConnectorRoutingSummary): 
     const siblings = summary.items.filter(item => item.present && key(item) === selectedKey && item.itemType === 'model');
     if (!siblings.length) { failures.push('A selected provider has no known models. Discover and configure its models first.'); continue; }
     for (const item of siblings) {
-      const target = proxyTarget(item);
+      const target = configuredRoutingModel(item);
       if (!target || !hasCurrentProviderReadiness(target.providerId, target.modelAlias)) {
         failures.push(`${item.displayName || item.modelId}: configure and test this exact model through ClawNex before applying the provider route.`);
       }
@@ -90,7 +90,7 @@ export async function assertSelectedLiveDeployments(summary: ConnectorRoutingSum
   const selected = new Set(summary.items.filter(item => item.present && item.desiredRoute === 'routed' &&
     ['provider-routing', 'model-inventory'].includes(item.capability)).map(key));
   const targets = summary.items.filter(item => item.present && item.itemType === 'model' && selected.has(key(item)))
-    .map(item => ({ item, target: proxyTarget(item) }));
+    .map(item => ({ item, target: configuredRoutingModel(item) }));
   if (!targets.length) return;
   const headers: Record<string, string> = {};
   if (process.env.LITELLM_MASTER_KEY) headers.Authorization = `Bearer ${process.env.LITELLM_MASTER_KEY}`;

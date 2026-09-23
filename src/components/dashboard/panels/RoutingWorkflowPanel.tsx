@@ -5,6 +5,7 @@ import { C, F } from '../constants';
 import { CollapsibleCard } from '../shared';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { GlobalFilterSelect } from '../GlobalFilterSelect';
+import { ModelReadinessControl } from './ModelReadinessControl';
 import type { ConnectorId, ConnectorRoutingResponse, ConnectorRoutingItem } from '@/lib/services/connector-routing-inventory';
 import type { RoutingPlan } from '@/lib/services/routing-workflow';
 import type { RoutingVerification } from '@/lib/services/routing-reconciliation';
@@ -52,6 +53,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   const [plan, setPlan] = useState<RoutingPlan | null>(null);
   const reviewOrigin = useRef<HTMLElement | null>(null);
   const [verification, setVerification] = useState<{ key: string; result: RoutingVerification } | null>(null);
+  const initialModelConfig = data.availableModels.find(model => model.alias === initialModel);
   const { title, accent, focusKey } = connectorPresentation[connector];
   const items = summary.items.filter(item => item.present && item.sourceId === sourceId && !['litellm', 'clawnex-litellm'].includes(item.providerId));
   const providers = new Map<string, ConnectorRoutingItem[]>();
@@ -107,9 +109,13 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
     <div style={{ fontSize: 12, fontFamily: F.disp, lineHeight: 1.6, overflowWrap: 'anywhere' }}>
     {['codex', 'claude'].includes(connector) && summary.status === 'ok' && (!groups.length || items.some(item => item.metadata.initialSetup)) && <div style={{ marginBottom: 12 }}>
       <div style={{ color: C.tx, fontSize: 12 }}>Initial model
-        <GlobalFilterSelect ariaLabel={`${title} initial model`} variant="form" minWidth={0} value={initialModel} disabled={busy} onChange={setInitialModel}
-          style={{ width: '100%', maxWidth: 500, margin: '6px 0 8px' }}
-          options={[{ value: '', label: 'Choose a configured ClawNex model' }, ...data.availableModels.map(model => ({ value: model.alias, label: model.name }))]} />
+        <div style={{ display: 'flex', alignItems: 'stretch', gap: 8, flexWrap: 'wrap', margin: '6px 0 8px', maxWidth: 680 }}>
+          <div style={{ flex: '1 1 320px', minWidth: 0 }}><GlobalFilterSelect ariaLabel={`${title} initial model`} variant="form" minWidth={0} value={initialModel} disabled={busy} onChange={setInitialModel}
+            style={{ width: '100%' }} options={[{ value: '', label: 'Choose a configured ClawNex model' }, ...data.availableModels.map(model => ({ value: model.alias, label: model.name }))]} /></div>
+          {initialModelConfig && <ModelReadinessControl key={`${initialModelConfig.providerId}:${initialModelConfig.alias}`}
+            providerId={initialModelConfig.providerId} modelAlias={initialModelConfig.alias} providerName={initialModelConfig.name}
+            ready={initialModelConfig.ready} disabled={busy} onRefresh={refresh} onMessage={setMessage} />}
+        </div>
       </div>
       <button style={button} disabled={busy || !initialModel} onClick={() => void run(async () => { await command({ action: 'choose-native-model', connector, modelAlias: initialModel }); setPlan(null); await refresh(); })}>Use selected model</button>
       <p style={{ color: C.txS, fontSize: 12, marginTop: 8 }}>Selection prepares a global provider. Review and Apply below writes its local proxy settings. Existing login, project settings and subscription credentials are preserved.</p>
@@ -150,7 +156,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
     <details open style={{ marginTop: 12 }}><summary style={{ cursor: 'pointer', color: C.tx, marginBottom: 8 }}>Providers and affected models</summary>
       {groups.map(([providerId, rows]) => {
         const writable = rows.filter(row => ['provider-routing', 'model-inventory'].includes(row.capability));
-        const models = [...new Set(rows.map(row => row.modelId).filter(Boolean))];
+        const modelRows = [...new Map(rows.filter(row => row.itemType === 'model' && row.modelId).map(row => [row.modelId, row])).values()];
         const providerDisplayName = rows.find(row => row.itemType === 'provider')?.displayName || providerId;
         return <div key={providerId} style={{ padding: '10px 12px', border: `1px solid ${C.brd}`, borderRadius: 6, marginBottom: 8 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, color: C.tx }}>
@@ -166,8 +172,16 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
             </> : <RoutingProviderLabel providerId={providerId} displayName={providerDisplayName} />}
             <span style={{ marginLeft: 'auto', color: C.txS, fontSize: 11 }}>{!writable.length ? 'Not supported · unchanged' : rows.some(row => row.currentRoute === 'routed') ? 'Configured' : 'Direct'}</span>
           </label>
-          <details style={{ marginTop: 8, color: C.txS, fontSize: 12 }}><summary>{models.length} affected model(s)</summary>
-            {models.map(model => <div key={model} style={{ padding: '4px 0', overflowWrap: 'anywhere' }}>{model}</div>)}</details>
+          <details style={{ marginTop: 8, color: C.txS, fontSize: 12 }}><summary>{modelRows.length} affected model(s)</summary>
+            {modelRows.map(model => {
+              const readiness = data.modelReadiness[model.id];
+              return <div key={model.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '6px 0' }}>
+                <span style={{ flex: '1 1 280px', minWidth: 0, overflowWrap: 'anywhere' }}>{model.modelId}</span>
+                {readiness && <ModelReadinessControl key={`${readiness.providerId}:${readiness.modelAlias}`}
+                  providerId={readiness.providerId} modelAlias={readiness.modelAlias} providerName={readiness.providerName}
+                  ready={readiness.ready} disabled={busy} onRefresh={refresh} onMessage={setMessage} />}
+              </div>;
+            })}</details>
         </div>;
       })}
       {!groups.length && <p style={{ color: C.txS }}>{native ? summary.status === 'ok' && connector !== 'pi' ? 'Choose the initial model above, then review the proposed global connection.' : summary.detail : 'No supported local configuration found. Add the instance in Fleet Connectors, then refresh. Remote instances require supported configuration access; they are not treated as local.'}</p>}

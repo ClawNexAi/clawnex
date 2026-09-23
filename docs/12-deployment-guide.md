@@ -249,6 +249,7 @@ crontab -l
 Open Configuration → Fleet & Routing → OpenClaw Routing:
 
 - Select the provider routes that should pass through ClawNex.
+- Expand affected models and use **Test model** beside each model until every required control reads **Model verified**.
 - Choose **Review connection changes**, inspect the exact provider/model impact, and approve the plan.
 - Restart the selected OpenClaw instance when prompted, send a new request, then choose **Verify connection**.
 
@@ -259,6 +260,7 @@ OpenClaw enforces this at provider endpoint level. Selecting a model routes that
 Open Configuration → Fleet & Routing → Hermes Routing and review the Hermes provider inventory:
 
 - Select writable Hermes `custom_providers` or model rows that should route through ClawNex.
+- Expand affected models and use **Test model** beside each model until every required control reads **Model verified**.
 - Choose **Review connection changes**, inspect the plan, and approve it.
 - Restart the detected Hermes gateway when prompted, send a new request, then choose **Verify connection**.
 - Use **Restore direct connection** to restore ClawNex-managed provider edits. Later operator edits are preserved and reported as conflicts.
@@ -270,7 +272,7 @@ Hermes uses provider-level routing for writable `custom_providers` in `~/.hermes
 If this host runs OpenCode:
 
 1. Open Configuration → Fleet Connectors and add the global OpenCode connector.
-2. Open Fleet & Routing, select `opencode:global`, choose the provider/model rows to route, and click **Review connection changes**.
+2. Open Fleet & Routing, select `opencode:global`, choose the provider/model rows to route, use **Test model** beside each affected model, and click **Review connection changes** after they read **Model verified**.
 3. Inspect and approve the plan. ClawNex resolves `OPENCODE_CONFIG`, `~/.config/opencode/opencode.json`, or `~/.config/opencode/opencode.jsonc`; project-local configuration is not changed.
 4. Restart OpenCode, send a new request, then click **Verify** and confirm the Traffic Monitor row identifies `opencode:global` with verified routing identity.
 

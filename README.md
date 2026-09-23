@@ -93,7 +93,7 @@ ClawNex currently supports same-host operation. A supported remote collector or 
 
 ## Current Development Version
 
-`v0.15.10-alpha` expands Fleet Connectors to OpenClaw, Hermes, AnythingLLM, OpenCode, Pi, Codex, and Claude Code. Supported routes use an operator-reviewed apply/verify/restore workflow with model-readiness checks, signed attribution where the client supports it, drift reconciliation, safe recovery records, and fresh traffic evidence.
+`v0.15.10-alpha` expands Fleet Connectors to OpenClaw, Hermes, AnythingLLM, OpenCode, Pi, Codex, and Claude Code. Supported routes use an operator-reviewed apply/verify/restore workflow with an inline **Test model / Model verified** control beside every affected model, signed attribution where the client supports it, drift reconciliation, safe recovery records, and fresh traffic evidence.
 
 See the [`dev` branch](https://github.com/ClawNexAi/clawnex/tree/dev) and [changelog](CHANGELOG.md) for development detail. The latest published release remains [`v0.15.9-alpha`](https://github.com/ClawNexAi/clawnex/releases/tag/v0.15.9-alpha).
 
