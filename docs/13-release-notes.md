@@ -3,10 +3,10 @@
 **Document ID:** CLAWNEX-REL-001
 **Version:** 1.22
 **Classification:** For Distribution
-**Last Updated:** 2026-09-12
+**Last Updated:** 2026-09-23
 **Status:** Living Document
 
-**See also:** `20-product-roadmap.md`, `21-project-history.md`, `14-data-dictionary.md`, `11-security-architecture.md`, `12-deployment-guide.md`.
+**See also:** `security-roadmap.md`, `14-data-dictionary.md`, `25-public-infrastructure-architecture.md`, and `12-deployment-guide.md`.
 
 ---
 

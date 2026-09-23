@@ -3,7 +3,7 @@
 **Document ID:** CLAWNEX-USR-002
 **Version:** 2.1
 **Classification:** Confidential
-**Last Updated:** 2026-09-12
+**Last Updated:** 2026-09-23
 **Product Version:** v0.15.10-alpha development line
 **Status:** Living Document
 
@@ -137,11 +137,11 @@ When you spot a concerning entry in the Traffic Monitor:
 
 ### 3.2A Connector Attribution and Verification
 
-OpenClaw, AnythingLLM, writable Hermes custom providers, and the global OpenCode connector can route supported model traffic through LiteLLM. ClawNex records the connector and source only when the request carries routing identity that ClawNex can verify; unverified caller-supplied attribution is ignored. AnythingLLM's built-in LiteLLM provider does not send an instance-identity header, so its Verify action confirms configuration and loaded models while Traffic Monitor provides separate request evidence.
+OpenClaw, AnythingLLM, writable Hermes custom providers, and the global OpenCode, Pi, Codex, and Claude Code connectors can route supported model traffic through LiteLLM. ClawNex records the connector and source only when the request carries routing identity that ClawNex can verify; unverified caller-supplied attribution is ignored. AnythingLLM's built-in LiteLLM provider does not send an instance-identity header, so its Verify action confirms configuration and loaded models while Traffic Monitor provides separate request evidence.
 
 Use the shared workflow in Configuration → Fleet & Routing:
 
-1. Sync inventory and select one connector instance. OpenCode uses the single `opencode:global` source.
+1. Sync inventory and select one connector instance. Coding-agent connectors manage their supported global configuration; project, environment, command-line, sandbox, and existing-session overrides remain outside coverage.
 2. Select provider/model rows and set their desired route.
 3. Choose **Review connection changes** and inspect the fingerprinted plan.
 4. Approve the plan, restart the affected agent when prompted, and send a new request.
@@ -408,7 +408,7 @@ Legend: **Y** = permission granted, **—** = permission denied.
 - **Viewer** holds 10 read-only permissions. All panels load read-only.
 - **Auditor** holds 11 permissions including `audit:export`. Specialized for compliance evidence collection; read-only elsewhere.
 
-**Audit trail guarantee:** Every admin operation listed in this manual — operator management (§6.1), session revocation (§6.3), break-glass activation (§5), whitelist changes (§2), block mode toggle, retention changes, trust audit runs (§7A), scheduled report changes (§7B), correlation rule changes (§7C), HTTPS config changes (§7D), MCP tool invocations (§7E), and system management (§14) — is recorded to the `audit_log` table with `actor`, `action`, `resource_type`, `resource_id`, `detail`, and `created_at`. The audit trail is append-only — no UPDATE or DELETE statements are emitted by application code (see REQ-009 and docs/11-security-architecture.md).
+**Audit trail guarantee:** Every admin operation listed in this manual — operator management (§6.1), session revocation (§6.3), break-glass activation (§5), whitelist changes (§2), block mode toggle, retention changes, trust audit runs (§7A), scheduled report changes (§7B), correlation rule changes (§7C), HTTPS config changes (§7D), MCP tool invocations (§7E), and system management (§14) — is recorded to the `audit_log` table with `actor`, `action`, `resource_type`, `resource_id`, `detail`, and `created_at`. The audit trail is append-only — no UPDATE or DELETE statements are emitted by application code (see REQ-009 and `25-public-infrastructure-architecture.md`).
 
 **Cross-references:**
 - Full REQ-to-permission mapping: `docs/04-product-requirements.md` §8.
@@ -1292,6 +1292,10 @@ The Configuration panel consolidates released agent gateway connections into a s
 | **OpenClaw** | LIVE | OpenClaw agent gateway — real-time session monitoring, agent fleet visibility, and traffic routing |
 | **AnythingLLM** | LIVE | Host-installed AnythingLLM — default chat and workspace routing through the local LiteLLM proxy |
 | **Hermes** | LIVE | Hermes-Agent (Nous Research) gateway — session scanning, token aggregation, and fleet filtering |
+| **OpenCode** | AVAILABLE | One global JSON or JSONC configuration; project-local configuration remains outside coverage |
+| **Pi** | AVAILABLE | Native global `models.json` and `settings.json` configuration |
+| **Codex** | AVAILABLE | Native global TOML configuration using the Responses API |
+| **Claude Code** | AVAILABLE | Native global settings using the Messages API |
 
 Each released connector section is independently collapsible. Live connectors show connection status, instance management (add/remove), and health indicators. ClawNex does not show disabled connector placeholders for unreleased adapters.
 
@@ -1318,7 +1322,7 @@ AnythingLLM must run on the same host as ClawNex. To register it:
 
 ClawNex uses the key to discover the instance-wide provider and its workspaces and to apply reviewed routing changes. A workspace marked **Uses default** has no chat-provider or chat-model override; it follows the **Default chat provider** shown above the workspace list, including later changes to that default.
 
-Before applying a route, select the exact ClawNex model and choose **Test through ClawNex**. The approved test sends one harmless inference request and may incur provider charges. A successful readiness result is valid for 30 minutes unless configuration changes. Then review, apply, send a new AnythingLLM chat, run **Verify connection**, and inspect Traffic Monitor for the new request.
+Before applying a route, select the exact ClawNex model and choose the amber **Test model** action. The approved test sends one harmless inference request and may incur provider charges. The action turns green and reads **Model verified** after success; readiness remains valid for 30 minutes unless configuration changes. If LiteLLM has not loaded the model, the same control changes to **Reload proxy**. Then review, apply, send a new AnythingLLM chat, run **Verify connection**, and inspect Traffic Monitor for the new request.
 
 **Restore direct connection** returns managed chat routes to their original providers and models without changing the original credentials. No AnythingLLM restart is required. After the final restore, managed-route Verify and Restore actions are unavailable; send a new chat to confirm the direct connection still works. The reserved LiteLLM connection remains available for later reuse.
 

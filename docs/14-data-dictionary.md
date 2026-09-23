@@ -3,10 +3,10 @@
 **Document ID:** CLAWNEX-DATA-001
 **Version:** 1.12
 **Classification:** Confidential
-**Last Updated:** 2026-05-08
+**Last Updated:** 2026-09-23
 **Status:** Living Document
 
-**See also:** `11-security-architecture.md`, `13-release-notes.md`, `break-glass-design.md`, `24-rbac-permissions-reference.md`.
+**See also:** `25-public-infrastructure-architecture.md`, `13-release-notes.md`, and the RBAC and break-glass sections in `07-advanced-user-manual.md`.
 
 ---
 

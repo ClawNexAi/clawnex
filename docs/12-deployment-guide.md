@@ -3,7 +3,7 @@
 **Document ID:** CLAWNEX-DEP-001
 **Version:** 2.4
 **Classification:** Confidential
-**Last Updated:** 2026-09-12
+**Last Updated:** 2026-09-23
 **Product Version:** v0.15.10-alpha development line
 **Status:** Living Document
 
@@ -246,22 +246,22 @@ crontab -l
 
 ### Step 13: Choose OpenClaw Routing Through ClawNex
 
-Open Configuration → OpenClaw Routing and review **OpenClaw Selective Routing**:
+Open Configuration → Fleet & Routing → OpenClaw Routing:
 
-- Tick the OpenClaw providers/models that should route through ClawNex.
-- Click **Apply OpenClaw Routing**.
-- Restart OpenClaw Gateway from the same card if prompted.
+- Select the provider routes that should pass through ClawNex.
+- Choose **Review connection changes**, inspect the exact provider/model impact, and approve the plan.
+- Restart the selected OpenClaw instance when prompted, send a new request, then choose **Verify connection**.
 
 OpenClaw enforces this at provider endpoint level. Selecting a model routes that model's provider through `http://127.0.0.1:4001/v1`; if other models share the same provider, they follow that provider route as well.
 
 ### Step 14: Choose Hermes Routing Through ClawNex
 
-Open Configuration → Hermes Routing and review the Hermes provider inventory:
+Open Configuration → Fleet & Routing → Hermes Routing and review the Hermes provider inventory:
 
-- Tick writable Hermes `custom_providers` or model rows that should route through ClawNex.
-- Click **Save Hermes Wire**.
-- Click **Restart Gateway** so the detected Hermes gateway supervisor reloads provider configuration.
-- Use **Revert Hermes Wire** to restore ClawNex-managed Hermes provider edits. Operator edits made after the wire are preserved.
+- Select writable Hermes `custom_providers` or model rows that should route through ClawNex.
+- Choose **Review connection changes**, inspect the plan, and approve it.
+- Restart the detected Hermes gateway when prompted, send a new request, then choose **Verify connection**.
+- Use **Restore direct connection** to restore ClawNex-managed provider edits. Later operator edits are preserved and reported as conflicts.
 
 Hermes uses provider-level routing for writable `custom_providers` in `~/.hermes/config.yaml`. Hermes OAuth/session-bound and watcher-only rows remain read-only retrospective inventory.
 
@@ -273,6 +273,15 @@ If this host runs OpenCode:
 2. Open Fleet & Routing, select `opencode:global`, choose the provider/model rows to route, and click **Review connection changes**.
 3. Inspect and approve the plan. ClawNex resolves `OPENCODE_CONFIG`, `~/.config/opencode/opencode.json`, or `~/.config/opencode/opencode.jsonc`; project-local configuration is not changed.
 4. Restart OpenCode, send a new request, then click **Verify** and confirm the Traffic Monitor row identifies `opencode:global` with verified routing identity.
+
+### Step 16: Choose AnythingLLM Routing Through ClawNex
+
+If this host runs AnythingLLM:
+
+1. Create a key under AnythingLLM → Settings → Developer API, then add the local AnythingLLM instance under Fleet Connectors.
+2. Select the exact default chat model and choose the amber **Test model** action. Continue after it turns green and reads **Model verified**.
+3. Choose **Review connection changes**, approve the default chat route, send a new AnythingLLM chat, and choose **Verify connection**.
+4. Confirm the new request in Traffic Monitor. Workspace rows marked **Uses default** follow the default chat provider automatically.
 
 Apply uses `http://127.0.0.1:4001/v1`, `{env:LITELLM_MASTER_KEY}`, and exact loaded LiteLLM aliases. Use **Restore direct connection** before removing the connector. Recovery preserves operator edits and does not store plaintext provider credentials.
 
@@ -779,7 +788,7 @@ When both gates are closed, the login page hides the button entirely and the ope
 MAGIC_LINK_EXPIRY_MINUTES=15
 ```
 
-**Security posture summary** (full detail in `docs/11-security-architecture.md` §10.3):
+**Security posture summary** (see `docs/25-public-infrastructure-architecture.md` for the current public architecture):
 - Token is 32 random bytes, stored only as sha256 hash
 - One-shot atomic consume — parallel clicks cannot both create sessions
 - All begin-time failure modes collapse to the same "check your inbox" response (no enumeration)

@@ -3,7 +3,7 @@
 **Document ID:** CLAWNEX-USR-001
 **Version:** 1.10
 **Classification:** For Distribution
-**Last Updated:** 2026-09-12
+**Last Updated:** 2026-09-23
 **Product Version:** v0.15.10-alpha development line
 **Status:** Living Document
 
@@ -74,7 +74,7 @@ On a fresh install, **Fleet Command** opens directly into the **Welcome Wizard**
 | 3. Enable Host Security | Click **Verify Now** — verifies the bundled scanner is available. Or click **Open Updates panel** for the manual path. | — (or Configuration → Updates) |
 | 4. Sync CVE database | Click **Sync Now** — pulls the feed in place | — |
 | 5. Sync Model Pricing | Click **Sync Now** — pulls the LiteLLM price snapshot in place | — |
-| 6. Configure agent routing | Click **Choose Routing** — opens Configuration → Fleet & Routing so you can select an OpenClaw, AnythingLLM, Hermes, or global OpenCode instance, review its provider/model changes, and apply them explicitly. For AnythingLLM, create the required key under **AnythingLLM → Settings → Developer API**, then add its localhost address and key under Fleet Connectors. The legacy all-provider OpenClaw wire remains available as a secondary compatibility action. | — (or Configuration → Fleet & Routing) |
+| 6. Configure agent routing | Click **Choose Routing** — opens Configuration → Fleet & Routing. Register the local OpenClaw, Hermes, AnythingLLM, OpenCode, Pi, Codex, or Claude Code client you use, test its exact model when requested, review the proposed changes, and apply them explicitly. AnythingLLM requires a key from **AnythingLLM → Settings → Developer API**. | — (or Configuration → Fleet & Routing) |
 | 7. Run first shield test | Click **Open Shield Tests** | Prompt Shield |
 
 Every "Open Configuration" button deep-links into the specific card you need — that card auto-expands and scrolls into view so you don't have to hunt for it.
@@ -404,34 +404,33 @@ The five **actions** in plain English: **Score** (default) feeds the threat scor
 
 **The header warning ribbon.** Disable ClawNex Default OR Generic Egress Starter and an amber ribbon appears across every dashboard tab naming which policy is off and which detection family is therefore disabled. To recover, open Configuration → Policies & Rules and click the row's checkbox; the ribbon clears immediately and a re-enable event lands in the audit log.
 
-**OpenClaw Routing:**
-- Shows each provider's routing status: **ROUTED** (traffic flows through LiteLLM proxy for scanning) or **DIRECT** (traffic bypasses ClawNex).
-- **OpenClaw Selective Routing** inventories OpenClaw providers/models. Tick the OpenClaw rows that should route through ClawNex, then click **Apply OpenClaw Routing**. Routing is enforced at provider endpoint level, not as independent per-model switches. If several models share one provider, selecting one model routes that provider through LiteLLM, so sibling models on that provider follow the same route.
-- **ClawNex-Managed Routing block** (added 2026-04-29) lets you wire / revert / restart from the dashboard:
-  - **Wire LiteLLM** — legacy compatibility action that adds a `models.providers.litellm` entry to `~/.openclaw/openclaw.json` pointing at `http://127.0.0.1:4001/v1`. Also sets `agents.defaults.model.primary` to `litellm/auto` if it was unset (won't clobber an operator's pinned default). Records ownership in a sidecar at `~/.clawnex-routing-managed.json`.
-  - **Revert ClawNex Wire** — undoes the wire. Operator edits made after the wire to `set-if-missing` paths (like `agents.defaults.model.primary`) are preserved automatically; the engine SHA-256 fingerprints values at write time and refuses to remove a value that was changed externally.
-  - **Force Wire (overwrite)** — surfaced when a `models.providers.litellm` entry exists but ClawNex doesn't have a sidecar (operator-owned or stale). Overwrites with ClawNex's canonical values and starts tracking ownership.
-  - **Restart Gateway** — restarts the long-running `openclaw-gateway` daemon so it picks up the new routing without an SSH trip. Tooltipped with the auto-detected supervisor (e.g. `systemd user unit (owner: <operator-user>)` on Linux, `launchd Aqua session` on macOS). On unsupported hosts the button is replaced with a copy-paste manual command.
-  - **View raw sidecar** — `<details>` disclosure showing the full `~/.clawnex-routing-managed.json` JSON inline. Lets you audit every path ClawNex is tracking and the SHA-256 fingerprint of each value without SSH.
-  - Result panel below the buttons surfaces the engine's status (wired / already-wired / reverted / conflict / restarted) plus supervisor + elapsed ms and any preserved-paths the revert kept in place.
-- On a fresh install where `openclaw.json` is present but has no LLM providers registered yet, you'll see a friendly blue info box instead of an error.
+**Fleet Connectors and routing:**
 
-**Hermes Routing:**
-- Lives in its own Configuration card and is not mixed into OpenClaw Routing.
-- Inventories writable Hermes `custom_providers` from `~/.hermes/config.yaml` plus read-only observed rows from Hermes activity.
-- Tick writable custom-provider or model rows that should route through ClawNex, then click **Save Hermes Wire**. This writes the selected Hermes custom-provider endpoints to the local LiteLLM proxy and records ownership in the Hermes routing sidecar.
-- **Revert Hermes Wire** restores ClawNex-managed Hermes provider edits when the current values still match the ClawNex-managed route. Operator edits made after the wire are preserved.
-- **Restart Gateway** restarts the detected Hermes gateway supervisor so Hermes reloads `config.yaml`. On unsupported hosts, the card shows the manual restart command instead.
-- Hermes OAuth/session-bound and watcher-only rows remain read-only retrospective inventory because ClawNex cannot safely rewrite those client-owned paths.
-- If `openclaw.json` truly can't be read, an amber warning explains it.
+- Fleet Connectors supports OpenClaw, Hermes, AnythingLLM, OpenCode, Pi, Codex, and Claude Code on the same host.
+- Configure and test upstream models in **AI & Models → Model Providers** before routing a connector.
+- Supported routing panels follow one sequence: select the provider route, choose **Review connection changes**, approve the exact changes, restart or start a new client session when instructed, send a new request, and choose **Verify connection**.
+- Routing is applied at provider endpoint level when a client shares one provider across several models. The panel lists all affected models before approval.
+- **Restore direct connection** restores only fields still owned by ClawNex. Later operator edits are preserved and reported as conflicts.
 
-**OpenCode Routing (v0.15.10-alpha development line):**
-- Add the single global connector in Configuration → Fleet Connectors. ClawNex checks `OPENCODE_CONFIG` first, then `~/.config/opencode/opencode.json`, then `~/.config/opencode/opencode.jsonc`.
-- Project-local OpenCode configuration is not managed. The connector represents `opencode:global` only.
-- In Fleet & Routing, select writable provider/model rows, choose **Review connection changes**, inspect the exact file changes, and approve the plan. ClawNex only routes explicit OpenAI-compatible providers with a unique loaded LiteLLM model alias.
-- Apply writes the local LiteLLM endpoint, the `{env:LITELLM_MASTER_KEY}` credential reference, exact LiteLLM model aliases, and a signed routing-identity header. The recovery sidecar stores no plaintext provider credential.
-- Restart OpenCode after apply or restore, start a new request, then run **Verify**. A routed Traffic Monitor row should show connector `opencode`, source `opencode:global`, and verified routing identity.
-- Before removing the OpenCode connector, review and execute **Restore direct connection**. ClawNex blocks connector removal while it still owns routed OpenCode configuration.
+**OpenClaw and Hermes:**
+
+- OpenClaw inventories provider/model routes and can restart the detected OpenClaw instance after an apply or restore.
+- Hermes inventories writable custom providers. OAuth, session-bound, and watcher-only rows stay read-only because ClawNex cannot safely rewrite those client-owned paths.
+- Both panels keep unsupported routes unchanged and show them as exclusions during review.
+
+**AnythingLLM:**
+
+- Create a key in **AnythingLLM → Settings → Developer API**, then register the local address and key under **Fleet Connectors → AnythingLLM**.
+- Select the exact model and choose the amber **Test model** action. It turns green and reads **Model verified** after the proxy test passes. The tooltip explains that this check is required before routing and remains valid for 30 minutes unless configuration changes.
+- Apply the default chat route, send a new AnythingLLM chat, choose **Verify connection**, and confirm the new request in Traffic Monitor. Workspace rows marked **Uses default** follow the default chat provider automatically.
+- Restore returns managed chat routes to their original provider and model. No AnythingLLM restart is required.
+
+**OpenCode, Pi, Codex, and Claude Code:**
+
+- These connectors manage supported global configuration only. Project, environment, command-line, sandbox, and existing-session overrides remain outside coverage.
+- OpenCode resolves its global JSON or JSONC file. Pi uses its global model and settings files. Codex uses TOML and the Responses API. Claude Code uses global settings and the Messages API.
+- Codex and Claude Code can prepare an initial global model from a tested ClawNex model. No model is selected automatically.
+- Start a new client session after apply or restore, then verify a fresh request. Before removing a connector, restore every route ClawNex still owns.
 
 **Shield Settings:**
 - **Shield Block Mode** — Toggle between OBSERVE and BLOCK.

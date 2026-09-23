@@ -3,7 +3,7 @@
 Document ID: CLAWNEX-POL-INDEX
 Version: 1.2
 Date Created: 2026-04-22
-Last Updated: 2026-05-05
+Last Updated: 2026-09-23
 Owner: Project owner
 Purpose: Starter enterprise policy set created from the 2026-04-22 audit recommendations and the governance handoff package.
 
@@ -42,12 +42,9 @@ All 14 policies below are signed off by the maintainer as Owner & Maintainer. Ap
 - [Security Roadmap](../security-roadmap.md)
 - [Security Assessment Summary](../security-assessment-summary.md)
 
-## Operational templates in use
+## Planned operational templates
 
-- [Incident Record Template](../templates/incident-record-template.md)
-- [Tabletop Exercise Template](../templates/tabletop-exercise-template.md)
-- [DR Test Record Template](../templates/dr-test-record-template.md)
-- [Quarterly Access Review Template](../templates/quarterly-access-review-template.md)
+Incident records, tabletop exercises, disaster-recovery tests, and quarterly access reviews currently use operator-managed records. Repository templates are planned and are not yet published.
 
 ## Change Log
 

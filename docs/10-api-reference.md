@@ -3,7 +3,7 @@
 **Document ID:** CLAWNEX-API-001  
 **Version:** 2.0  
 **Classification:** Confidential  
-**Last Updated:** 2026-09-12  
+**Last Updated:** 2026-09-23
 **Status:** Living Document  
 
 ---
@@ -15,7 +15,7 @@
 **Content-Type:** `application/json` for all POST/PUT/PATCH requests  
 **Response Format:** JSON (unless noted, e.g., `audio/mpeg` for voice, `application/gzip` for migrate, `text/event-stream` for SSE)  
 **Route surface:** the internal `/api/*` surface + the public `/api/v1/*` surface — counts drift with each release; see `src/app/api/**/route.ts` for the live figure (v0.6.x snapshot: 103 internal + 7 public-v1)  
-**OpenAPI:** A formal OpenAPI 3.1 specification is planned for v0.7.0 and will live at `/api/openapi.json`. Until then, this document is the authoritative contract.
+**OpenAPI:** A formal OpenAPI 3.1 specification is planned but is not shipped. Until then, this document is the authoritative contract.
 
 This document describes the **internal** API (`/api/*`) used by the dashboard UI and MCP server. The **public** API (`/api/v1/*`) — for SIEM, CI/CD, and third-party integrations — is documented in CLAWNEX-INT-001 (docs/19). Both surfaces share the same underlying services.
 

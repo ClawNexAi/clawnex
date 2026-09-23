@@ -2,7 +2,7 @@
 
 **Document:** 17-troubleshooting-guide
 **Version:** 0.14.5
-**Last Updated:** 2026-09-12
+**Last Updated:** 2026-09-23
 **Product Version:** v0.15.10-alpha development line
 **Classification:** Operations Reference
 
@@ -210,43 +210,19 @@ cat ~/sentinel/.env | grep OPENCLAW
 # Edit .env and set OPENCLAW_HOME to the correct path
 ```
 
-### Cause D: OpenClaw routing wire conflict (v0.9.3+)
+### Cause D: OpenClaw routing conflict
 
-**Symptoms:** Configuration → OpenClaw Routing card shows **OPERATOR-OWNED**
-badge instead of **WIRED**. The **Wire LiteLLM** button is replaced
-with **Force Wire (overwrite)**. The Welcome Wizard step 5 says wire
-failed with detail "models.providers.litellm already exists but is not
-managed by ClawNex".
+**Symptoms:** **Review connection changes** reports a conflict, or apply/restore preserves one or more routes instead of changing them.
 
-**Diagnosis:** A `models.providers.litellm` entry exists in
-`~/.openclaw/openclaw.json` but ClawNex doesn't have a sidecar
-(`~/.clawnex-routing-managed.json`) recording that it wrote it. This is
-either an operator-managed entry from a previous manual edit, or a
-stale ClawNex wire from before the sidecar was tracked.
+**Diagnosis:** The current OpenClaw provider configuration no longer matches the fingerprint ClawNex reviewed or last wrote. This usually means another operator or process changed the same provider after the plan was prepared.
 
-**Fix:**
-```bash
-# Inspect what's there
-jq '.models.providers.litellm' ~/.openclaw/openclaw.json
-ls -la ~/.clawnex-routing-managed.json
+**Fix:** Refresh the OpenClaw routing panel, review the current provider and affected models, then prepare a new plan. Keep the external edit when it is intentional. ClawNex preserves conflicting fields instead of overwriting them silently.
 
-# Option A: keep operator-owned. Leave the entry as-is; ClawNex won't touch it.
-#          The dashboard simply reports OPERATOR-OWNED and skips wire.
-# Option B: let ClawNex adopt ownership. Click Force Wire (overwrite) in
-#          the Configuration card OR POST {"action":"wire","force":true}
-#          to /api/openclaw/routing. This overwrites the existing entry
-#          with ClawNex's canonical values and starts tracking via the
-#          sidecar.
-# Option C: remove manually, then click Wire LiteLLM normally.
-jq 'del(.models.providers.litellm)' ~/.openclaw/openclaw.json > /tmp/oc.json && mv /tmp/oc.json ~/.openclaw/openclaw.json
-```
+### Cause E: Gateway restart failed after routing
 
-### Cause E: Gateway restart failed after wire
+**Symptoms:** The route was applied, but the OpenClaw instance did not reload it or **Verify connection** sees no fresh matching traffic.
 
-**Symptoms:** Wire succeeded (sidecar present, JSON has the entry) but
-the **Restart Gateway** button reports `status: "exec-failed"` or
-`status: "unsupported"`. Result panel shows the supervisor name and
-the manual fallback command.
+**Fix:** Restart the selected OpenClaw instance with its normal supervisor, start a new session, and send a new model request. Verification counts only matching traffic created after the latest routing operation.
 
 **Diagnosis:** The auto-restart engine
 (`src/lib/services/openclaw-gateway-control.ts`) detects supervisor by:

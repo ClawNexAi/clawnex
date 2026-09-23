@@ -3,7 +3,7 @@
 Document ID: CLAWNEX-GOV-INDEX
 Version: 1.5
 Date Created: 2026-04-22
-Last Updated: 2026-06-30
+Last Updated: 2026-09-23
 Owner: Project owner
 Purpose: Single entry point for all ClawNex governance, policy, register, template, and readiness artifacts.
 
@@ -32,12 +32,9 @@ See [policies/README.md](policies/README.md) for the full index with status.
 - [Security Roadmap](security-roadmap.md) — near-term security improvements and assurance work
 - [Vendor Inventory Register](registers/vendor-inventory-register.md) — grouped by dependency category, live-reconciled against codebase
 
-## Operational templates
+## Planned operational templates
 
-- [Incident Record Template](templates/incident-record-template.md)
-- [Tabletop Exercise Template](templates/tabletop-exercise-template.md)
-- [DR Test Record Template](templates/dr-test-record-template.md)
-- [Quarterly Access Review Template](templates/quarterly-access-review-template.md)
+Incident records, tabletop exercises, disaster-recovery tests, and quarterly access reviews currently use operator-managed records. Repository templates are planned and are not yet published.
 
 ## Governance summaries and mappings
 

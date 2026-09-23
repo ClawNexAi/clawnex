@@ -1,6 +1,6 @@
 # ClawNex Policy Evidence Checklist
 
-**Last updated:** 2026-06-17
+**Last updated:** 2026-09-23
 **Status:** Public summary
 
 ## Purpose
@@ -17,7 +17,7 @@ This checklist maps ClawNex policy commitments to public evidence artifacts. It 
 
 | Policy area | Public evidence | Status |
 |---|---|---|
-| Information security posture | [Security validation summary](security-validation-summary.md), [security architecture](11-security-architecture.md), [SECURITY.md](../SECURITY.md) | Implemented |
+| Information security posture | [Security validation summary](security-validation-summary.md), [infrastructure architecture](25-public-infrastructure-architecture.md), [SECURITY.md](../SECURITY.md) | Implemented |
 | Access control | [Access control policy](policies/02-access-control-policy.md), RBAC documentation in [advanced user manual](07-advanced-user-manual.md), installer mode guidance in [deployment guide](12-deployment-guide.md) | Implemented |
 | Incident response | [Incident response policy](policies/03-incident-response-policy.md), [responsible disclosure policy](../SECURITY.md), [security roadmap](security-roadmap.md) | Implemented |
 | Change management | [Change management policy](policies/04-change-management-policy.md), [release notes](13-release-notes.md), [CHANGELOG](../CHANGELOG.md) | Implemented |
@@ -27,7 +27,7 @@ This checklist maps ClawNex policy commitments to public evidence artifacts. It 
 | Data classification | [Data classification policy](policies/08-data-classification-policy.md), [data dictionary](14-data-dictionary.md) | Implemented |
 | Data retention and disposal | [Data retention policy](policies/09-data-retention-and-disposal-policy.md), configuration docs, deployment docs | Partial |
 | Business continuity and disaster recovery | [BCP / DR policy](policies/10-bcp-dr-policy.md), backup guidance in deployment docs | Partial |
-| Cryptographic controls | [Cryptographic controls policy](policies/11-cryptographic-controls-policy.md), [security architecture](11-security-architecture.md) | Implemented |
+| Cryptographic controls | [Cryptographic controls policy](policies/11-cryptographic-controls-policy.md), [infrastructure architecture](25-public-infrastructure-architecture.md) | Implemented |
 | Asset management | [Asset management policy](policies/12-asset-management-policy.md), dependency manifests, installer docs | Partial |
 | Vulnerability management | [Vulnerability management policy](policies/13-vulnerability-management-policy.md), [security validation summary](security-validation-summary.md), [security roadmap](security-roadmap.md) | Implemented |
 | Acceptable use | [Acceptable use policy](policies/14-acceptable-use-policy.md), [CONTRIBUTING](../CONTRIBUTING.md), [code of conduct](../CODE_OF_CONDUCT.md) | Implemented |

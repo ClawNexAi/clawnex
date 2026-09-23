@@ -14,7 +14,7 @@
   <a href="https://github.com/ClawNexAi/clawnex/tree/dev"><img src="https://img.shields.io/badge/dev-0.15.10--alpha-orange" alt="Development version 0.15.10-alpha"></a>
 </p>
 
-ClawNex is a local-first security control plane for AI agents. It connects to OpenClaw, Hermes, and a global OpenCode configuration on the same host, routes supported model traffic through a pinned LiteLLM proxy, applies Prompt Shield policy, and gives operators one place to investigate alerts, fleet posture, trust boundaries, cost, and audit evidence.
+ClawNex is a local-first security control plane for AI agents. It connects to OpenClaw, Hermes, AnythingLLM, OpenCode, Pi, Codex, and Claude Code on the same host, routes supported model traffic through a pinned LiteLLM proxy, applies Prompt Shield policy, and gives operators one place to investigate alerts, fleet posture, trust boundaries, cost, and audit evidence.
 
 **Development version:** [`v0.15.10-alpha`](https://github.com/ClawNexAi/clawnex/tree/dev) · **Latest published release:** [`v0.15.9-alpha`](https://github.com/ClawNexAi/clawnex/releases/tag/v0.15.9-alpha) · Public alpha · macOS and Linux
 
@@ -22,7 +22,7 @@ ClawNex is a local-first security control plane for AI agents. It connects to Op
 
 ## Getting Started
 
-ClawNex is intended for a host that runs OpenClaw, Hermes, OpenCode, or a combination of them. The interactive installer checks dependencies, recommends a deployment mode, asks for confirmation, configures authentication and an optional model provider, builds the application, and starts the appropriate service layer.
+ClawNex is intended for a host that runs one or more supported agent clients. The interactive installer checks dependencies, recommends a deployment mode, asks for confirmation, configures authentication and an optional model provider, builds the application, and starts the appropriate service layer.
 
 ### Requirements
 
@@ -30,7 +30,7 @@ ClawNex is intended for a host that runs OpenClaw, Hermes, OpenCode, or a combin
 - Node.js 22 recommended; Node.js 18 is the enforced minimum
 - Python 3.10 or newer; Python 3.12 is the validated target
 - Git
-- An existing OpenClaw, Hermes, and/or OpenCode installation for agent telemetry and routing
+- At least one supported local client when you want connector telemetry or managed routing
 
 ```bash
 git clone https://github.com/ClawNexAi/clawnex.git clawnex
@@ -68,7 +68,7 @@ The uninstaller confirms destructive actions, offers database archival and docum
 | **Mission Control** | Fleet posture, evidence confidence, policy coverage, cost risk, alert aging, and a prioritized action queue. |
 | **Investigation Workbench** | Overview, payload, detection analysis, related activity, and decision views with evidence links and audited operator actions. |
 | **Prompt Shield** | 163 built-in detections plus enabled operator-authored policies for injection, jailbreak, exfiltration, credential exposure, steganography, unsafe commands, and sensitive paths. |
-| **OpenClaw, Hermes, and OpenCode** | Local connector health, sessions, agents, provider inventory, routing state, and selective routing for supported API-based providers. OpenCode support targets its global configuration. |
+| **Fleet Connectors** | Local connector health and managed routing for OpenClaw, Hermes, AnythingLLM, OpenCode, Pi, Codex, and Claude Code. Coding-agent support targets global configuration; project and session overrides remain outside coverage. |
 | **Traffic Monitor** | Source, model, provider, verdict, score, latency, tokens, and request status for observed model traffic. |
 | **Correlations** | Higher-order findings across Shield events, alerts, traffic, audit activity, cost, trust, and collector health. |
 | **Trust and Blast Radius** | Reachable surfaces, agent capabilities, dangerous tool combinations, confidence labels, findings, and remediation guidance. |
@@ -82,7 +82,7 @@ The sidebar keeps up to **five Favorites** and the last **three Recent** panels 
 
 ClawNex protects traffic only when that traffic passes through a supported inspection path:
 
-1. OpenClaw, a writable Hermes custom provider, or a supported provider in the global OpenCode configuration sends an API-based model request through the local LiteLLM proxy.
+1. A supported fleet connector sends an API-based model request through the local LiteLLM proxy after an operator reviews and applies its route.
 2. ClawNex scans the request and response using built-in Shield detections and enabled policy rules.
 3. The resulting verdict is `ALLOW`, `REVIEW`, or `BLOCK`.
 4. Traffic metadata, detections, alerts, and audit events are stored in the local ClawNex database for operator review.
@@ -93,7 +93,7 @@ ClawNex currently supports same-host operation. A supported remote collector or 
 
 ## Current Development Version
 
-`v0.15.10-alpha` adds OpenCode as a global coding-agent connector and moves OpenClaw, Hermes, and OpenCode onto one review/apply/restore routing workflow. The development line also adds signed routing attribution, provider/model inventory, drift reconciliation, safe recovery sidecars, and verification evidence for routed or blocked requests.
+`v0.15.10-alpha` expands Fleet Connectors to OpenClaw, Hermes, AnythingLLM, OpenCode, Pi, Codex, and Claude Code. Supported routes use an operator-reviewed apply/verify/restore workflow with model-readiness checks, signed attribution where the client supports it, drift reconciliation, safe recovery records, and fresh traffic evidence.
 
 See the [`dev` branch](https://github.com/ClawNexAi/clawnex/tree/dev) and [changelog](CHANGELOG.md) for development detail. The latest published release remains [`v0.15.9-alpha`](https://github.com/ClawNexAi/clawnex/releases/tag/v0.15.9-alpha).
 
@@ -102,7 +102,7 @@ See the [`dev` branch](https://github.com/ClawNexAi/clawnex/tree/dev) and [chang
 A standard installation contains four core runtime components:
 
 ```text
-OpenClaw / Hermes / OpenCode
+Supported local fleet connectors
         |
         | supported API traffic
         v

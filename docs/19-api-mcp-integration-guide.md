@@ -4,7 +4,7 @@
 **Document ID:** CLAWNEX-INT-001
 **Version:** 1.7
 **Classification:** For Distribution -- ClawNex maintainers
-**Last Updated:** 2026-09-12
+**Last Updated:** 2026-09-23
 **Product Version:** v0.15.10-alpha development line
 
 ---
@@ -1420,7 +1420,7 @@ Alert threshold: 80%
 Budget updated. Daily limit: $75, Alert threshold: 90%
 ```
 
-**Roadmap (NOT shipped):** per-agent / per-model / per-team scope, weekly / monthly periods, and auto-block-at-100%. Tracked in `docs/20-product-roadmap.md` Token Cost FinOps v1.1 backlog. Treat any operator-facing copy that promises these as forward-looking.
+**Roadmap (NOT shipped):** per-agent / per-model / per-team scope, weekly / monthly periods, and auto-block-at-100%. Track planned work in [GitHub Issues](https://github.com/ClawNexAi/clawnex/issues). Treat any operator-facing copy that promises these as forward-looking.
 
 ### Available Resources
 

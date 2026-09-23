@@ -1,7 +1,7 @@
 # ClawNex — Adding a New Module
 
 **Audience:** OSS contributors adding net-new functionality to ClawNex.
-**Companion docs:** [`CONTRIBUTING.md`](CONTRIBUTING.md) (workflow / DCO / coding style), [`docs/02-high-level-architecture.md`](docs/02-high-level-architecture.md) (HLD), [`docs/18-developer-manual.md`](docs/18-developer-manual.md) (engineering reference), [`docs/14-data-dictionary.md`](docs/14-data-dictionary.md) (schema authoritative source).
+**Companion docs:** [`CONTRIBUTING.md`](CONTRIBUTING.md) (workflow / DCO / coding style), [`docs/26-public-high-level-architecture.md`](docs/26-public-high-level-architecture.md) (HLD), [`docs/27-public-low-level-architecture.md`](docs/27-public-low-level-architecture.md) (engineering reference), [`docs/14-data-dictionary.md`](docs/14-data-dictionary.md) (schema authoritative source).
 
 This document is the "how do I add a new X?" guide. Six common X's are covered: **a new dashboard panel**, **a new API route**, **a new shield rule**, **a new database table**, **a new MCP tool**, and **a new RBAC permission**.
 
@@ -118,7 +118,7 @@ npm run dev -- --webpack                   # Boot local dev server
 
 ### 1.5 Doc updates
 
-- `docs/02-high-level-architecture.md` §7.1 Tab Structure — add your panel's row to the appropriate group.
+- `docs/26-public-high-level-architecture.md` — keep the public dashboard inventory aligned when adding a user-visible panel.
 - `docs/23-help-surfaces-index.md` — bump the panel count or category if applicable.
 - `docs/06-basic-user-manual.md` — add a one-line operator-facing description.
 
@@ -407,8 +407,8 @@ curl -X POST http://127.0.0.1:5050/mcp/list_widgets \
 
 ### 5.4 Doc updates
 
-- `docs/18-developer-manual.md` — MCP Tools table, bump the count (currently 10).
-- `docs/02-high-level-architecture.md` §7.2 MCP Tools.
+- `docs/27-public-low-level-architecture.md` — update the MCP integration description when behavior changes.
+- `docs/28-public-api-mcp-integration-guide.md` — update the public MCP tool reference.
 - `docs/06-basic-user-manual.md` — operator-facing description if the tool is something operators would prompt Claude Code about.
 
 ---
@@ -525,11 +525,11 @@ scripts/
   verify-*.sh / verify-*.ts       # Regression guards — run before opening a PR
 docs/
   01-infrastructure-design.md     # LLD — runtime, services, schema, network
-  02-high-level-architecture.md   # HLD — components, data flows, security, design decisions
+  26-public-high-level-architecture.md # HLD — components, data flows, security, design decisions
   04-product-requirements.md      # PRD — REQ list
   10-api-reference.md             # API contract
   14-data-dictionary.md           # Schema authoritative source
-  18-developer-manual.md          # Engineering reference
+  27-public-low-level-architecture.md  # Engineering reference
   qa/accepted-residuals.md        # AR-001 (CSP style-src-attr) + AR-002 (Pattern-B same-host trust)
   registers/risk-register.md      # Open + closed risks
 ```

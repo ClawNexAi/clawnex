@@ -2,14 +2,14 @@
 
 **Document ID:** CLAWNEX-GOV-001
 **Version:** 1.5
-**Date:** 2026-06-30
+**Date:** 2026-09-23
 **Product Version:** v0.15.10-alpha development line
 **Owner & Maintainer:** Project owner
 **Audience:** Leadership, VC, prospective enterprise pilots, security questionnaires
 
 ## What ClawNex is
 
-ClawNex is an LLM security dashboard and proxy gateway. It routes AI traffic through a LiteLLM-based gateway with a 163-rule pre/post scan pipeline, exposes 26 operator panels with RBAC, an MCP tool surface (10 tools), and a 58-event audit catalog. Every security-relevant action is logged and mirrored to stdout for external ingest.
+ClawNex is an LLM security dashboard and proxy gateway. It routes AI traffic through a LiteLLM-based gateway with a 163-rule pre/post scan pipeline, exposes an RBAC-protected operator dashboard and MCP tool surface, and maintains a structured audit catalog. Every security-relevant action is logged and mirrored to stdout for external ingest.
 
 Public repository: `https://github.com/ClawNexAi/clawnex`.
 
@@ -64,8 +64,8 @@ These numbers come from the 2026-04-22 security audit's control-mapping section.
 
 - **Regression coverage and docs accuracy** — keep installer paths, dashboard panels, and operator docs aligned with the public release.
 - **Named alternate approver + secret-escrow plan (R-019)** — reduce single-maintainer operational risk.
-- **First tabletop exercise** using `docs/templates/tabletop-exercise-template.md`.
-- **First DR / restore exercise** using `docs/templates/dr-test-record-template.md` (closes R-022).
+- **First tabletop exercise** using an operator-managed record while the repository template is prepared.
+- **First DR / restore exercise** using an operator-managed record while the repository template is prepared (closes R-022).
 - **External penetration test** scoping and vendor selection (R-017).
 - **Provider DPA review** for external model, email, and media services (R-018).
 - **KMS-backed secret storage plan** to replace single-file `.env.local` storage for regulated deployments (R-021).

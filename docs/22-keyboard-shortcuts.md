@@ -3,7 +3,7 @@
 **Document:** 22-keyboard-shortcuts
 **Document ID:** CLAWNEX-A11Y-001
 **Version:** 1.5
-**Last Updated:** 2026-09-12
+**Last Updated:** 2026-09-23
 **Product Version:** v0.15.10-alpha development line
 **Classification:** For Distribution
 **Status:** Living Document
@@ -261,7 +261,7 @@ Every panel follows the convention: **panel header** → **primary action button
 | Chat Panel | Clear | Message input → Send |
 | Guided Tour | Prev, Next, Finish | Tour content → controls |
 
-**Verification methodology:** Focus order is verified with the Accessibility Insights extension (`Tab Stops` mode) on every release. Deviations are filed as accessibility bugs against `docs/20-product-roadmap.md` → A11y section.
+**Verification methodology:** Focus order is verified with the Accessibility Insights extension (`Tab Stops` mode) on every release. Deviations are filed as accessibility issues in [GitHub Issues](https://github.com/ClawNexAi/clawnex/issues).
 
 ---
 
@@ -274,7 +274,7 @@ Planned for a later release (no committed version yet):
 - **Quick filters** — `/` to focus the nearest search box, `f` to toggle filter drawer
 - **Alert triage hotkeys** — `a` to acknowledge, `r` to resolve, `j`/`k` to navigate the card list
 
-If you have a strong opinion on which shortcuts to prioritize, drop it in a GitHub issue (once the public repo is up) or in `docs/20-product-roadmap.md` → v0.7.x section.
+If you have a strong opinion on which shortcuts to prioritize, open a [GitHub issue](https://github.com/ClawNexAi/clawnex/issues).
 
 ---
 

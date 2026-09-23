@@ -1,6 +1,6 @@
 # ClawNex Security Assessment Summary
 
-**Last updated:** 2026-06-17
+**Last updated:** 2026-09-23
 **Status:** Public summary
 
 ## Purpose
@@ -49,6 +49,6 @@ Public readers should start with:
 
 - [Security validation summary](security-validation-summary.md)
 - [Security roadmap](security-roadmap.md)
-- [Security architecture](11-security-architecture.md)
+- [Infrastructure architecture](25-public-infrastructure-architecture.md)
 - [Policy evidence checklist](policy-evidence-checklist.md)
 - [Responsible disclosure policy](../SECURITY.md)

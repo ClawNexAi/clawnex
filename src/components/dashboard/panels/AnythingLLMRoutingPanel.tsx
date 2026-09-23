@@ -104,6 +104,7 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
   const [plan, setPlan] = useState<AnythingPlan | null>(null);
   const [testTarget, setTestTarget] = useState<Data['models'][number] | null>(null);
   const [readiness, setReadiness] = useState<Record<string, ReadinessMessage>>({});
+  const [testingAlias, setTestingAlias] = useState('');
   const [restartBusy, setRestartBusy] = useState(false);
   const reviewOrigin = useRef<HTMLElement | null>(null);
   const run = async (task: () => Promise<void>) => { setBusy(true); setMessage(''); try { await task(); } catch (e) { setMessage(e instanceof Error ? e.message : 'Operation failed.'); } finally { setBusy(false); } };
@@ -113,7 +114,7 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
     return run(async () => { const result: AnythingPlan = await command({ action: 'prepare', id: instance.id, operation }); await refresh(); setPlan(result); });
   };
   const runModelTest = async (target: Data['models'][number]) => {
-    setBusy(true); setMessage('');
+    setBusy(true); setTestingAlias(target.alias); setMessage('');
     try {
       const response = await fetch(`/api/config/providers/${encodeURIComponent(target.providerId)}/test`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -137,15 +138,16 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
       await refresh();
     } catch {
       setReadiness(previous => ({ ...previous, [target.alias]: { tone: 'error', title: 'Test result unavailable', detail: 'ClawNex could not confirm the model test.' } }));
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setTestingAlias(''); }
   };
-  const restartLiteLLM = async () => {
+  const restartLiteLLM = async (alias: string) => {
     setRestartBusy(true);
     try {
       const response = await fetch('/api/system/litellm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restart' }) });
       const result = await response.json();
       if (!response.ok || result.ok !== true) throw new Error(result.error || 'Restart failed.');
-      setMessage('LiteLLM restart requested. Wait for it to start, then test the model again.');
+      setReadiness(previous => ({ ...previous, [alias]: { tone: 'warning', title: 'Test required', detail: 'LiteLLM restarted. Test the model again when the proxy is ready.' } }));
+      setMessage('LiteLLM restart requested. Test the model again when the proxy is ready.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'LiteLLM restart could not be confirmed.'); }
     finally { setRestartBusy(false); }
   };
@@ -153,21 +155,31 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
     const alias = instance.choices[key]?.model || '';
     const selectedModel = data.models.find(model => model.alias === alias);
     const result = alias ? readiness[alias] : undefined;
-    const tone = result?.tone === 'success' ? C.green : result?.tone === 'error' ? C.danger : C.warn;
-    return <div style={{ width: '100%', maxWidth: 500 }}>
-      <GlobalFilterSelect ariaLabel={`ClawNex model for ${key}`} variant="form" minWidth={0} disabled={busy} style={{ width: '100%' }} value={alias}
+    const verified = !!selectedModel && (selectedModel.ready || result?.tone === 'success');
+    const reloadRequired = result?.title === 'Request not sent' && result.detail.startsWith('LiteLLM');
+    const failed = result?.tone === 'error';
+    const testing = testingAlias === alias;
+    const statusColor = verified ? C.green : failed ? C.danger : C.warn;
+    const statusLabel = verified ? 'Model verified' : testing ? 'Testing…' : reloadRequired ? (restartBusy ? 'Reloading…' : 'Reload proxy') : failed ? 'Retry test' : 'Test model';
+    const statusDetail = verified
+      ? 'This model is accessible through ClawNex. Verification remains valid for 30 minutes unless the configuration changes.'
+      : reloadRequired
+        ? 'LiteLLM must load the current model configuration before the required access test can run.'
+        : failed
+          ? `${result.title}: ${result.detail}`
+          : 'Required before routing. This test confirms that the selected model is accessible through the ClawNex proxy.';
+    const statusDisabled = busy || verified || testing || (reloadRequired && restartBusy);
+    const runStatusAction = (event: React.MouseEvent<HTMLButtonElement>) => {
+      if (!selectedModel || verified || testing) return;
+      if (reloadRequired) { void restartLiteLLM(selectedModel.alias); return; }
+      reviewOrigin.current = event.currentTarget;
+      setTestTarget(selectedModel);
+    };
+    return <div style={{ width: '100%', maxWidth: 680, display: 'flex', alignItems: 'stretch', gap: 8, flexWrap: 'wrap' }}>
+      <div style={{ flex: '1 1 320px', minWidth: 0 }}><GlobalFilterSelect ariaLabel={`ClawNex model for ${key}`} variant="form" minWidth={0} disabled={busy} style={{ width: '100%' }} value={alias}
         onChange={value => void select(key, instance.choices[key]?.selected || false, value)}
-        options={[{ value: '', label: 'Choose a configured ClawNex model' }, ...data.models.map(m => ({ value: m.alias, label: `${m.name} · ${m.ready ? '✓ Tested' : '⚠ Test required'}` }))]} />
-      {selectedModel && !selectedModel.ready && <div style={{ marginTop: 8, padding: '8px 10px', border: `1px solid ${tone}55`, borderRadius: 6, background: `${tone}0d` }}>
-        <div role={result?.tone === 'error' ? 'alert' : 'status'} style={{ color: tone, fontSize: 11, marginBottom: 6 }}>
-          <strong>{result ? `${result.tone === 'error' ? '✕' : '⚠'} ${result.title}` : '⚠ Test required'}</strong>{result ? ` — ${result.detail}` : ' — Test this exact model through ClawNex before applying the route.'}
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button type="button" disabled={busy} style={actionButton(busy)} onClick={event => { reviewOrigin.current = event.currentTarget; setTestTarget(selectedModel); }}>Test through ClawNex</button>
-          {result?.title === 'Request not sent' && result.detail.startsWith('LiteLLM') && <button type="button" disabled={restartBusy} style={actionButton(restartBusy, C.warn)} onClick={() => void restartLiteLLM()}>{restartBusy ? 'Restarting…' : 'Restart LiteLLM proxy'}</button>}
-        </div>
-      </div>}
-      {selectedModel?.ready && <div role="status" style={{ marginTop: 6, color: C.green, fontSize: 11 }}>✓ Tested through ClawNex. Readiness remains valid for 30 minutes unless configuration changes.</div>}
+        options={[{ value: '', label: 'Choose a configured ClawNex model' }, ...data.models.map(m => ({ value: m.alias, label: m.name }))]} /></div>
+      {selectedModel && <Tooltip placement="top" variant="detail" content={<span>{statusDetail}</span>}><button type="button" aria-label={`${statusLabel}: ${statusDetail}`} disabled={statusDisabled} style={{ ...actionButton(statusDisabled, statusColor), flex: '0 0 auto', minWidth: 126, fontWeight: 700, opacity: verified ? 1 : undefined, cursor: verified ? 'default' : undefined }} onClick={runStatusAction}>{verified ? '✓ ' : failed ? '✕ ' : ''}{statusLabel}</button></Tooltip>}
     </div>;
   };
   const owned = instance ? Object.keys(instance.ownership).length : 0;
@@ -226,7 +238,7 @@ export function AnythingLLMRoutingPanel({ focusedCard }: { focusedCard?: string 
         if (approved.prerequisites.length) { setMessage(approved.prerequisites.join(' ')); return; }
         void run(async () => { const result = await command({ action: 'execute', planId: approved.id, approved: true }); await refresh(); setMessage(result.detail); });
       }} />
-    <ConfirmDialog open={!!testTarget} title="Test connection through ClawNex" confirmLabel="Approve test" returnFocusTo={reviewOrigin.current}
+    <ConfirmDialog open={!!testTarget} title="Test model" confirmLabel="Run test" returnFocusTo={reviewOrigin.current}
       body={<p>Send the harmless prompt “Reply with OK.” through ClawNex to <b>{testTarget?.alias}</b> using <b>{testTarget?.name.split(' / ')[0]}</b>? This makes one inference request and may incur provider charges. It does not change AnythingLLM routing.</p>}
       onCancel={() => setTestTarget(null)} onConfirm={() => { const approved = testTarget; setTestTarget(null); if (approved) void runModelTest(approved); }} />
   </CollapsibleCard>;

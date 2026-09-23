@@ -80,7 +80,7 @@ const PANEL_GUIDE: Array<{
   {
     group: "SYSTEM",
     panels: [
-      { id: "configuration", label: "Configuration", oneLiner: "Everything-hub — settings grouped into 6 collapsible categories (AI & Models, Fleet & Routing, Shield & Detection, Access Control, Integrations, System). Fleet Connectors and the shared routing workflow cover OpenClaw, Hermes, and global OpenCode configuration. Local password remains the break-glass identifier.", doc: "07-advanced-user-manual.md" },
+      { id: "configuration", label: "Configuration", oneLiner: "Settings grouped into 6 collapsible categories. Fleet Connectors covers OpenClaw, Hermes, AnythingLLM, OpenCode, Pi, Codex, and Claude Code; supported routes use a review/apply/verify/restore workflow.", doc: "07-advanced-user-manual.md" },
       { id: "help", label: "Help", oneLiner: "This panel. Onboarding tour, keyboard shortcuts, panel reference, tooltip system explainer, and inline documentation viewer.", doc: "06-basic-user-manual.md" },
       { id: "about", label: "Credits & Info", oneLiner: "Build version + channel, credits, attribution, and the About-tab dedications curated by the operator. Read-only.", doc: "06-basic-user-manual.md" },
     ],
@@ -257,8 +257,8 @@ export function HelpPanel({ onNavigate }: { onNavigate: (tab: TabId) => void }) 
               mismatch — fix is to compute, not type. */}
           <Badge label={`${NAV.length} PANELS`} color={C.brand} />
           <Badge label="163 SHIELD DETECTIONS" color={C.danger} />
-          <Badge label={`${NAV.length}+ TOOLTIPS`} color={C.cyan} />
-          <Badge label="31 DOCS" color={C.info} />
+          <Badge label="CONTEXTUAL TOOLTIPS" color={C.cyan} />
+          <Badge label="11 IN-APP DOCS" color={C.info} />
         </div>
       </Card>
 
@@ -302,7 +302,7 @@ export function HelpPanel({ onNavigate }: { onNavigate: (tab: TabId) => void }) 
             <li>In AnythingLLM, open <strong style={{ color: C.tx }}>Settings → Developer API</strong>, create a key, and copy it.</li>
             <li>In ClawNex, open <strong style={{ color: C.tx }}>Configuration → Fleet &amp; Routing → Fleet Connectors → AnythingLLM</strong>.</li>
             <li>Enter a name, the AnythingLLM address on this host (for example <code style={{ color: C.cyan }}>http://127.0.0.1:19322</code>), and the Developer API key.</li>
-            <li>Select the default chat model, run its inline <strong style={{ color: C.tx }}>Test through ClawNex</strong> action, then review and apply the route.</li>
+            <li>Select the default chat model and choose the amber <strong style={{ color: C.tx }}>Test model</strong> action. When it turns green and reads <strong style={{ color: C.tx }}>Model verified</strong>, review and apply the route.</li>
             <li>Send a new AnythingLLM chat, verify the managed configuration, and confirm the request in Traffic Monitor.</li>
           </ol>
           <p style={{ margin: 0, fontSize: 12, color: C.txT }}>
@@ -401,9 +401,9 @@ export function HelpPanel({ onNavigate }: { onNavigate: (tab: TabId) => void }) 
             {[
               { doc: "06-basic-user-manual.md", desc: "Operator operations guide" },
               { doc: "07-advanced-user-manual.md", desc: "Shield tuning, RBAC, break-glass" },
-              { doc: "17-troubleshooting-guide.md", desc: "12 common issues + fixes" },
-              { doc: "10-api-reference.md", desc: "71 internal + 7 public endpoints" },
-              { doc: "14-data-dictionary.md", desc: "Database schema, 28 tables" },
+              { doc: "17-troubleshooting-guide.md", desc: "Common issues and fixes" },
+              { doc: "10-api-reference.md", desc: "Internal and public API reference" },
+              { doc: "14-data-dictionary.md", desc: "Database schema and stored fields" },
               { doc: "19-api-mcp-integration-guide.md", desc: "External integration guide" },
               { doc: "13-release-notes.md", desc: "What changed in each version" },
               { doc: "CHANGELOG.md", desc: "Version-by-version changes" },

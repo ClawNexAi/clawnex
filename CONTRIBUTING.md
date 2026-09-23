@@ -2,7 +2,7 @@
 
 **Document Version:** 1.5
 **Product Version:** v0.11.2-alpha
-**Last Updated:** 2026-05-05
+**Last Updated:** 2026-09-23
 
 Thanks for your interest in contributing to ClawNex. This document explains how the project is organized, how to propose changes, and the legal sign-off required for every commit.
 
@@ -36,7 +36,7 @@ That's it. The rest of this document covers the "why" and the edge cases.
 If this is your first contribution to ClawNex, follow this path:
 
 1. **Read `README.md`** — especially the Enterprise Readiness and Deployment Options sections so you understand what is shipped and what is planned.
-2. **Read `docs/02-high-level-architecture.md`** — the 10-minute system overview. Do not skip this; it saves hours of rediscovery.
+2. **Read `docs/26-public-high-level-architecture.md`** — the 10-minute system overview. Do not skip this; it saves hours of rediscovery.
 3. **Pick a labeled "good first issue"** from the GitHub tracker when the repo is public. Look for issues tagged `good-first-issue` or `documentation`.
 4. **Introduce yourself on the PR description.** Mention what you plan to change and why. Reviewers will respond faster when they understand the intent.
 5. **Keep the first PR small.** Aim for under 200 changed lines. A crisp first PR builds trust; a sprawling first PR burns reviewer time.
@@ -230,12 +230,12 @@ ClawNex has an enterprise documentation suite — start here:
 
 | Doc | When to read it |
 |---|---|
-| `docs/02-high-level-architecture.md` | First — 10-minute system overview |
-| `docs/18-developer-manual.md` | Deep dive — every subsystem, every decision, every file |
+| `docs/26-public-high-level-architecture.md` | First — 10-minute system overview |
+| `docs/27-public-low-level-architecture.md` | Engineering reference for runtime components and data flows |
 | `docs/19-api-mcp-integration-guide.md` | Before touching the public API or MCP server |
-| `docs/11-security-architecture.md` | Before touching the shield engine or break-glass |
+| `docs/25-public-infrastructure-architecture.md` | Before changing infrastructure or security boundaries |
 | `docs/23-help-surfaces-index.md` | Before adding help content (tooltips, PANEL_HELP, chat, wizard, troubleshooting, docs) |
-| `docs/20-product-roadmap.md` | To see what's planned and pick a direction |
+| [GitHub Issues](https://github.com/ClawNexAi/clawnex/issues) | To see planned work and pick a direction |
 | `docs/24-trust-boundary-audit.md` | Before contributing to the Trust Boundary Audit engine |
 
 ---
