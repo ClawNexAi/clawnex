@@ -23,7 +23,8 @@ interface OpenCodeProviderRecord extends RoutingIdentityOwnership {
   originalBaseUrl: string;
   routedBaseUrl: string;
   routedAt: string;
-  models: Array<{ key: string; hadId: boolean; originalId?: string; routedId: string }>;
+  schema?: 'singular' | 'plural';
+  models: Array<{ key: string; idKey?: 'id' | 'modelID'; hadId: boolean; originalId?: string; routedId: string }>;
   hadApiKey: boolean;
   encryptedOriginalApiKey?: EncryptedRoutingCredential;
   routedApiKeyHash: string;
@@ -61,8 +62,6 @@ function readSidecar(): OpenCodeRoutingSidecar | null {
   }
 }
 
-const ROUTED_API_KEY = '{env:LITELLM_MASTER_KEY}';
-
 function credentialOwner(record: Pick<OpenCodeProviderRecord, 'providerId' | 'configPath' | 'originalBaseUrl' | 'routedBaseUrl' | 'hadApiKey'>): string {
   return JSON.stringify(['opencode-recovery-v1', record.providerId, record.configPath, record.originalBaseUrl, record.routedBaseUrl, record.hadApiKey]);
 }
@@ -92,6 +91,45 @@ function directRoute(baseUrl: string | null): 'direct' | 'routed' | 'unknown' | 
   }
 }
 
+interface OpenCodeProviderView {
+  providerId: string;
+  provider: Record<string, unknown>;
+  options: Record<string, unknown>;
+  models: Record<string, unknown>;
+  schema: 'singular' | 'plural';
+  idKey: 'id' | 'modelID';
+  packageName: unknown;
+  supportedPackage: boolean;
+}
+
+function openCodeProviderViews(config: Record<string, unknown>): OpenCodeProviderView[] {
+  const views = new Map<string, OpenCodeProviderView>();
+  const add = (container: unknown, schema: OpenCodeProviderView['schema']) => {
+    for (const [providerId, value] of Object.entries(asRecord(container) || {})) {
+      const provider = asRecord(value);
+      if (!provider) continue;
+      const plural = schema === 'plural';
+      const options = asRecord(provider[plural ? 'settings' : 'options']) || {};
+      const packageName = provider[plural ? 'package' : 'npm'];
+      views.set(providerId, {
+        providerId,
+        provider,
+        options,
+        models: asRecord(provider.models) || {},
+        schema,
+        idKey: plural ? 'modelID' : 'id',
+        packageName,
+        supportedPackage: plural
+          ? packageName === '@opencode/ai/providers/openai-compatible'
+          : packageName === '@ai-sdk/openai-compatible',
+      });
+    }
+  };
+  add(config.provider, 'singular');
+  add(config.providers, 'plural');
+  return [...views.values()];
+}
+
 export function discoverOpenCodeItems(): {
   status: ConnectorRoutingSummary['status']; detail: string; sourceId: string; items: DiscoveredRoutingItem[];
 } {
@@ -101,21 +139,16 @@ export function discoverOpenCodeItems(): {
   if (!check.available) return { status: 'error', detail: check.error || 'Global OpenCode configuration is unavailable.', sourceId: 'opencode:global', items: [] };
 
   const config = parseOpenCodeConfig(fs.readFileSync(check.configPath, 'utf8'));
-  const providers = asRecord(config.provider) || {};
   const ownership = new Map((readSidecar()?.providers || []).map(record => [record.providerId, record]));
   const items: DiscoveredRoutingItem[] = [];
-  for (const [providerId, providerValue] of Object.entries(providers)) {
-    const provider = asRecord(providerValue);
-    if (!provider) continue;
-    const options = asRecord(provider.options) || {};
+  for (const view of openCodeProviderViews(config)) {
+    const { providerId, provider, options, models } = view;
     const baseUrl = typeof options.baseURL === 'string' && options.baseURL.trim() ? options.baseURL.trim() : null;
     const route = directRoute(baseUrl);
-    const models = asRecord(provider.models) || {};
-    const supportedPackage = provider.npm === '@ai-sdk/openai-compatible';
     const supportedModels = Object.values(models).every(model => asRecord(model) !== null);
     const supportedCredential = options.apiKey === undefined || typeof options.apiKey === 'string';
-    const capability = supportedPackage && supportedModels && supportedCredential && baseUrl && ['direct', 'routed'].includes(route) ? 'provider-routing' : 'unsupported';
-    const metadata = { configPath: check.configPath, connectorId: connector.id, globalOnly: true, package: provider.npm || null,
+    const capability = view.supportedPackage && supportedModels && supportedCredential && baseUrl && ['direct', 'routed'].includes(route) ? 'provider-routing' : 'unsupported';
+    const metadata = { configPath: check.configPath, connectorId: connector.id, globalOnly: true, package: view.packageName || null, schema: view.schema,
       ...identityMetadata(options.headers, ownership.get(providerId)) };
     items.push({
       connector: 'opencode', sourceId: 'opencode:global', itemType: 'provider', providerId, modelId: '', displayName: typeof provider.name === 'string' ? provider.name : providerId,
@@ -124,7 +157,8 @@ export function discoverOpenCodeItems(): {
     for (const [modelKey, modelValue] of Object.entries(models)) {
       const model = asRecord(modelValue) || {};
       const modelId = modelKey.startsWith(`${providerId}/`) ? modelKey : `${providerId}/${modelKey}`;
-      const configuredModelId = typeof model.id === 'string' && model.id.trim() ? model.id.trim() : modelId;
+      const configuredId = model[view.idKey];
+      const configuredModelId = typeof configuredId === 'string' && configuredId.trim() ? configuredId.trim() : modelId;
       const managedModel = ownership.get(providerId)?.models.find(entry => entry.key === modelKey);
       const proxyModelAlias = route === 'routed' && managedModel
         ? managedModel.routedId
@@ -160,7 +194,7 @@ export function applyOpenCodeDesiredRouting(scope: RoutingApplyScope = {}): Appl
     throw new Error('Agent configuration changed after review. Refresh and approve again.');
   }
   const config = parseOpenCodeConfig(expectedRaw);
-  const providers = asRecord(config.provider) || {};
+  const providers = openCodeProviderViews(config);
   const previousSidecar = readSidecar();
   const sidecar: OpenCodeRoutingSidecar = previousSidecar || { version: 1, managedAt: new Date().toISOString(), providers: [] };
   const records = new Map(sidecar.providers.map(record => [record.providerId, record]));
@@ -175,45 +209,46 @@ export function applyOpenCodeDesiredRouting(scope: RoutingApplyScope = {}): Appl
   const skippedProviders: Array<{ providerId: string; reason: string }> = [];
   let changed = false;
 
-  for (const [providerId, providerValue] of Object.entries(providers)) {
-    const provider = asRecord(providerValue);
-    const options = provider ? asRecord(provider.options) : null;
-    if (!provider || !options) continue;
+  for (const view of providers) {
+    const { providerId, options } = view;
     const baseUrl = typeof options.baseURL === 'string' ? options.baseURL : '';
     const record = records.get(providerId);
     if (selected.has(providerId)) {
-      if (record && (baseUrl !== record.routedBaseUrl || !identityHeaderMatches(asRecord(options.headers) || {}, record) ||
+      if (record && ((record.schema || 'singular') !== view.schema || baseUrl !== record.routedBaseUrl || !identityHeaderMatches(asRecord(options.headers) || {}, record) ||
           stableRoutingFingerprint(options.apiKey) !== record.routedApiKeyHash)) {
         skippedProviders.push({ providerId, reason: 'The endpoint or routing identity changed after ClawNex routed it. The operator edit and recovery record were preserved.' });
         continue;
       }
       if (!record) {
-        if (provider.npm !== '@ai-sdk/openai-compatible' || directRoute(baseUrl) !== 'direct') {
+        if (!view.supportedPackage || directRoute(baseUrl) !== 'direct') {
           skippedProviders.push({ providerId, reason: 'Only explicit OpenAI-compatible global provider endpoints can be routed.' });
           continue;
         }
-        const modelMap = asRecord(provider.models) || {};
+        const modelMap = view.models;
         const models = Object.entries(modelMap).map(([key, value]) => {
           const model = asRecord(value);
-          if (!model || (model.id !== undefined && typeof model.id !== 'string')) throw new Error('OpenCode model entries must be objects with optional string ids.');
+          const configuredId = model?.[view.idKey];
+          if (!model || (configuredId !== undefined && typeof configuredId !== 'string')) throw new Error('OpenCode model entries must be objects with optional string ids.');
           const modelId = key.startsWith(`${providerId}/`) ? key : `${providerId}/${key}`;
-          const configuredModelId = typeof model.id === 'string' && model.id.trim() ? model.id.trim() : modelId;
+          const configuredModelId = typeof configuredId === 'string' && configuredId.trim() ? configuredId.trim() : modelId;
           const proxyModel = resolveConfiguredProxyModel(configuredModelId, { providerId, baseUrl });
           if (!proxyModel) throw new Error('An OpenCode model has no unique configured LiteLLM alias. Refresh configuration and test the exact model.');
-          return { key, hadId: Object.hasOwn(model, 'id'), ...(typeof model.id === 'string' ? { originalId: model.id } : {}),
+          return { key, idKey: view.idKey, hadId: Object.hasOwn(model, view.idKey), ...(typeof configuredId === 'string' ? { originalId: configuredId } : {}),
             routedId: proxyModel.modelAlias };
         });
+        const routedApiKey = process.env.LITELLM_MASTER_KEY;
+        if (!routedApiKey) throw new Error('Configure the local LiteLLM access key before applying OpenCode routing.');
         const record: OpenCodeProviderRecord = {
-          providerId, configPath: check.configPath, originalBaseUrl: baseUrl, routedBaseUrl: target,
+          providerId, configPath: check.configPath, originalBaseUrl: baseUrl, routedBaseUrl: target, schema: view.schema,
           routedAt: new Date().toISOString(), models, hadApiKey: Object.hasOwn(options, 'apiKey'),
-          routedApiKeyHash: stableRoutingFingerprint(ROUTED_API_KEY),
+          routedApiKeyHash: stableRoutingFingerprint(routedApiKey),
         };
         if (record.hadApiKey) record.encryptedOriginalApiKey = sealRoutingCredential(OPENCODE_SIDECAR_PATH, credentialOwner(record), options.apiKey);
         records.set(providerId, record);
       }
       const owner = records.get(providerId)!;
-      const modelMap = asRecord(provider.models) || {};
-      if (baseUrl === target && owner.models.some(model => asRecord(modelMap[model.key])?.id !== model.routedId)) {
+      const modelMap = view.models;
+      if (baseUrl === target && owner.models.some(model => asRecord(modelMap[model.key])?.[model.idKey || view.idKey] !== model.routedId)) {
         skippedProviders.push({ providerId, reason: 'A model identifier changed after ClawNex routed it. The operator edit and recovery record were preserved.' });
         continue;
       }
@@ -222,18 +257,21 @@ export function applyOpenCodeDesiredRouting(scope: RoutingApplyScope = {}): Appl
       if (!owner.identityHash) owner.identityContainerExisted = options.headers != null;
       const token = prepareIdentityHeader(headers, owner, 'opencode', 'opencode:global');
       if (baseUrl !== target) { options.baseURL = target; changed = true; routedProviders.push(providerId); }
-      if (options.apiKey !== ROUTED_API_KEY) { options.apiKey = ROUTED_API_KEY; changed = true; }
+      const routedApiKey = process.env.LITELLM_MASTER_KEY;
+      if (!routedApiKey) throw new Error('Configure the local LiteLLM access key before applying OpenCode routing.');
+      if (options.apiKey !== routedApiKey) { options.apiKey = routedApiKey; changed = true; }
       for (const modelRecord of owner.models) {
         const model = asRecord(modelMap[modelRecord.key]);
         if (!model) throw new Error('An OpenCode model changed during routing. No configuration was written.');
-        if (model.id !== modelRecord.routedId) { model.id = modelRecord.routedId; changed = true; }
+        const idKey = modelRecord.idKey || view.idKey;
+        if (model[idKey] !== modelRecord.routedId) { model[idKey] = modelRecord.routedId; changed = true; }
       }
       if (token) { headers[ROUTING_IDENTITY_HEADER] = token; options.headers = headers; changed = true; }
       continue;
     }
     if (!record || scope.restore === false) continue;
-    const modelMap = asRecord(provider.models) || {};
-    const modelIdsIntact = record.models.every(model => asRecord(modelMap[model.key])?.id === model.routedId);
+    const modelMap = view.models;
+    const modelIdsIntact = record.models.every(model => asRecord(modelMap[model.key])?.[model.idKey || view.idKey] === model.routedId);
     if (baseUrl !== record.routedBaseUrl || !identityHeaderMatches(asRecord(options.headers) || {}, record) || !modelIdsIntact ||
         stableRoutingFingerprint(options.apiKey) !== record.routedApiKeyHash) {
       skippedProviders.push({ providerId, reason: 'The endpoint or routing identity changed after ClawNex routed it. The operator edit and recovery record were preserved.' });
@@ -249,8 +287,9 @@ export function applyOpenCodeDesiredRouting(scope: RoutingApplyScope = {}): Appl
     } else delete options.apiKey;
     for (const modelRecord of record.models) {
       const model = asRecord(modelMap[modelRecord.key])!;
-      if (modelRecord.hadId) model.id = modelRecord.originalId;
-      else delete model.id;
+      const idKey = modelRecord.idKey || view.idKey;
+      if (modelRecord.hadId) model[idKey] = modelRecord.originalId;
+      else delete model[idKey];
     }
     records.delete(providerId);
     changed = true;

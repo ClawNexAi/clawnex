@@ -19,6 +19,7 @@ process.env.OPENCLAW_HOME = path.join(root, '.openclaw');
 process.env.HERMES_HOME = path.join(root, '.hermes');
 process.env.CLAWNEX_OPENCODE_ROUTING_SIDECAR = path.join(root, '.clawnex-opencode-routing-managed.json');
 process.env.LITELLM_PORT = '4001';
+process.env.LITELLM_MASTER_KEY = 'fixture-only-litellm-key';
 const liteLlmConfigPath = path.join(root, 'litellm-config.yaml');
 process.env.CLAWNEX_LITELLM_CONFIG = liteLlmConfigPath;
 fs.writeFileSync(liteLlmConfigPath, 'model_list: []\n');
@@ -28,11 +29,19 @@ const configPath = path.join(configDirectory, 'opencode.jsonc');
 fs.mkdirSync(configDirectory, { recursive: true });
 fs.writeFileSync(configPath, `{
   // OpenCode accepts JSONC in its global configuration.
-  "provider": {
+  "providers": {
     "fleet": {
       "name": "OpenRouter Friendly",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://openrouter.ai/api/v1", "apiKey": "upstream-secret" },
+      "models": { "gpt-5.4": { "name": "GPT-5.4", "modelID": "openrouter/openai/gpt-5.4" } },
+    },
+  },
+  "provider": {
+    "compat": {
+      "name": "Singular Compatibility",
       "npm": "@ai-sdk/openai-compatible",
-      "options": { "baseURL": "https://openrouter.ai/api/v1", "apiKey": "{env:OPENROUTER_API_KEY}" },
+      "options": { "baseURL": "https://openrouter.ai/api/v1" },
       "models": { "gpt-5.4": { "name": "GPT-5.4", "id": "openrouter/openai/gpt-5.4" } },
     },
   },
@@ -68,8 +77,10 @@ async function main(): Promise<void> {
     const inventory = await response.json();
     assert.equal(response.status, 200);
     assert.equal(inventory.opencode.status, 'ok', 'shared routing inventory includes OpenCode');
-    const provider = inventory.opencode.items.find((item: { itemType: string }) => item.itemType === 'provider');
+    const provider = inventory.opencode.items.find((item: { providerId: string; itemType: string }) => item.providerId === 'fleet' && item.itemType === 'provider');
     assert.equal(provider.displayName, 'OpenRouter Friendly', 'JSONC provider display name reaches routing inventory');
+    const compatibleProvider = inventory.opencode.items.find((item: { providerId: string; itemType: string }) => item.providerId === 'compat' && item.itemType === 'provider');
+    assert.equal(compatibleProvider.capability, 'provider-routing', 'singular OpenCode provider schema remains supported');
     const model = inventory.opencode.items.find((item: { modelId: string }) => item.modelId === 'fleet/gpt-5.4');
     assert.equal(model.capability, 'model-inventory', 'OpenCode provider model is selectable');
 
@@ -111,10 +122,10 @@ async function main(): Promise<void> {
     const appliedBody = await applied.json();
     assert.equal(applied.status, 200, `reviewed OpenCode routing applies: ${JSON.stringify(appliedBody)}`);
     let configured = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    assert.equal(configured.provider.fleet.options.baseURL, 'http://127.0.0.1:4001/v1');
-    assert.equal(configured.provider.fleet.models['gpt-5.4'].id, 'openrouter/openai/gpt-5.4', 'OpenCode sends the exact loaded LiteLLM alias');
-    assert.equal(configured.provider.fleet.options.apiKey, '{env:LITELLM_MASTER_KEY}', 'routed OpenCode uses the LiteLLM credential reference');
-    assert.equal(typeof configured.provider.fleet.options.headers['x-clawnex-routing-identity'], 'string');
+    assert.equal(configured.providers.fleet.settings.baseURL, 'http://127.0.0.1:4001/v1');
+    assert.equal(configured.providers.fleet.models['gpt-5.4'].modelID, 'openrouter/openai/gpt-5.4', 'OpenCode sends the exact loaded LiteLLM alias');
+    assert.equal(configured.providers.fleet.settings.apiKey, 'fixture-only-litellm-key', 'routed OpenCode receives the local LiteLLM credential');
+    assert.equal(typeof configured.providers.fleet.settings.headers['x-clawnex-routing-identity'], 'string');
     const routedInventoryResponse = await routingApi.GET(new NextRequest('http://127.0.0.1:5001/api/connector-routing', {
       headers: { origin: 'http://127.0.0.1:5001' },
     }));
@@ -122,7 +133,8 @@ async function main(): Promise<void> {
     const routedModel = routedInventory.opencode.items.find((item: { modelId: string }) => item.modelId === 'fleet/gpt-5.4');
     assert.equal(routedModel.metadata.proxyModelAlias, 'openrouter/openai/gpt-5.4', 'routed inventory preserves the exact LiteLLM alias written into OpenCode');
     const sidecar = fs.readFileSync(process.env.CLAWNEX_OPENCODE_ROUTING_SIDECAR!, 'utf8');
-    assert.ok(!sidecar.includes('OPENROUTER_API_KEY'), 'OpenCode recovery journal contains no credential material');
+    assert.ok(!sidecar.includes('upstream-secret'), 'OpenCode recovery journal contains no credential material');
+    assert.ok(!sidecar.includes('fixture-only-litellm-key'), 'OpenCode recovery journal contains no proxy credential material');
     const unsafeRemoval = await connectorApi.DELETE(new NextRequest(`http://127.0.0.1:5001/api/config/coding-agent-connectors?id=${encodeURIComponent(addedConnector.connector.id)}`, {
       method: 'DELETE', headers: { origin: 'http://127.0.0.1:5001' },
     }));
@@ -133,10 +145,10 @@ async function main(): Promise<void> {
     const restored = await routingApi.POST(request({ action: 'execute-plan', planId: restorePlan.plan.id, approved: true }));
     assert.equal(restored.status, 200, 'reviewed OpenCode restoration succeeds');
     configured = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    assert.equal(configured.provider.fleet.options.baseURL, 'https://openrouter.ai/api/v1');
-    assert.equal(configured.provider.fleet.options.apiKey, '{env:OPENROUTER_API_KEY}', 'restoration returns the upstream credential reference');
-    assert.equal(configured.provider.fleet.models['gpt-5.4'].id, 'openrouter/openai/gpt-5.4', 'restoration returns the original upstream model id');
-    assert.equal(configured.provider.fleet.options.headers, undefined, 'restoration removes only the managed identity header container');
+    assert.equal(configured.providers.fleet.settings.baseURL, 'https://openrouter.ai/api/v1');
+    assert.equal(configured.providers.fleet.settings.apiKey, 'upstream-secret', 'restoration returns the upstream credential');
+    assert.equal(configured.providers.fleet.models['gpt-5.4'].modelID, 'openrouter/openai/gpt-5.4', 'restoration returns the original upstream model id');
+    assert.equal(configured.providers.fleet.settings.headers, undefined, 'restoration removes only the managed identity header container');
     console.log('PASS: global OpenCode connector completes shared readiness, routing, and restoration lifecycle');
   } finally {
     globalThis.fetch = originalFetch;

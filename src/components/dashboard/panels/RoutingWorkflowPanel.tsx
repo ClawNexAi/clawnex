@@ -68,7 +68,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   const verificationPending = routed > 0 && !pending && currentVerification?.status !== 'verified';
   const excluded = groups.filter(([, rows]) => rows.every(row => ['read-only', 'unsupported'].includes(row.capability))).length;
   const emptyGuidance = connector === 'opencode' && summary.status === 'ok'
-    ? 'OpenCode is connected, but its global config has no explicit OpenAI-compatible provider endpoint. Add a provider with options.baseURL and models in ~/.config/opencode/opencode.json(c), then refresh.'
+          ? 'OpenCode is connected, but its global config has no explicit OpenAI-compatible provider endpoint. Add a provider with settings.baseURL and models in ~/.config/opencode/opencode.json(c), then refresh.'
     : native
       ? summary.status === 'ok' && connector !== 'pi'
         ? 'Choose the initial model above, then review the proposed global connection.'
