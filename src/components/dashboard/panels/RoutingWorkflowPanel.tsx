@@ -43,7 +43,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   const summary = data[connector];
   const sources = [...new Set(summary.items.filter(item => item.present).map(item => item.sourceId))];
   const native = ['pi', 'codex', 'claude'].includes(connector);
-  if (native && !sources.length && summary.status === 'ok') sources.push(summary.sourceId);
+  if (!sources.length && summary.status === 'ok') sources.push(summary.sourceId);
   const [selectedSource, setSelectedSource] = useState('');
   const [initialModel, setInitialModel] = useState('');
   const sourceId = sources.includes(selectedSource) ? selectedSource : sources[0] || '';
@@ -67,6 +67,13 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   const pending = items.some(item => ['provider-routing', 'model-inventory'].includes(item.capability) && item.desiredRoute !== item.currentRoute);
   const verificationPending = routed > 0 && !pending && currentVerification?.status !== 'verified';
   const excluded = groups.filter(([, rows]) => rows.every(row => ['read-only', 'unsupported'].includes(row.capability))).length;
+  const emptyGuidance = connector === 'opencode' && summary.status === 'ok'
+    ? 'OpenCode is connected, but its global config has no explicit OpenAI-compatible provider endpoint. Add a provider with options.baseURL and models in ~/.config/opencode/opencode.json(c), then refresh.'
+    : native
+      ? summary.status === 'ok' && connector !== 'pi'
+        ? 'Choose the initial model above, then review the proposed global connection.'
+        : summary.detail
+      : 'No supported local configuration found. Add the instance in Fleet Connectors, then refresh. Remote instances require supported configuration access; they are not treated as local.';
   const run = async (task: () => Promise<void>) => {
     setBusy(true); setMessage(''); setPrerequisites([]);
     try { await task(); } catch (error) { setMessage(error instanceof Error ? error.message : 'Operation could not be confirmed.'); }
@@ -125,7 +132,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
       <strong style={{ color: C.tx }}>{currentVerification?.status === 'verified' ? 'Routed models verified' : routed ? 'Configured · verification required' : 'Direct connection'}</strong>
       <GlobalFilterSelect ariaLabel={`${title} instance`} variant="form" minWidth={0} disabled={busy || sources.length === 0} value={sourceId}
         onChange={value => { setSelectedSource(value); setMessage(''); setPlan(null); setPrerequisites([]); }}
-        options={sources.length ? sources.map(source => ({ value: source, label: source === 'default' ? 'Local instance' : summary.items.find(item => item.sourceId === source)?.metadata.profileName as string || (native ? `${title} global configuration` : source) })) : [{ value: '', label: 'No local instance found' }]} />
+        options={sources.length ? sources.map(source => ({ value: source, label: source === 'default' ? 'Local instance' : summary.items.find(item => item.sourceId === source)?.metadata.profileName as string || (native || connector === 'opencode' ? `${title} global configuration` : source) })) : [{ value: '', label: 'No local instance found' }]} />
     </div>
     <p style={{ color: C.txS, fontSize: 12, lineHeight: 1.6 }}>Prepare → Review → Apply → Verify<br />
       {routed} of {groups.length} provider routes configured through ClawNex. {excluded ? `${excluded} unsupported route(s) remain unchanged. Coverage is partial.` : ''}
@@ -184,7 +191,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
             })}</details>
         </div>;
       })}
-      {!groups.length && <p style={{ color: C.txS }}>{native ? summary.status === 'ok' && connector !== 'pi' ? 'Choose the initial model above, then review the proposed global connection.' : summary.detail : 'No supported local configuration found. Add the instance in Fleet Connectors, then refresh. Remote instances require supported configuration access; they are not treated as local.'}</p>}
+      {!groups.length && <p style={{ color: C.txS }}>{emptyGuidance}</p>}
     </details>
     <details style={{ marginTop: 12, color: C.txT, fontSize: 12 }}><summary>Technical details</summary><p>Instance: {sourceId || 'unavailable'}</p><p>Proxy: {data.litellmTarget}</p><p>{summary.detail}</p></details>
     </div>
