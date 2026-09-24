@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { C, F } from "../constants";
-import { Badge, BadgeLegend, Dot, CollapsibleCard, CategorySection, LoadingSpinner, PaginationFooter, formatTimeAgo, useStickyBoolean } from "../shared";
+import { Badge, BadgeLegend, Dot, CollapsibleCard, CategorySection, LoadingSpinner, PaginationFooter, formatTimeAgo } from "../shared";
 import { Tooltip } from "../tooltip";
 import { timeAgo } from "../utils";
 import type { TabId } from "../types";
@@ -3668,13 +3668,11 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
   const [hermesTestResult, setHermesTestResult] = useState<string | null>(null);
   const [newHermesName, setNewHermesName] = useState("");
   const [newHermesPath, setNewHermesPath] = useState("");
-  // Fleet Connector sub-section toggles. Persisted across reloads via
-  // localStorage so an operator who never uses Hermes (or Paperclip etc.)
-  // can collapse it once and have it stay collapsed. the operator's use case
-  // 2026-05-01: "I never use Hermes, hide it."
-  const [fcOpenClaw, setFcOpenClaw] = useStickyBoolean("clawnex_fc_openclaw", true);
-  const [fcHermes, setFcHermes] = useStickyBoolean("clawnex_fc_hermes", true);
-  const [fcOpenCode, setFcOpenCode] = useStickyBoolean('clawnex_fc_opencode', true);
+  // Framework rows always start collapsed so Fleet Connectors remains
+  // scannable. Their status badges remain visible without opening a form.
+  const [fcOpenClaw, setFcOpenClaw] = useState(false);
+  const [fcHermes, setFcHermes] = useState(false);
+  const [fcOpenCode, setFcOpenCode] = useState(false);
   const [codingAgentConnectors, setCodingAgentConnectors] = useState<CodingAgentConnectorConfig[]>([]);
   const [newOpenCodeName, setNewOpenCodeName] = useState('OpenCode Local');
   const [openCodeResult, setOpenCodeResult] = useState<string | null>(null);
@@ -4647,7 +4645,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
 
         {/* --- OpenClaw --- */}
         <div style={{ marginBottom: 20 }}>
-          <div onClick={() => setFcOpenClaw(!fcOpenClaw)} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: fcOpenClaw ? 10 : 0, paddingBottom: 6, borderBottom: `1px solid ${C.glassBorderSubtle}`, cursor: "pointer" }}>
+          <div role="button" tabIndex={0} aria-expanded={fcOpenClaw} onClick={() => setFcOpenClaw(!fcOpenClaw)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setFcOpenClaw(!fcOpenClaw); } }} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: fcOpenClaw ? 10 : 0, paddingBottom: 6, borderBottom: `1px solid ${C.glassBorderSubtle}`, cursor: "pointer" }}>
             <span style={{ fontSize: 10, color: C.txT, display: "inline-block", transform: fcOpenClaw ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>{"\u25B6"}</span>
             <span style={{ fontSize: 13, fontWeight: 800, color: C.orange, letterSpacing: "0.04em" }}>OPENCLAW</span>
             <Badge color={gateways.length > 0 ? C.green : C.txT} label={gateways.length > 0 ? "LIVE" : "NOT CONFIGURED"} />
@@ -4699,7 +4697,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
 
         {/* --- Hermes --- */}
         <div style={{ marginBottom: 20 }}>
-          <div onClick={() => setFcHermes(!fcHermes)} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: fcHermes ? 10 : 0, paddingBottom: 6, borderBottom: `1px solid ${C.glassBorderSubtle}`, cursor: "pointer" }}>
+          <div role="button" tabIndex={0} aria-expanded={fcHermes} onClick={() => setFcHermes(!fcHermes)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setFcHermes(!fcHermes); } }} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: fcHermes ? 10 : 0, paddingBottom: 6, borderBottom: `1px solid ${C.glassBorderSubtle}`, cursor: "pointer" }}>
             <span style={{ fontSize: 10, color: C.txT, display: "inline-block", transform: fcHermes ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>{"\u25B6"}</span>
             <span style={{ fontSize: 13, fontWeight: 800, color: C.purp, letterSpacing: "0.04em" }}>HERMES AGENT</span>
             <Badge color={hermesStatus?.available ? C.green : C.txT} label={hermesStatus?.available ? "LIVE" : "NOT CONFIGURED"} />
@@ -4757,7 +4755,7 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
 
         {/* --- OpenCode (global configuration only) --- */}
         <div style={{ marginBottom: 20 }}>
-          <div onClick={() => setFcOpenCode(!fcOpenCode)} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: fcOpenCode ? 10 : 0, paddingBottom: 6, borderBottom: `1px solid ${C.glassBorderSubtle}`, cursor: 'pointer' }}>
+          <div role="button" tabIndex={0} aria-expanded={fcOpenCode} onClick={() => setFcOpenCode(!fcOpenCode)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setFcOpenCode(!fcOpenCode); } }} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: fcOpenCode ? 10 : 0, paddingBottom: 6, borderBottom: `1px solid ${C.glassBorderSubtle}`, cursor: 'pointer' }}>
             <span style={{ fontSize: 10, color: C.txT, display: 'inline-block', transform: fcOpenCode ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>{'▶'}</span>
             <span style={{ fontSize: 13, fontWeight: 800, color: C.cyan, letterSpacing: '0.04em' }}>OPENCODE</span>
             <Badge color={openCodeConnectors.some(connector => connector.available) ? C.green : C.txT}
