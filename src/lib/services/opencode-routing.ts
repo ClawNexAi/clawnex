@@ -124,10 +124,11 @@ export function discoverOpenCodeItems(): {
     for (const [modelKey, modelValue] of Object.entries(models)) {
       const model = asRecord(modelValue) || {};
       const modelId = modelKey.startsWith(`${providerId}/`) ? modelKey : `${providerId}/${modelKey}`;
+      const configuredModelId = typeof model.id === 'string' && model.id.trim() ? model.id.trim() : modelId;
       const managedModel = ownership.get(providerId)?.models.find(entry => entry.key === modelKey);
       const proxyModelAlias = route === 'routed' && managedModel
         ? managedModel.routedId
-        : resolveConfiguredProxyModel(modelId, { providerId, baseUrl })?.modelAlias || modelId;
+        : resolveConfiguredProxyModel(configuredModelId, { providerId, baseUrl })?.modelAlias || modelId;
       items.push({
         connector: 'opencode', sourceId: 'opencode:global', itemType: 'model', providerId, modelId,
         displayName: typeof model.name === 'string' ? model.name : modelId, baseUrl,
@@ -196,7 +197,8 @@ export function applyOpenCodeDesiredRouting(scope: RoutingApplyScope = {}): Appl
           const model = asRecord(value);
           if (!model || (model.id !== undefined && typeof model.id !== 'string')) throw new Error('OpenCode model entries must be objects with optional string ids.');
           const modelId = key.startsWith(`${providerId}/`) ? key : `${providerId}/${key}`;
-          const proxyModel = resolveConfiguredProxyModel(modelId, { providerId, baseUrl });
+          const configuredModelId = typeof model.id === 'string' && model.id.trim() ? model.id.trim() : modelId;
+          const proxyModel = resolveConfiguredProxyModel(configuredModelId, { providerId, baseUrl });
           if (!proxyModel) throw new Error('An OpenCode model has no unique configured LiteLLM alias. Refresh configuration and test the exact model.');
           return { key, hadId: Object.hasOwn(model, 'id'), ...(typeof model.id === 'string' ? { originalId: model.id } : {}),
             routedId: proxyModel.modelAlias };
