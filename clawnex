@@ -9,6 +9,7 @@
 #   status                 Show running services, ports, health
 #   logs [which]           Tail a log file (default: dashboard)
 #                          which: dashboard | litellm | watchdog
+#   run codex --model ID   Launch one inspected Codex session
 #   setup                  Re-run setup.sh (overwrites .env.local — see prompt)
 #   uninstall              Run scripts/uninstall.sh against this install
 #   version                Print ClawNex version
@@ -308,6 +309,126 @@ cmd_version() {
     fi
 }
 
+cmd_run_codex() {
+    local model="" dry_run="false"
+    local -a codex_args=()
+    local has_codex_args="false"
+
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --model|-m)
+                [ "$#" -ge 2 ] || { echo -e "  ${RED}✗${NC} --model requires a configured ClawNex model alias" >&2; return 2; }
+                model="$2"; shift 2
+                ;;
+            --dry-run)
+                dry_run="true"; shift
+                ;;
+            --)
+                shift; codex_args=("$@"); [ "$#" -gt 0 ] && has_codex_args="true"; break
+                ;;
+            *)
+                echo -e "  ${RED}✗${NC} Unknown launcher option: $1" >&2
+                echo "  Put Codex arguments after --" >&2
+                return 2
+                ;;
+        esac
+    done
+
+    [ -n "$model" ] || { echo -e "  ${RED}✗${NC} Select a model: clawnex run codex --model <alias>" >&2; return 2; }
+    case "$model" in *$'\n'*|*$'\r'*) echo -e "  ${RED}✗${NC} Model aliases cannot contain line breaks" >&2; return 2 ;; esac
+    if [ "$has_codex_args" = "true" ]; then
+        local arg
+        for arg in "${codex_args[@]}"; do
+            case "$arg" in
+                -c|--config|-p|--profile|-m|--model|--model-provider|--model_provider)
+                    echo -e "  ${RED}✗${NC} $arg can override the inspected route and is not accepted by this launcher" >&2
+                    return 2
+                    ;;
+            esac
+        done
+    fi
+
+    local env_file="$INSTALL_DIR/.env.local" proxy_key="" ingest_secret="" proxy_port="$LITELLM_PORT"
+    [ -f "$env_file" ] && [ ! -L "$env_file" ] || { echo -e "  ${RED}✗${NC} Missing safe ClawNex environment file: $env_file" >&2; return 1; }
+    while IFS='=' read -r key value; do
+        case "$key" in
+            LITELLM_MASTER_KEY) proxy_key="$value" ;;
+            CLAWNEX_INGEST_SECRET) ingest_secret="$value" ;;
+            LITELLM_PORT) proxy_port="$value" ;;
+        esac
+    done < "$env_file"
+    [ -n "$proxy_key" ] || { echo -e "  ${RED}✗${NC} LITELLM_MASTER_KEY is not configured" >&2; return 1; }
+    [ "${#ingest_secret}" -ge 32 ] || { echo -e "  ${RED}✗${NC} CLAWNEX_INGEST_SECRET must contain at least 32 bytes" >&2; return 1; }
+    [[ "$proxy_port" =~ ^[0-9]+$ ]] && [ "$proxy_port" -ge 1 ] && [ "$proxy_port" -le 65535 ] || {
+        echo -e "  ${RED}✗${NC} LITELLM_PORT is invalid" >&2; return 1;
+    }
+
+    local codex_bin
+    codex_bin="$(command -v codex 2>/dev/null || true)"
+    [ -n "$codex_bin" ] || [ ! -x "$HOME/.npm-global/bin/codex" ] || codex_bin="$HOME/.npm-global/bin/codex"
+    [ -n "$codex_bin" ] || { echo -e "  ${RED}✗${NC} Codex is not installed or is not in PATH" >&2; return 1; }
+
+    local identity
+    identity="$(CLAWNEX_LAUNCH_SECRET="$ingest_secret" node -e '
+      const crypto = require("node:crypto");
+      const value = { v: 1, connector: "codex", sourceId: "codex:global", nonce: crypto.randomBytes(16).toString("hex") };
+      const payload = Buffer.from(JSON.stringify(value)).toString("base64url");
+      const signature = crypto.createHmac("sha256", process.env.CLAWNEX_LAUNCH_SECRET).update(`clawnex-routing-v1:${payload}`).digest("base64url");
+      process.stdout.write(`${payload}.${signature}`);
+    ')" || { echo -e "  ${RED}✗${NC} Could not create the Codex routing identity" >&2; return 1; }
+
+    local proxy_base="http://127.0.0.1:${proxy_port}/v1"
+    local -a provider_args=(
+        -c 'model_provider="clawnex"'
+        -c 'model_providers.clawnex.name="ClawNex"'
+        -c "model_providers.clawnex.base_url=\"${proxy_base}\""
+        -c 'model_providers.clawnex.env_key="CLAWNEX_LITELLM_API_KEY"'
+        -c 'model_providers.clawnex.env_http_headers={"x-clawnex-routing-identity"="CLAWNEX_ROUTING_IDENTITY"}'
+        -c 'model_providers.clawnex.wire_api="responses"'
+        -c 'model_providers.clawnex.requires_openai_auth=false'
+        -c 'model_providers.clawnex.supports_websockets=false'
+        --model "$model"
+    )
+
+    if [ "$dry_run" = "true" ]; then
+        echo "Codex inspected-session launch is ready"
+        echo "  Model: $model"
+        echo "  Proxy: $proxy_base"
+        echo "  Identity: signed child environment"
+        echo "  Config files changed: none"
+        return 0
+    fi
+
+    local model_info
+    model_info="$(curl -fsS --max-time 10 -H "Authorization: Bearer ${proxy_key}" "http://127.0.0.1:${proxy_port}/model/info" 2>/dev/null)" || {
+        echo -e "  ${RED}✗${NC} LiteLLM is not reachable on 127.0.0.1:${proxy_port}" >&2; return 1;
+    }
+    CLAWNEX_LAUNCH_MODEL="$model" node -e '
+      let raw = ""; process.stdin.setEncoding("utf8"); process.stdin.on("data", chunk => raw += chunk);
+      process.stdin.on("end", () => { try {
+        const rows = JSON.parse(raw).data; const matches = Array.isArray(rows) ? rows.filter(row => row?.model_name === process.env.CLAWNEX_LAUNCH_MODEL) : [];
+        if (matches.length !== 1) process.exit(1);
+      } catch { process.exit(1); } });
+    ' <<< "$model_info" || { echo -e "  ${RED}✗${NC} Model alias '$model' is not uniquely loaded in LiteLLM" >&2; return 1; }
+
+    export CLAWNEX_LITELLM_API_KEY="$proxy_key"
+    export CLAWNEX_ROUTING_IDENTITY="$identity"
+    unset OPENAI_API_KEY OPENAI_BASE_URL OPENAI_API_BASE OPENAI_ORG_ID OPENAI_ORGANIZATION CODEX_API_KEY OMNIROUTE_API_KEY
+    if [ "$has_codex_args" = "true" ]; then
+        exec "$codex_bin" "${provider_args[@]}" "${codex_args[@]}"
+    fi
+    exec "$codex_bin" "${provider_args[@]}"
+}
+
+cmd_run() {
+    local target="${1:-}"
+    [ -n "$target" ] && shift
+    case "$target" in
+        codex) cmd_run_codex "$@" ;;
+        *) echo -e "  ${RED}✗${NC} Usage: clawnex run codex --model <alias> [-- Codex arguments]" >&2; return 2 ;;
+    esac
+}
+
 cmd_help() {
     cat <<EOF
 ${BOLD}clawnex${NC} — ClawNex service management CLI
@@ -320,6 +441,7 @@ ${BOLD}Commands:${NC}
   restart            Stop, wait, then start
   status             Show running services, ports, health
   logs [name]        Tail a log file (dashboard | litellm | watchdog)
+  run codex --model  Launch one Codex session through ClawNex without changing config files
   setup              Re-run setup.sh (will prompt before touching .env.local)
   uninstall          Remove this ClawNex install
   version            Print ClawNex version
@@ -336,6 +458,7 @@ case "${1:-help}" in
     restart)   shift; cmd_restart "$@" ;;
     status)    shift; cmd_status "$@" ;;
     logs)      shift; cmd_logs "$@" ;;
+    run)       shift; cmd_run "$@" ;;
     setup)     shift; cmd_setup "$@" ;;
     uninstall) shift; cmd_uninstall "$@" ;;
     version|-v|--version) cmd_version ;;

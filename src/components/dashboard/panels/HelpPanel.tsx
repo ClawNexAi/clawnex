@@ -312,6 +312,18 @@ export function HelpPanel({ onNavigate }: { onNavigate: (tab: TabId) => void }) 
         </div>
       </CollapsibleCard>
 
+      <CollapsibleCard title="Launch an inspected Codex session" accent={C.cyan} defaultOpen={false} count={4}>
+        <div style={{ fontSize: 13, color: C.txS, lineHeight: 1.7 }}>
+          <ol style={{ margin: "0 0 10px", paddingLeft: 22 }}>
+            <li>Open <strong style={{ color: C.tx }}>Configuration → Fleet &amp; Routing → Codex Routing</strong>.</li>
+            <li>Under <strong style={{ color: C.tx }}>One-session launcher</strong>, choose a configured model and use <strong style={{ color: C.tx }}>Test model</strong> if verification is required.</li>
+            <li>Select <strong style={{ color: C.tx }}>Copy launch command</strong>, paste the command into a terminal, and start Codex.</li>
+            <li>Send a request, then use <strong style={{ color: C.tx }}>Verify connection</strong> or Traffic Monitor to confirm the <code style={{ color: C.cyan }}>codex:global</code> traffic.</li>
+          </ol>
+          <p style={{ margin: 0, fontSize: 12, color: C.txT }}>The launcher changes no Codex configuration files or device login. It supplies the local LiteLLM provider, credential, and signed instance identity only to that Codex process. Profile and provider override flags are rejected because they could bypass inspection.</p>
+        </div>
+      </CollapsibleCard>
+
       <CollapsibleCard title="Sidebar Favorites & Recents" accent={C.warn} defaultOpen={false} count={2}>
         <div style={{ fontSize: 13, color: C.txS, lineHeight: 1.65 }}>
           <p style={{ margin: "0 0 8px" }}>

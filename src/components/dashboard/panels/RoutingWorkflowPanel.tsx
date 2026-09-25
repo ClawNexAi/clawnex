@@ -46,6 +46,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   if (!sources.length && summary.status === 'ok') sources.push(summary.sourceId);
   const [selectedSource, setSelectedSource] = useState('');
   const [initialModel, setInitialModel] = useState('');
+  const [launchModel, setLaunchModel] = useState('');
   const sourceId = sources.includes(selectedSource) ? selectedSource : sources[0] || '';
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -54,6 +55,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   const reviewOrigin = useRef<HTMLElement | null>(null);
   const [verification, setVerification] = useState<{ key: string; result: RoutingVerification } | null>(null);
   const initialModelConfig = data.availableModels.find(model => model.alias === initialModel);
+  const launchModelConfig = data.availableModels.find(model => model.alias === launchModel);
   const { title, accent, focusKey } = connectorPresentation[connector];
   const items = summary.items.filter(item => item.present && item.sourceId === sourceId && !['litellm', 'clawnex-litellm'].includes(item.providerId));
   const providers = new Map<string, ConnectorRoutingItem[]>();
@@ -110,6 +112,12 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
     }
     setMessage(`${result.detail} Send one new OpenClaw request, then verify the connection.`);
   });
+  const copyCodexLaunch = () => void run(async () => {
+    if (!launchModelConfig?.ready) throw new Error('Test this model before copying its inspected launch command.');
+    const quoted = `'${launchModelConfig.alias.replaceAll("'", `'"'"'`)}'`;
+    await navigator.clipboard.writeText(`clawnex run codex --model ${quoted}`);
+    setMessage('Copied the inspected Codex launch command. Run it in a terminal to start one session through ClawNex.');
+  });
 
   return <CollapsibleCard title={`${title.toUpperCase()} ROUTING`} accent={accent}
     defaultOpen={false} focusKey={focusKey} focusedCard={focusedCard}>
@@ -139,6 +147,20 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
       {' '}Connection status does not change your existing blocking, observe-only, or emergency-bypass policy.</p>
     <p style={{ color: C.txS, fontSize: 12 }}>Configure and test your upstream models first. Select provider routes below, then review the changes. Selecting a provider affects all of its models.</p>
     {['pi', 'codex', 'claude'].includes(connector) && <p style={{ color: C.txS, fontSize: 12 }}>{summary.detail}</p>}
+    {connector === 'codex' && <div style={{ padding: '10px 12px', marginBottom: 14, border: `1px solid ${C.brd}`, borderRadius: 6 }}>
+      <strong style={{ color: C.tx }}>One-session launcher</strong>
+      <p style={{ color: C.txS, margin: '4px 0 8px' }}>Start Codex through ClawNex without changing your Codex configuration or device login.</p>
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 320px', minWidth: 0 }}><GlobalFilterSelect ariaLabel="Codex inspected session model" variant="form" minWidth={0}
+          value={launchModel} disabled={busy} onChange={setLaunchModel} style={{ width: '100%' }}
+          options={[{ value: '', label: 'Choose a configured ClawNex model' }, ...data.availableModels.map(model => ({ value: model.alias, label: model.name }))]} /></div>
+        {launchModelConfig && <ModelReadinessControl key={`launch:${launchModelConfig.providerId}:${launchModelConfig.alias}`}
+          providerId={launchModelConfig.providerId} modelAlias={launchModelConfig.alias} providerName={launchModelConfig.name}
+          ready={launchModelConfig.ready} disabled={busy} onRefresh={refresh} onMessage={setMessage} />}
+        <button aria-label="Copy inspected Codex launch command" style={launchModelConfig?.ready ? primaryButton : button}
+          disabled={busy || !launchModelConfig?.ready} onClick={copyCodexLaunch}>Copy launch command</button>
+      </div>
+    </div>}
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
       <button aria-label={`Review ${title} connection changes`} style={pending ? primaryButton : button} disabled={busy || !sourceId || !pending} onClick={() => void review('apply')}>Review connection changes</button>
       <button aria-label={`Refresh ${title} configuration`} style={button} disabled={busy} onClick={() => void run(refresh)}>Refresh configuration</button>
