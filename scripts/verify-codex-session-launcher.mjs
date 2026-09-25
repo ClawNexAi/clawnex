@@ -67,6 +67,7 @@ for (const id of ['codex', 'claude', 'opencode', 'pi', 'hermes']) {
   assert.equal(capture.env.CLAWNEX_LITELLM_API_KEY, undefined);
   assert.equal(capture.env.CLAWNEX_ROUTING_IDENTITY, undefined);
   assert.ok(!JSON.stringify(capture).includes(proxyKey));
+  if (id === 'opencode') assert.equal(JSON.parse(capture.env.OPENCODE_CONFIG_CONTENT).model, 'clawnex/provider/model');
   if (capture.temp) assert.equal(fs.existsSync(path.dirname(capture.temp)), false);
 }
 

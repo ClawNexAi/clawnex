@@ -170,9 +170,10 @@ function buildPlan(harnessId, model, bridgePort, binary, extraArgs) {
   } else if (harnessId === 'opencode') {
     env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
       $schema: 'https://opencode.ai/config.json',
+      model: `clawnex/${model}`,
       provider: { clawnex: { npm: '@ai-sdk/openai-compatible', name: 'ClawNex', options: { baseURL: v1, apiKey: 'clawnex-local-session' }, models: { [model]: { name: model } } } },
     });
-    args = ['--model', `clawnex/${model}`];
+    args = [];
   } else if (harnessId === 'pi') {
     const piDir = path.join(tempDir, 'pi');
     privateFile(path.join(piDir, 'models.json'), `${JSON.stringify({ providers: { clawnex: {
