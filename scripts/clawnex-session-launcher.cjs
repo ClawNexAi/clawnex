@@ -45,10 +45,14 @@ function parseArgs(argv) {
   if (!model) fail(`Select a model: clawnex run ${harnessId} --model <alias>`, 2);
   if (/[\r\n]/.test(model)) fail('Model aliases cannot contain line breaks', 2);
   const forbidden = new Set([
-    '-c', '--config', '-p', '--profile', '-m', '--model', '--model-provider', '--model_provider',
+    '--config', '--profile', '-m', '--model', '--model-provider', '--model_provider',
     '--provider', '--api-key', '--dangerously-bypass-approvals-and-sandbox',
     '--dangerously-skip-permissions', '--yolo', '--full-auto',
   ]);
+  if (harnessId === 'codex') {
+    forbidden.add('-c');
+    forbidden.add('-p');
+  }
   const unsafe = extraArgs.find(arg => forbidden.has(arg) || arg.startsWith('--model=') || arg.startsWith('--provider='));
   if (unsafe) fail(`${unsafe} can override the inspected route or normal safety controls and is not accepted by this launcher`, 2);
   return { harnessId, harness, model, dryRun, extraArgs };

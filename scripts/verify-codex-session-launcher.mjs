@@ -96,6 +96,15 @@ for (const id of ['codex', 'claude', 'opencode', 'pi', 'hermes']) {
   assert.match(rejected.stderr, /normal safety controls/);
 }
 
+for (const [id, flag] of [['claude', '-p'], ['pi', '-p'], ['opencode', '-c']]) {
+  const accepted = spawnSync(path.join(root, 'clawnex'), ['run', id, '--model', 'provider/model', '--dry-run', '--', flag, 'safe argument'], { env: baseEnv, encoding: 'utf8' });
+  assert.equal(accepted.status, 0, `${id} should accept its safe ${flag} flag: ${accepted.stderr}`);
+}
+for (const flag of ['-c', '-p']) {
+  const rejected = spawnSync(path.join(root, 'clawnex'), ['run', 'codex', '--model', 'provider/model', '--dry-run', '--', flag, 'override'], { env: baseEnv, encoding: 'utf8' });
+  assert.equal(rejected.status, 2, `Codex ${flag} must remain blocked`);
+}
+
 server.kill('SIGTERM');
 fs.rmSync(root, { recursive: true, force: true });
 console.log('PASS: five-harness launcher matrix uses a signed secret-isolating session bridge and safe defaults');
