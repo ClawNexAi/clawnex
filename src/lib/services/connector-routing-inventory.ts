@@ -33,6 +33,7 @@ import { discoverOpenCodeItems, openCodeRoutingOwnershipFingerprint, OPENCODE_SI
 import { resolveConfiguredProxyModel } from './configured-proxy-model';
 import { discoverNativeItems, nativeJournal, nativeOwnershipFingerprint } from './native-agent-routing';
 import { isNativeAgent } from './native-agent-config';
+import { listSessionLaunchers, type SessionLauncherAvailability } from './session-launchers';
 
 export { resolveConfiguredProxyModel } from './configured-proxy-model';
 
@@ -94,6 +95,7 @@ export interface ConnectorRoutingResponse {
   codex: ConnectorRoutingSummary;
   claude: ConnectorRoutingSummary;
   availableModels: Array<{ providerId: string; alias: string; name: string; ready: boolean }>;
+  sessionLaunchers: SessionLauncherAvailability[];
   modelReadiness: Record<string, { providerId: string; modelAlias: string; providerName: string; ready: boolean }>;
   driftTotal: number;
   scannedAt: string;
@@ -1017,6 +1019,7 @@ export function syncConnectorRoutingInventory(trigger = "sync"): ConnectorRoutin
     hermes,
     opencode, pi, codex, claude,
     availableModels,
+    sessionLaunchers: listSessionLaunchers(),
     modelReadiness,
     driftTotal: openclaw.drift.total + hermes.drift.total + opencode.drift.total + pi.drift.total + codex.drift.total + claude.drift.total,
     scannedAt,

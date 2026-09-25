@@ -3,56 +3,99 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'clawnex-codex-launcher-'));
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'clawnex-launcher-matrix-'));
 const bin = path.join(root, 'bin');
-const capture = path.join(root, 'capture.json');
+const requests = path.join(root, 'requests.jsonl');
+const portFile = path.join(root, 'port');
 const secret = 'fixture-ingest-secret-that-is-at-least-32-bytes';
+const proxyKey = 'fixture-proxy-key';
 fs.mkdirSync(bin, { recursive: true });
+fs.mkdirSync(path.join(root, 'scripts'));
 fs.copyFileSync(new URL('../clawnex', import.meta.url), path.join(root, 'clawnex'));
+fs.copyFileSync(new URL('./clawnex-session-launcher.cjs', import.meta.url), path.join(root, 'scripts', 'clawnex-session-launcher.cjs'));
 fs.chmodSync(path.join(root, 'clawnex'), 0o755);
-fs.writeFileSync(path.join(root, '.env.local'), `LITELLM_PORT=4001\nLITELLM_MASTER_KEY=fixture-proxy-key\nCLAWNEX_INGEST_SECRET=${secret}\n`, { mode: 0o600 });
-fs.writeFileSync(path.join(bin, 'curl'), '#!/bin/bash\nprintf \'%s\' \'{"data":[{"model_name":"provider/model"}]}\'\n', { mode: 0o755 });
-fs.writeFileSync(path.join(bin, 'codex'), `#!/usr/bin/env node
-const fs = require('node:fs');
-fs.writeFileSync(process.env.CAPTURE, JSON.stringify({
-  args: process.argv.slice(2),
-  key: process.env.CLAWNEX_LITELLM_API_KEY,
-  identity: process.env.CLAWNEX_ROUTING_IDENTITY,
-  stripped: !process.env.OPENAI_API_KEY && !process.env.OMNIROUTE_API_KEY,
-}));
-`, { mode: 0o755 });
 
-const env = { ...process.env, HOME: root, PATH: `${bin}:${process.env.PATH}`, CAPTURE: capture,
-  OPENAI_API_KEY: 'must-not-reach-child', OMNIROUTE_API_KEY: 'must-not-reach-child' };
-const run = spawnSync(path.join(root, 'clawnex'), ['run', 'codex', '--model', 'provider/model', '--', 'exec', 'Reply OK'], { env, encoding: 'utf8' });
-assert.equal(run.status, 0, run.stderr || run.stdout);
-const child = JSON.parse(fs.readFileSync(capture, 'utf8'));
-assert.equal(child.key, 'fixture-proxy-key');
-assert.equal(child.stripped, true);
-assert.deepEqual(child.args.slice(-4), ['--model', 'provider/model', 'exec', 'Reply OK']);
-assert.ok(child.args.includes('model_provider="clawnex"'));
-assert.ok(child.args.includes('model_providers.clawnex.base_url="http://127.0.0.1:4001/v1"'));
-assert.ok(child.args.includes('model_providers.clawnex.env_key="CLAWNEX_LITELLM_API_KEY"'));
-assert.ok(child.args.includes('model_providers.clawnex.env_http_headers={"x-clawnex-routing-identity"="CLAWNEX_ROUTING_IDENTITY"}'));
+const serverSource = `
+const fs=require('fs'),http=require('http');
+const out=process.argv[2], portFile=process.argv[3];
+const server=http.createServer((req,res)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{
+ fs.appendFileSync(out,JSON.stringify({url:req.url,headers:req.headers,body})+'\\n');
+ res.setHeader('content-type','application/json');
+ if(req.url==='/model/info') res.end(JSON.stringify({data:[{model_name:'provider/model'}]}));
+ else res.end(JSON.stringify({ok:true}));
+});});
+server.listen(0,'127.0.0.1',()=>fs.writeFileSync(portFile,String(server.address().port)));
+process.on('SIGTERM',()=>server.close(()=>process.exit(0)));
+`;
+const serverScript = path.join(root, 'fixture-server.cjs');
+fs.writeFileSync(serverScript, serverSource);
+const server = spawn(process.execPath, [serverScript, requests, portFile], { stdio: 'inherit' });
+for (let i = 0; i < 100 && !fs.existsSync(portFile); i += 1) await new Promise(resolve => setTimeout(resolve, 20));
+assert.ok(fs.existsSync(portFile), 'fixture server started');
+const port = fs.readFileSync(portFile, 'utf8').trim();
+fs.writeFileSync(path.join(root, '.env.local'), `LITELLM_PORT=${port}\nLITELLM_MASTER_KEY=${proxyKey}\nCLAWNEX_INGEST_SECRET=${secret}\n`, { mode: 0o600 });
 
-const [payload, signature] = child.identity.split('.');
-const expected = crypto.createHmac('sha256', secret).update(`clawnex-routing-v1:${payload}`).digest('base64url');
-assert.equal(signature, expected);
-const identity = JSON.parse(Buffer.from(payload, 'base64url').toString());
-assert.equal(identity.connector, 'codex');
-assert.equal(identity.sourceId, 'codex:global');
+const harnessSource = `#!/usr/bin/env node
+const fs=require('fs'),path=require('path');
+const id=path.basename(process.argv[1]); let base='', temp='';
+if(id==='codex'){const hit=process.argv.find(x=>x.startsWith('model_providers.clawnex.base_url='));base=JSON.parse(hit.split('=').slice(1).join('='));}
+if(id==='claude')base=process.env.ANTHROPIC_BASE_URL+'/v1';
+if(id==='opencode')base=JSON.parse(process.env.OPENCODE_CONFIG_CONTENT).provider.clawnex.options.baseURL;
+if(id==='pi'){temp=process.env.PI_CODING_AGENT_DIR;const c=JSON.parse(fs.readFileSync(path.join(temp,'models.json'),'utf8'));base=c.providers.clawnex.baseUrl;}
+if(id==='hermes'){temp=process.env.HERMES_HOME;const raw=fs.readFileSync(path.join(temp,'config.yaml'),'utf8');base=JSON.parse(raw.match(/base_url: (.+)/)[1]);}
+fetch(base+'/probe',{headers:{authorization:'Bearer clawnex-local-session'}}).then(()=>{
+ const capture={id,args:process.argv.slice(2),base,temp,env:{
+  OPENAI_API_KEY:process.env.OPENAI_API_KEY,ANTHROPIC_AUTH_TOKEN:process.env.ANTHROPIC_AUTH_TOKEN,
+  OPENCODE_CONFIG_CONTENT:process.env.OPENCODE_CONFIG_CONTENT,PI_CODING_AGENT_DIR:process.env.PI_CODING_AGENT_DIR,HERMES_HOME:process.env.HERMES_HOME,
+  CLAWNEX_LITELLM_API_KEY:process.env.CLAWNEX_LITELLM_API_KEY,CLAWNEX_ROUTING_IDENTITY:process.env.CLAWNEX_ROUTING_IDENTITY,
+ }};fs.writeFileSync(process.env.CAPTURE,JSON.stringify(capture));
+}).catch(e=>{console.error(e);process.exitCode=1});
+`;
+for (const id of ['codex', 'claude', 'opencode', 'pi', 'hermes']) fs.writeFileSync(path.join(bin, id), harnessSource, { mode: 0o755 });
 
-const dryRun = spawnSync(path.join(root, 'clawnex'), ['run', 'codex', '--model', 'provider/model', '--dry-run'], { env, encoding: 'utf8' });
+const baseEnv = { ...process.env, HOME: root, PATH: `${bin}:${process.env.PATH}` };
+for (const id of ['codex', 'claude', 'opencode', 'pi', 'hermes']) {
+  const capturePath = path.join(root, `${id}.json`);
+  const run = spawnSync(path.join(root, 'clawnex'), ['run', id, '--model', 'provider/model'], {
+    env: { ...baseEnv, CAPTURE: capturePath, OPENAI_API_KEY: 'must-not-reach-child', ANTHROPIC_API_KEY: 'must-not-reach-child' }, encoding: 'utf8',
+  });
+  assert.equal(run.status, 0, `${id}: ${run.stderr || run.stdout}`);
+  const capture = JSON.parse(fs.readFileSync(capturePath, 'utf8'));
+  assert.equal(capture.id, id);
+  assert.equal(capture.env.CLAWNEX_LITELLM_API_KEY, undefined);
+  assert.equal(capture.env.CLAWNEX_ROUTING_IDENTITY, undefined);
+  assert.ok(!JSON.stringify(capture).includes(proxyKey));
+  if (capture.temp) assert.equal(fs.existsSync(path.dirname(capture.temp)), false);
+}
+
+const logged = fs.readFileSync(requests, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+const probes = logged.filter(request => request.url.endsWith('/probe'));
+assert.equal(probes.length, 5);
+for (const request of probes) {
+  assert.equal(request.headers.authorization, `Bearer ${proxyKey}`);
+  const token = request.headers['x-clawnex-routing-identity'];
+  assert.equal(typeof token, 'string');
+  const [payload, signature] = token.split('.');
+  assert.equal(signature, crypto.createHmac('sha256', secret).update(`clawnex-routing-v1:${payload}`).digest('base64url'));
+  const identity = JSON.parse(Buffer.from(payload, 'base64url').toString());
+  assert.ok(['codex', 'claude', 'opencode', 'pi', 'hermes'].includes(identity.connector));
+}
+
+const dryRun = spawnSync(path.join(root, 'clawnex'), ['run', 'codex', '--model', 'provider/model', '--dry-run'], { env: baseEnv, encoding: 'utf8' });
 assert.equal(dryRun.status, 0, dryRun.stderr);
+assert.match(dryRun.stdout, /Safety: normal harness approvals and sandbox/);
 assert.match(dryRun.stdout, /Config files changed: none/);
-assert.ok(!dryRun.stdout.includes('fixture-proxy-key') && !dryRun.stdout.includes(secret));
+assert.ok(!dryRun.stdout.includes(proxyKey) && !dryRun.stdout.includes(secret));
 
-const override = spawnSync(path.join(root, 'clawnex'), ['run', 'codex', '--model', 'provider/model', '--', '--profile', 'direct'], { env, encoding: 'utf8' });
-assert.equal(override.status, 2);
-assert.match(override.stderr, /can override the inspected route/);
-assert.equal(fs.existsSync(path.join(root, '.codex', 'config.toml')), false);
+for (const id of ['codex', 'claude', 'opencode', 'pi', 'hermes']) {
+  const unsafeFlag = id === 'claude' ? '--dangerously-skip-permissions' : '--yolo';
+  const rejected = spawnSync(path.join(root, 'clawnex'), ['run', id, '--model', 'provider/model', '--', unsafeFlag], { env: baseEnv, encoding: 'utf8' });
+  assert.equal(rejected.status, 2);
+  assert.match(rejected.stderr, /normal safety controls/);
+}
 
+server.kill('SIGTERM');
 fs.rmSync(root, { recursive: true, force: true });
-console.log('PASS: zero-write Codex launcher injects child-only proxy auth and signed routing identity');
+console.log('PASS: five-harness launcher matrix uses a signed secret-isolating session bridge and safe defaults');

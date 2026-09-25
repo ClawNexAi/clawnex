@@ -7,6 +7,7 @@ import path from 'node:path';
 const root = process.cwd();
 const routingPanel = fs.readFileSync(path.join(root, 'src/components/dashboard/panels/RoutingWorkflowPanel.tsx'), 'utf8');
 const configurationPanel = fs.readFileSync(path.join(root, 'src/components/dashboard/panels/ConfigurationPanel.tsx'), 'utf8');
+const sessionLauncher = fs.readFileSync(path.join(root, 'src/components/dashboard/panels/SessionLauncherPanel.tsx'), 'utf8');
 
 assert.match(routingPanel, /refreshToken\?: string;/, 'routing panel accepts a connector-registry refresh token');
 assert.match(routingPanel, /useEffect\([^\n]+\[refresh, refreshToken\]\);/,
@@ -17,5 +18,9 @@ assert.match(routingPanel, /if \(!sources\.length && summary\.status === 'ok'\) 
   'a registered connector remains selectable when its configuration has no routable provider rows');
 assert.match(routingPanel, /OpenCode is connected, but its global config has no explicit OpenAI-compatible provider endpoint\./,
   'empty OpenCode provider configuration receives an actionable prerequisite instead of add-instance guidance');
+assert.match(configurationPanel, /<SessionLauncherPanel[\s\S]+<RoutingWorkflowPanel[^>]+connectors=\{\['opencode'\]\}/,
+  'the shared coding-session launcher appears immediately after Fleet Connectors and before connector routing panels');
+assert.match(sessionLauncher, /flexWrap: 'wrap'/, 'launcher actions wrap together on narrow viewports');
+assert.match(sessionLauncher, /normal safety controls/, 'launcher displays its safe-default posture');
 
 console.log('PASS: connector changes refresh routing and empty OpenCode configuration stays visible with actionable guidance');

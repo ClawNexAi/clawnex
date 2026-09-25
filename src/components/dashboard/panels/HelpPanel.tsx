@@ -312,15 +312,15 @@ export function HelpPanel({ onNavigate }: { onNavigate: (tab: TabId) => void }) 
         </div>
       </CollapsibleCard>
 
-      <CollapsibleCard title="Launch an inspected Codex session" accent={C.cyan} defaultOpen={false} count={4}>
+      <CollapsibleCard title="Launch an inspected coding session" accent={C.cyan} defaultOpen={false} count={4}>
         <div style={{ fontSize: 13, color: C.txS, lineHeight: 1.7 }}>
           <ol style={{ margin: "0 0 10px", paddingLeft: 22 }}>
-            <li>Open <strong style={{ color: C.tx }}>Configuration → Fleet &amp; Routing → Codex Routing</strong>.</li>
-            <li>Under <strong style={{ color: C.tx }}>One-session launcher</strong>, choose a configured model and use <strong style={{ color: C.tx }}>Test model</strong> if verification is required.</li>
-            <li>Select <strong style={{ color: C.tx }}>Copy launch command</strong>, paste the command into a terminal, and start Codex.</li>
-            <li>Send a request, then use <strong style={{ color: C.tx }}>Verify connection</strong> or Traffic Monitor to confirm the <code style={{ color: C.cyan }}>codex:global</code> traffic.</li>
+            <li>Open <strong style={{ color: C.tx }}>Configuration → Fleet &amp; Routing → Coding Session Launcher</strong>.</li>
+            <li>Choose a configured model and use <strong style={{ color: C.tx }}>Test model</strong> if verification is required.</li>
+            <li>Choose an installed harness, select <strong style={{ color: C.tx }}>Copy launch command</strong>, and paste the command into a terminal.</li>
+            <li>Send a request, then use <strong style={{ color: C.tx }}>Traffic Monitor</strong> to confirm the exact Codex, Claude Code, OpenCode, Pi, or Hermes attribution.</li>
           </ol>
-          <p style={{ margin: 0, fontSize: 12, color: C.txT }}>The launcher changes no Codex configuration files or device login. It supplies the local LiteLLM provider, credential, and signed instance identity only to that Codex process. Profile and provider override flags are rejected because they could bypass inspection.</p>
+          <p style={{ margin: 0, fontSize: 12, color: C.txT }}>The launcher changes no normal harness configuration or device login. A short-lived localhost bridge supplies LiteLLM authentication and signed attribution without exposing secrets in the copied command, harness arguments, or temporary adapter files. Route overrides and permission-bypass flags are rejected.</p>
         </div>
       </CollapsibleCard>
 

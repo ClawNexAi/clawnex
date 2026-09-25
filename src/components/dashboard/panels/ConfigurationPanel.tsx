@@ -10,6 +10,7 @@ import type { TabId } from "../types";
 import { CORRELATION_STARTER_TEMPLATES } from "@/lib/correlation-templates";
 import { AuthDevicesCard } from "./AuthDevicesCard";
 import { RoutingWorkflowPanel } from "./RoutingWorkflowPanel";
+import { SessionLauncherPanel } from "./SessionLauncherPanel";
 import { NativeAgentFleetConnector } from './NativeAgentFleetConnector';
 import { AnythingLLMFleetConnector, AnythingLLMRoutingPanel } from './AnythingLLMRoutingPanel';
 import { AuthMethodsCard } from "./AuthMethodsCard";
@@ -5159,8 +5160,9 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
 
       {/* ── FLEET & ROUTING ──────────────────────────────────────────── */}
       <CategorySection title="FLEET & ROUTING" accent={C.cyan} storageKey="fleetRouting" focusCard={focusCard}
-        focusKeys={["openclawRouting", "hermesRouting", "opencodeRouting", "anythingllmRouting", "piRouting", "codexRouting", "claudeRouting"]}>
+        focusKeys={["sessionLauncher", "openclawRouting", "hermesRouting", "opencodeRouting", "anythingllmRouting", "piRouting", "codexRouting", "claudeRouting"]}>
         {fleetConnectorsCard}
+        <SessionLauncherPanel focusedCard={focusCard} refreshToken={codingAgentConnectorToken} />
         <RoutingWorkflowPanel focusedCard={focusCard} connectors={['opencode']} refreshToken={codingAgentConnectorToken} />
         <AnythingLLMRoutingPanel focusedCard={focusCard} />
         <RoutingWorkflowPanel focusedCard={focusCard} connectors={['pi', 'codex', 'claude']} refreshToken={codingAgentConnectorToken} />
