@@ -1429,38 +1429,18 @@ if [ -n "$PROVIDER_REG_NAME" ] && [ -f "$INSTALL_DIR/clawnex.db" -o -f "$INSTALL
 fi
 fi  # end CLAWNEX_NO_START gate (dashboard start → health → provider registration)
 
-# Offer to install ~/.local/bin/clawnex symlink so the operator can run
-# `clawnex start` from anywhere instead of `~/clawnex/clawnex start`.
-# Strictly user-local — no sudo, no system pollution. Skip if the dir
-# isn't in PATH (we'd be installing into a black hole).
-if [ -x "$INSTALL_DIR/clawnex" ] && ! command -v clawnex &>/dev/null; then
+# Install the user-local CLI entrypoint used by dashboard-generated commands.
+# Generated commands use the explicit $HOME/.local/bin/clawnex path, so this
+# works even when that directory is not on the operator's PATH.
+if [ -x "$INSTALL_DIR/clawnex" ]; then
     USER_BIN="$HOME/.local/bin"
-    case ":$PATH:" in
-        *":$USER_BIN:"*)
-            echo ""
-            echo -e "  ${DIM}clawnex CLI: a 'clawnex' command shortcut would let you run${NC}"
-            echo -e "  ${DIM}'clawnex start|stop|status' from anywhere instead of cd'ing here.${NC}"
-            _tty_read "  Install symlink at $USER_BIN/clawnex? (yes/no) [yes]: " INSTALL_SYMLINK
-            INSTALL_SYMLINK=${INSTALL_SYMLINK:-yes}
-            if is_yes "$INSTALL_SYMLINK"; then
-                mkdir -p "$USER_BIN"
-                if ln -sf "$INSTALL_DIR/clawnex" "$USER_BIN/clawnex"; then
-                    echo -e "  ${GREEN}✓${NC} Installed: $USER_BIN/clawnex → $INSTALL_DIR/clawnex"
-                else
-                    echo -e "  ${YELLOW}⚠${NC} Could not install CLI shortcut at $USER_BIN/clawnex"
-                    echo -e "    Run from this directory instead: $INSTALL_DIR/clawnex"
-                fi
-            else
-                echo -e "  ${DIM}Skipped — run via $INSTALL_DIR/clawnex instead.${NC}"
-            fi
-            ;;
-        *)
-            echo ""
-            echo -e "  ${DIM}Tip: $USER_BIN is not in your PATH. To enable 'clawnex' globally:${NC}"
-            echo -e "  ${DIM}  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc${NC}"
-            echo -e "  ${DIM}  ln -sf $INSTALL_DIR/clawnex \$HOME/.local/bin/clawnex${NC}"
-            ;;
-    esac
+    mkdir -p "$USER_BIN"
+    if ln -sf "$INSTALL_DIR/clawnex" "$USER_BIN/clawnex"; then
+        echo -e "  ${GREEN}✓${NC} Installed: $USER_BIN/clawnex → $INSTALL_DIR/clawnex"
+    else
+        echo -e "  ${YELLOW}⚠${NC} Could not install CLI shortcut at $USER_BIN/clawnex"
+        echo -e "    Run from this directory instead: $INSTALL_DIR/clawnex"
+    fi
 fi
 
 # CVE sync (after dashboard is running — deferred to orchestrator under --no-start)

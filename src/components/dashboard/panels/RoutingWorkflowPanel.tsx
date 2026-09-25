@@ -115,7 +115,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   const copyCodexLaunch = () => void run(async () => {
     if (!launchModelConfig?.ready) throw new Error('Test this model before copying its inspected launch command.');
     const quoted = `'${launchModelConfig.alias.replaceAll("'", `'"'"'`)}'`;
-    await navigator.clipboard.writeText(`clawnex run codex --model ${quoted}`);
+    await navigator.clipboard.writeText(`$HOME/.local/bin/clawnex run codex --model ${quoted}`);
     setMessage('Copied the inspected Codex launch command. Run it in a terminal to start one session through ClawNex.');
   });
 

@@ -560,6 +560,11 @@ if [ "${PRESERVE_CADDY:-0}" = "1" ]; then INSTALL_OPTIONS+=(--preserve-caddy); f
 echo "=== 7/8 chown + symlink data into standalone ==="
 sudo -A chown -R $USER:$USER "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR/logs"
+# Dashboard launch commands use this stable, user-local entrypoint. Production
+# deploys bypass setup.sh, so install it here as part of every deployment.
+mkdir -p "$HOME/.local/bin"
+ln -sf "$INSTALL_DIR/clawnex" "$HOME/.local/bin/clawnex"
+echo "  ✓ CLI installed: $HOME/.local/bin/clawnex → $INSTALL_DIR/clawnex"
 # Restore preserved operator DB (if any) BEFORE the symlinks so the
 # .next/standalone links point at the restored files, not freshly-empty ones.
 # The dashboard hasn't been restarted yet — it'll see the restored DB on first

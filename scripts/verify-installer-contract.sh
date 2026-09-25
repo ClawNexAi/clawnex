@@ -140,6 +140,9 @@ assert_grep deploy/lib-macos.sh 'CLAWNEX_LITELLM_CONFIG="\$INSTALL_DIR/litellm/c
 assert_grep deploy/lib-macos.sh 'CLAWNEX_LOG_DIR="\$INSTALL_DIR/logs"' "macOS dashboard writes structured logs outside standalone artifact"
 assert_grep deploy/install-prod.sh 'Environment=CLAWNEX_LOG_DIR=\$\{INSTALL_DIR\}/logs' "Public VPS dashboard writes structured logs outside standalone artifact"
 assert_grep clawnex 'CLAWNEX_LOG_DIR="\$INSTALL_DIR/logs"' "CLI dashboard launcher writes structured logs outside standalone artifact"
+assert_grep setup.sh 'ln -sf "\$INSTALL_DIR/clawnex" "\$USER_BIN/clawnex"' "setup installs the dashboard command CLI entrypoint"
+assert_grep scripts/deploy-prod.sh 'ln -sf "\$INSTALL_DIR/clawnex" "\$HOME/\.local/bin/clawnex"' "production deploy installs the dashboard command CLI entrypoint"
+assert_grep src/components/dashboard/panels/RoutingWorkflowPanel.tsx '\$HOME/\.local/bin/clawnex run codex' "Codex launcher copies the stable installed CLI path"
 
 echo "[4] uninstall parity"
 assert_grep scripts/uninstall.sh 'io\.clawnex\.litellm\.plist' "uninstall removes litellm plist"
