@@ -18,9 +18,8 @@
 #     [--dry-run]               # print plan, don't execute
 #     [--no-deep-clean]         # skip cleanup of clawkeeper / unit / cron / Caddyfile
 #     [--preserve-data]         # tar clawnex.db* before wipe, restore after install
-#                               # (default: ON when --domain matches
-#                               #  $CLAWNEX_QA_DOMAIN, OFF otherwise)
-#     [--no-preserve-data]      # force-disable preservation even on QA hosts
+#                               # (default: ON for every deployment)
+#     [--no-preserve-data]      # explicitly request a clean, destructive install
 #     [--preserve-caddy]        # validate and retain existing Caddy config/service
 #     [--help]
 #
@@ -50,7 +49,7 @@
 #     - The `openclaw` binary at $HOME/.npm-global/bin/openclaw
 #     - LiteLLM Python install (process killed via port 4001, package preserved)
 #
-#   Optional data preservation (--preserve-data, default ON when --domain matches $CLAWNEX_QA_DOMAIN):
+#   Data preservation (default ON; disable only with --no-preserve-data):
 #     Tar clawnex.db + clawnex.db-wal + clawnex.db-shm to /tmp before the wipe;
 #     restore them after install but before the dashboard service restart.
 #     Operator accounts, sessions, configs, accepted-risk records, and the
@@ -74,13 +73,12 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOST=""
 DOMAIN=""
 VERSION=""
-CLAWNEX_QA_DOMAIN="${CLAWNEX_QA_DOMAIN:-}"
 SUDO_PASS_MODE="prompt"        # prompt | stdin | env
 SUDO_PASS_ENV_VAR=""
 DRY_RUN=0
 DEEP_CLEAN=1
 PRESERVE_CADDY=0
-# PRESERVE_DATA: -1 = unset (decide from domain), 0 = forced off, 1 = forced on
+# PRESERVE_DATA: -1 = unset (safe default ON), 0 = explicit wipe, 1 = preserve
 PRESERVE_DATA=-1
 
 print_help() {
@@ -141,16 +139,10 @@ if ! [[ "$DOMAIN" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]]; then
   die "invalid --domain: $DOMAIN (must be letters/digits/dots/hyphens; cannot start or end with hyphen/dot)"
 fi
 
-# Resolve PRESERVE_DATA default: ON only when the target matches an operator-supplied
-# QA domain. operator flagged 2026-05-07: clean wipe on every redeploy was nuking
-# the operator DB, forcing re-onboarding each time. Internal QA hosts need
-# persistent state; demo host/test host/etc. can be explicit when they want it.
+# Preserve operator state unless the caller explicitly requests a clean install.
+# A deployment typo or missing environment variable must never imply data loss.
 if [ "$PRESERVE_DATA" = "-1" ]; then
-  if [ -n "$CLAWNEX_QA_DOMAIN" ] && [ "$DOMAIN" = "$CLAWNEX_QA_DOMAIN" ]; then
-    PRESERVE_DATA=1
-  else
-    PRESERVE_DATA=0
-  fi
+  PRESERVE_DATA=1
 fi
 
 # Resolve VERSION from package.json if not given (same regex package.sh uses

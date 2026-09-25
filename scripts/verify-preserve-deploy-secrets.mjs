@@ -4,6 +4,11 @@ import { readFileSync } from 'node:fs';
 
 const source = readFileSync(new URL('./deploy-prod.sh', import.meta.url), 'utf8');
 
+assert.match(source, /if \[ "\$PRESERVE_DATA" = "-1" \]; then\s+PRESERVE_DATA=1\s+fi/,
+  'deployments preserve operator data by default');
+assert.match(source, /--no-preserve-data\) PRESERVE_DATA=0/,
+  'a clean install requires the explicit destructive flag');
+
 for (const [envName, preservedName] of [
   ['SESSION_SECRET', 'PRESERVED_SESSION_SECRET'],
   ['EVIDENCE_ENCRYPTION_KEY', 'PRESERVED_EVIDENCE_ENCRYPTION_KEY'],
