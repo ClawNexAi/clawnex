@@ -24,6 +24,7 @@ const server=http.createServer((req,res)=>{let body='';req.on('data',c=>body+=c)
  fs.appendFileSync(out,JSON.stringify({url:req.url,headers:req.headers,body})+'\\n');
  res.setHeader('content-type','application/json');
  if(req.url==='/model/info') res.end(JSON.stringify({data:[{model_name:'provider/model'}]}));
+ else if(req.url.startsWith('/v1/messages')) res.end(JSON.stringify({id:'msg-fixture',type:'message',role:'assistant',model:'provider/model',stop_reason:'end_turn',stop_sequence:null,content:[{type:'text',text:'Fixture OK'}],usage:{input_tokens:3,output_tokens:2}}));
  else res.end(JSON.stringify({ok:true}));
 });});
 server.listen(0,'127.0.0.1',()=>fs.writeFileSync(portFile,String(server.address().port)));
@@ -45,12 +46,14 @@ if(id==='claude')base=process.env.ANTHROPIC_BASE_URL+'/v1';
 if(id==='opencode')base=JSON.parse(process.env.OPENCODE_CONFIG_CONTENT).provider.clawnex.options.baseURL;
 if(id==='pi'){temp=process.env.PI_CODING_AGENT_DIR;const c=JSON.parse(fs.readFileSync(path.join(temp,'models.json'),'utf8'));base=c.providers.clawnex.baseUrl;}
 if(id==='hermes'){temp=process.env.HERMES_HOME;const raw=fs.readFileSync(path.join(temp,'config.yaml'),'utf8');base=JSON.parse(raw.match(/base_url: (.+)/)[1]);}
-fetch(base+'/probe',{headers:{authorization:'Bearer clawnex-local-session'}}).then(()=>{
+const target=id==='claude'?base+'/messages':base+'/probe';
+const init=id==='claude'?{method:'POST',headers:{authorization:'Bearer clawnex-local-session','content-type':'application/json'},body:JSON.stringify({model:process.env.ANTHROPIC_MODEL,max_tokens:32,stream:true,messages:[{role:'user',content:'Fixture'}]})}:{headers:{authorization:'Bearer clawnex-local-session'}};
+fetch(target,init).then(async response=>{const responseText=await response.text();if(id==='claude'&&!responseText.includes('event: message_stop'))throw new Error('Claude did not receive a complete Messages stream');
  const capture={id,args:process.argv.slice(2),base,temp,env:{
   OPENAI_API_KEY:process.env.OPENAI_API_KEY,ANTHROPIC_AUTH_TOKEN:process.env.ANTHROPIC_AUTH_TOKEN,
   OPENCODE_CONFIG_CONTENT:process.env.OPENCODE_CONFIG_CONTENT,PI_CODING_AGENT_DIR:process.env.PI_CODING_AGENT_DIR,HERMES_HOME:process.env.HERMES_HOME,
   CLAWNEX_LITELLM_API_KEY:process.env.CLAWNEX_LITELLM_API_KEY,CLAWNEX_ROUTING_IDENTITY:process.env.CLAWNEX_ROUTING_IDENTITY,
- }};fs.writeFileSync(process.env.CAPTURE,JSON.stringify(capture));
+ },responseText};fs.writeFileSync(process.env.CAPTURE,JSON.stringify(capture));
 }).catch(e=>{console.error(e);process.exitCode=1});
 `;
 for (const id of ['codex', 'claude', 'opencode', 'pi', 'hermes']) fs.writeFileSync(path.join(bin, id), harnessSource, { mode: 0o755 });
@@ -78,7 +81,7 @@ for (const id of ['codex', 'claude', 'opencode', 'pi', 'hermes']) {
 }
 
 const logged = fs.readFileSync(requests, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-const probes = logged.filter(request => request.url.endsWith('/probe'));
+const probes = logged.filter(request => request.url.endsWith('/probe') || request.url.startsWith('/v1/messages'));
 assert.equal(probes.length, 5);
 for (const request of probes) {
   assert.equal(request.headers.authorization, `Bearer ${proxyKey}`);
@@ -89,6 +92,8 @@ for (const request of probes) {
   const identity = JSON.parse(Buffer.from(payload, 'base64url').toString());
   assert.ok(['codex', 'claude', 'opencode', 'pi', 'hermes'].includes(identity.connector));
 }
+const messagesRequest = probes.find(request => request.url.startsWith('/v1/messages'));
+assert.equal(JSON.parse(messagesRequest.body).stream, false, 'Claude Messages must traverse LiteLLM non-streaming so callbacks run');
 
 const dryRun = spawnSync(path.join(root, 'clawnex'), ['run', 'codex', '--model', 'provider/model', '--dry-run'], { env: baseEnv, encoding: 'utf8' });
 assert.equal(dryRun.status, 0, dryRun.stderr);

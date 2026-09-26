@@ -115,7 +115,33 @@ async function assertModelLoaded(model, proxyKey, proxyPort) {
   if (matches.length !== 1) fail(`Model alias '${model}' is not uniquely loaded in LiteLLM`);
 }
 
-function startBridge({ proxyKey, proxyPort, identity }) {
+function anthropicSse(message) {
+  const events = [];
+  const emit = (event, data) => events.push(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  const content = Array.isArray(message.content) ? message.content : [];
+  emit('message_start', { type: 'message_start', message: { ...message, content: [], stop_reason: null, stop_sequence: null,
+    usage: { ...(message.usage || {}), output_tokens: 0 } } });
+  content.forEach((block, index) => {
+    if (block?.type === 'tool_use') {
+      emit('content_block_start', { type: 'content_block_start', index, content_block: { type: 'tool_use', id: block.id, name: block.name, input: {} } });
+      emit('content_block_delta', { type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: JSON.stringify(block.input || {}) } });
+    } else if (block?.type === 'thinking') {
+      emit('content_block_start', { type: 'content_block_start', index, content_block: { type: 'thinking', thinking: '' } });
+      emit('content_block_delta', { type: 'content_block_delta', index, delta: { type: 'thinking_delta', thinking: block.thinking || '' } });
+      if (block.signature) emit('content_block_delta', { type: 'content_block_delta', index, delta: { type: 'signature_delta', signature: block.signature } });
+    } else {
+      emit('content_block_start', { type: 'content_block_start', index, content_block: { type: 'text', text: '' } });
+      emit('content_block_delta', { type: 'content_block_delta', index, delta: { type: 'text_delta', text: block?.text || '' } });
+    }
+    emit('content_block_stop', { type: 'content_block_stop', index });
+  });
+  emit('message_delta', { type: 'message_delta', delta: { stop_reason: message.stop_reason || 'end_turn', stop_sequence: message.stop_sequence || null },
+    usage: { output_tokens: message.usage?.output_tokens || 0 } });
+  emit('message_stop', { type: 'message_stop' });
+  return events.join('');
+}
+
+function startBridge({ proxyKey, proxyPort, identity, harnessId }) {
   const blocked = new Set(['connection', 'proxy-connection', 'keep-alive', 'transfer-encoding', 'upgrade', 'host', 'authorization', 'x-clawnex-routing-identity']);
   const server = http.createServer((request, response) => {
     const headers = {};
@@ -123,15 +149,68 @@ function startBridge({ proxyKey, proxyPort, identity }) {
     headers.authorization = `Bearer ${proxyKey}`;
     headers['x-clawnex-routing-identity'] = identity;
     headers.host = `127.0.0.1:${proxyPort}`;
-    const upstream = http.request({ host: '127.0.0.1', port: proxyPort, method: request.method, path: request.url, headers }, upstreamResponse => {
-      response.writeHead(upstreamResponse.statusCode || 502, upstreamResponse.headers);
-      upstreamResponse.pipe(response);
+    const forward = (body, messagesStream = false) => {
+      if (body) headers['content-length'] = String(body.length);
+      const upstream = http.request({ host: '127.0.0.1', port: proxyPort, method: request.method, path: request.url, headers }, upstreamResponse => {
+        if (!messagesStream || (upstreamResponse.statusCode || 500) >= 300) {
+          response.writeHead(upstreamResponse.statusCode || 502, upstreamResponse.headers);
+          upstreamResponse.pipe(response);
+          return;
+        }
+        const chunks = [];
+        let size = 0;
+        upstreamResponse.on('data', chunk => {
+          size += chunk.length;
+          if (size <= 8 * 1024 * 1024) chunks.push(chunk);
+        });
+        upstreamResponse.on('end', () => {
+          try {
+            if (size > 8 * 1024 * 1024) throw new Error('Messages response exceeded 8 MiB');
+            const message = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            response.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache' });
+            response.end(anthropicSse(message));
+          } catch (error) {
+            response.writeHead(502, { 'content-type': 'application/json' });
+            response.end(JSON.stringify({ error: { message: `ClawNex could not adapt the Messages response: ${error.message}` } }));
+          }
+        });
+      });
+      upstream.on('error', error => {
+        if (!response.headersSent) response.writeHead(502, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: { message: `ClawNex session bridge could not reach LiteLLM: ${error.message}` } }));
+      });
+      if (body) upstream.end(body);
+      else request.pipe(upstream);
+    };
+    if (harnessId !== 'claude' || request.method !== 'POST' || !request.url?.startsWith('/v1/messages')) {
+      forward(null);
+      return;
+    }
+    const chunks = [];
+    let size = 0;
+    request.on('data', chunk => {
+      size += chunk.length;
+      if (size <= 8 * 1024 * 1024) chunks.push(chunk);
     });
-    upstream.on('error', error => {
-      if (!response.headersSent) response.writeHead(502, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ error: { message: `ClawNex session bridge could not reach LiteLLM: ${error.message}` } }));
+    request.on('end', () => {
+      if (size > 8 * 1024 * 1024) {
+        response.writeHead(413, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: { message: 'Messages request exceeded 8 MiB' } }));
+        return;
+      }
+      const raw = Buffer.concat(chunks);
+      try {
+        const body = JSON.parse(raw.toString('utf8'));
+        if (body.stream !== true) {
+          forward(raw);
+          return;
+        }
+        body.stream = false;
+        forward(Buffer.from(JSON.stringify(body)), true);
+      } catch {
+        forward(raw);
+      }
     });
-    request.pipe(upstream);
   });
   return new Promise((resolve, reject) => {
     server.once('error', reject);
@@ -210,7 +289,7 @@ async function main() {
     return;
   }
   const identity = routingIdentity(ingestSecret, harnessId, harness.sourceId);
-  const { server, port } = await startBridge({ proxyKey, proxyPort, identity });
+  const { server, port } = await startBridge({ proxyKey, proxyPort, identity, harnessId });
   let plan;
   let child;
   const stop = signal => { if (child && !child.killed) child.kill(signal); };
