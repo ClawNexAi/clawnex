@@ -82,6 +82,16 @@ _health() {
         | grep -o '"status":"ok"' || true
 }
 
+_node_bin() {
+    local found
+    found="$(command -v node 2>/dev/null || true)"
+    if [ -n "$found" ]; then printf '%s\n' "$found"; return 0; fi
+    for found in /opt/homebrew/bin/node /usr/local/bin/node /usr/bin/node "$HOME/.local/bin/node"; do
+        if [ -x "$found" ]; then printf '%s\n' "$found"; return 0; fi
+    done
+    return 1
+}
+
 # ---- Commands ----------------------------------------------------------------
 _wait_for_port() {
     # _wait_for_port <port> <pid> [max_seconds=30]
@@ -315,7 +325,11 @@ cmd_run() {
     local target="${1:-}"
     [ -n "$target" ] && shift
     case "$target" in
-        codex|claude|opencode|pi|hermes) exec node "$INSTALL_DIR/scripts/clawnex-session-launcher.cjs" "$target" "$@" ;;
+        codex|claude|opencode|pi|hermes)
+            local node_bin
+            node_bin="$(_node_bin)" || { echo -e "  ${RED}✗${NC} Node.js was not found in the shell or standard macOS/Linux install paths" >&2; return 1; }
+            exec "$node_bin" "$INSTALL_DIR/scripts/clawnex-session-launcher.cjs" "$target" "$@"
+            ;;
         *) echo -e "  ${RED}✗${NC} Usage: clawnex run <codex|claude|opencode|pi|hermes> --model <alias> [-- harness arguments]" >&2; return 2 ;;
     esac
 }
@@ -324,7 +338,11 @@ cmd_launcher() {
     local target="${1:-}"
     [ -n "$target" ] && shift
     case "$target" in
-        snapshot) exec node "$INSTALL_DIR/scripts/clawnex-session-launcher.cjs" snapshot "$@" ;;
+        snapshot)
+            local node_bin
+            node_bin="$(_node_bin)" || { echo -e "  ${RED}✗${NC} Node.js was not found in the shell or standard macOS/Linux install paths" >&2; return 1; }
+            exec "$node_bin" "$INSTALL_DIR/scripts/clawnex-session-launcher.cjs" snapshot "$@"
+            ;;
         *) echo -e "  ${RED}✗${NC} Usage: clawnex launcher snapshot --json" >&2; return 2 ;;
     esac
 }

@@ -9,6 +9,12 @@ const cli = fs.readFileSync(new URL('../scripts/clawnex-session-launcher.cjs', i
 assert.match(core, /\["launcher", "snapshot", "--json"\]/, 'native client consumes the versioned CLI snapshot');
 assert.ok(core.includes('run \\(shellQuote(harness)) --model \\(shellQuote(model))'), 'native client delegates launch to clawnex run');
 assert.match(core, /shellQuote\(directory\)/, 'working directory is shell quoted');
+assert.match(core, /\/opt\/homebrew\/bin/, 'GUI process adds the standard Apple Silicon package path');
+assert.ok(core.includes('PATH=\\(shellQuote(pathValue))'), 'terminal command receives the deterministic executable path');
+assert.match(core, /\/usr\/bin\/ssh/, 'portable launcher supports a remote ClawNex target over SSH');
+assert.match(core, /BatchMode=yes/, 'remote inventory never prompts the menu-bar process for credentials');
+assert.match(core, /validRemoteHost/, 'remote target is validated before entering an SSH command');
+assert.ok(app.includes('Remote over SSH'), 'menu-bar shell exposes the remote target mode');
 assert.doesNotMatch(core + app, /LITELLM_MASTER_KEY|CLAWNEX_INGEST_SECRET|x-clawnex-routing-identity/i, 'native app contains no secret contract');
 assert.match(app, /MenuBarExtra\("ClawNex Launcher"/, 'app is a macOS menu-bar utility');
 for (const field of ['MODEL', 'SESSION OPENS IN', 'CODING HARNESSES']) assert.ok(app.includes(field), `app renders ${field}`);
