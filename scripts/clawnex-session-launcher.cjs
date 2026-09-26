@@ -115,6 +115,42 @@ async function assertModelLoaded(model, proxyKey, proxyPort) {
   if (matches.length !== 1) fail(`Model alias '${model}' is not uniquely loaded in LiteLLM`);
 }
 
+async function readLoadedModels(proxyKey, proxyPort) {
+  let response;
+  try {
+    response = await fetch(`http://127.0.0.1:${proxyPort}/model/info`, {
+      headers: { authorization: `Bearer ${proxyKey}` }, signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    fail(`LiteLLM is not reachable on 127.0.0.1:${proxyPort}`);
+  }
+  if (!response.ok) fail(`LiteLLM model inventory returned HTTP ${response.status}`);
+  let body;
+  try { body = await response.json(); } catch { fail('LiteLLM returned an invalid model inventory'); }
+  const aliases = Array.isArray(body?.data)
+    ? body.data.map(row => row?.model_name).filter(value => typeof value === 'string' && value.trim())
+    : [];
+  return [...new Set(aliases)].sort((left, right) => left.localeCompare(right));
+}
+
+async function printSnapshot(argv) {
+  if (argv.length !== 1 || argv[0] !== '--json') fail('Usage: clawnex launcher snapshot --json', 2);
+  const { proxyKey, proxyPort } = readEnvironment();
+  const models = await readLoadedModels(proxyKey, proxyPort);
+  const payload = {
+    schemaVersion: 1,
+    product: 'ClawNex',
+    models: models.map(id => ({ id, name: id })),
+    harnesses: Object.entries(harnesses).map(([id, harness]) => ({
+      id,
+      label: harness.label,
+      protocol: harness.protocol,
+      installed: Boolean(findBinary(harness.bin)),
+    })),
+  };
+  process.stdout.write(`${JSON.stringify(payload)}\n`);
+}
+
 function anthropicSse(message) {
   const events = [];
   const emit = (event, data) => events.push(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -291,7 +327,12 @@ function buildPlan(harnessId, model, bridgePort, binary, extraArgs) {
 }
 
 async function main() {
-  const { harnessId, harness, model, dryRun, extraArgs } = parseArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv[0] === 'snapshot') {
+    await printSnapshot(argv.slice(1));
+    return;
+  }
+  const { harnessId, harness, model, dryRun, extraArgs } = parseArgs(argv);
   const { proxyKey, ingestSecret, proxyPort } = readEnvironment();
   const binary = findBinary(harness.bin);
   if (!binary) fail(`${harness.label} is not installed or is not in a supported executable directory`);

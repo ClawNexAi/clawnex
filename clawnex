@@ -10,6 +10,8 @@
 #   logs [which]           Tail a log file (default: dashboard)
 #                          which: dashboard | litellm | watchdog
 #   run HARNESS --model ID Launch one inspected coding-harness session
+#   launcher snapshot --json
+#                          Print sanitized launcher state for companion UIs
 #   setup                  Re-run setup.sh (overwrites .env.local — see prompt)
 #   uninstall              Run scripts/uninstall.sh against this install
 #   version                Print ClawNex version
@@ -318,6 +320,15 @@ cmd_run() {
     esac
 }
 
+cmd_launcher() {
+    local target="${1:-}"
+    [ -n "$target" ] && shift
+    case "$target" in
+        snapshot) exec node "$INSTALL_DIR/scripts/clawnex-session-launcher.cjs" snapshot "$@" ;;
+        *) echo -e "  ${RED}✗${NC} Usage: clawnex launcher snapshot --json" >&2; return 2 ;;
+    esac
+}
+
 cmd_help() {
     cat <<EOF
 ${BOLD}clawnex${NC} — ClawNex service management CLI
@@ -331,6 +342,8 @@ ${BOLD}Commands:${NC}
   status             Show running services, ports, health
   logs [name]        Tail a log file (dashboard | litellm | watchdog)
   run HARNESS --model  Launch one coding session through ClawNex without changing normal config
+  launcher snapshot --json
+                     Print secret-free model and harness state for companion apps
   setup              Re-run setup.sh (will prompt before touching .env.local)
   uninstall          Remove this ClawNex install
   version            Print ClawNex version
@@ -348,6 +361,7 @@ case "${1:-help}" in
     status)    shift; cmd_status "$@" ;;
     logs)      shift; cmd_logs "$@" ;;
     run)       shift; cmd_run "$@" ;;
+    launcher)  shift; cmd_launcher "$@" ;;
     setup)     shift; cmd_setup "$@" ;;
     uninstall) shift; cmd_uninstall "$@" ;;
     version|-v|--version) cmd_version ;;

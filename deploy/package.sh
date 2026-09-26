@@ -140,6 +140,18 @@ if [ -d "$INSTALL_DIR/scripts" ]; then
     echo -e "  ${GREEN}✓${NC} scripts/"
 fi
 
+# Native companion shells ship as source and build scripts. Generated SwiftPM
+# output and packaged .app bundles are host artifacts and never enter the
+# deployment tarball.
+if [ -d "$INSTALL_DIR/apps" ]; then
+    rsync -a \
+        --exclude='.build/' \
+        --exclude='.swiftpm/' \
+        --exclude='.DS_Store' \
+        "$INSTALL_DIR/apps/" "$BUNDLE_DIR/apps/"
+    echo -e "  ${GREEN}✓${NC} apps/ (native companion sources)"
+fi
+
 if [ -d "$INSTALL_DIR/third_party" ]; then
     rsync -a \
         --exclude='.DS_Store' \

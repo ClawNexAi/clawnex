@@ -158,6 +158,7 @@ if [ -f deploy/package.sh ]; then
     assert_grep deploy/package.sh 'lib-linux-local\.sh' "tarball ships lib-linux-local.sh"
     assert_grep deploy/package.sh 'lib-macos\.sh' "tarball ships lib-macos.sh"
     assert_grep deploy/package.sh 'third_party/' "tarball ships bundled third-party scanner files"
+    assert_grep deploy/package.sh 'apps/' "tarball ships native companion sources"
     assert_grep deploy/package.sh 'NOTICE' "tarball ships third-party NOTICE"
 else
     [ -f deploy/lib-linux-local.sh ] && pass "packaged runtime includes lib-linux-local.sh" || fail "packaged runtime includes lib-linux-local.sh"

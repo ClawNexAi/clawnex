@@ -41,6 +41,7 @@
     "verify:coding-agent-connectors": "tsx scripts/verify-coding-agent-connectors.ts",
     "verify:coding-agent-routing-visibility": "tsx scripts/verify-coding-agent-routing-visibility.ts",
     "verify:codex-session-launcher": "node scripts/verify-codex-session-launcher.mjs",
+    "verify:macos-launcher": "node scripts/verify-macos-launcher.mjs",
     "verify:opencode-routing": "tsx scripts/verify-opencode-routing.ts",
     "verify:routing-provider-label": "tsx scripts/verify-routing-provider-label.tsx",
     "verify:hermes-routing-credentials": "tsx scripts/verify-hermes-routing-credentials.ts",

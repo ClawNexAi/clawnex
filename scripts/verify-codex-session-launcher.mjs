@@ -105,6 +105,15 @@ assert.match(dryRun.stdout, /Safety: normal harness approvals and sandbox/);
 assert.match(dryRun.stdout, /Config files changed: none/);
 assert.ok(!dryRun.stdout.includes(proxyKey) && !dryRun.stdout.includes(secret));
 
+const snapshotRun = spawnSync(path.join(root, 'clawnex'), ['launcher', 'snapshot', '--json'], { env: baseEnv, encoding: 'utf8' });
+assert.equal(snapshotRun.status, 0, snapshotRun.stderr);
+const snapshot = JSON.parse(snapshotRun.stdout);
+assert.equal(snapshot.schemaVersion, 1);
+assert.deepEqual(snapshot.models, [{ id: 'provider/model', name: 'provider/model' }]);
+assert.deepEqual(snapshot.harnesses.map(item => item.id), ['codex', 'claude', 'opencode', 'pi', 'hermes']);
+assert.ok(snapshot.harnesses.every(item => item.installed));
+assert.ok(!snapshotRun.stdout.includes(proxyKey) && !snapshotRun.stdout.includes(secret));
+
 for (const id of ['codex', 'claude', 'opencode', 'pi', 'hermes']) {
   const unsafeFlag = id === 'claude' ? '--dangerously-skip-permissions' : '--yolo';
   const rejected = spawnSync(path.join(root, 'clawnex'), ['run', id, '--model', 'provider/model', '--', unsafeFlag], { env: baseEnv, encoding: 'utf8' });
