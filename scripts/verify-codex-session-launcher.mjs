@@ -40,9 +40,9 @@ fs.writeFileSync(path.join(root, '.env.local'), `LITELLM_PORT=${port}\nLITELLM_M
 
 const harnessSource = `#!/usr/bin/env node
 const fs=require('fs'),path=require('path');
-const id=path.basename(process.argv[1]); let base='', temp='';
+const id=path.basename(process.argv[1]); let base='', temp='', settings;
 if(id==='codex'){const hit=process.argv.find(x=>x.startsWith('model_providers.clawnex.base_url='));base=JSON.parse(hit.split('=').slice(1).join('='));}
-if(id==='claude')base=process.env.ANTHROPIC_BASE_URL+'/v1';
+if(id==='claude'){const i=process.argv.indexOf('--settings');temp=process.argv[i+1];settings=JSON.parse(fs.readFileSync(temp,'utf8'));base=settings.env.ANTHROPIC_BASE_URL+'/v1';}
 if(id==='opencode')base=JSON.parse(process.env.OPENCODE_CONFIG_CONTENT).provider.clawnex.options.baseURL;
 if(id==='pi'){temp=process.env.PI_CODING_AGENT_DIR;const c=JSON.parse(fs.readFileSync(path.join(temp,'models.json'),'utf8'));base=c.providers.clawnex.baseUrl;}
 if(id==='hermes'){temp=process.env.HERMES_HOME;const raw=fs.readFileSync(path.join(temp,'config.yaml'),'utf8');base=JSON.parse(raw.match(/base_url: (.+)/)[1]);}
@@ -50,10 +50,10 @@ const target=id==='claude'?base+'/messages':base+'/probe';
 const init=id==='claude'?{method:'POST',headers:{authorization:'Bearer clawnex-local-session','content-type':'application/json'},body:JSON.stringify({model:process.env.ANTHROPIC_MODEL,max_tokens:32,stream:true,messages:[{role:'user',content:'Fixture'}]})}:{headers:{authorization:'Bearer clawnex-local-session'}};
 fetch(target,init).then(async response=>{const responseText=await response.text();if(id==='claude'&&!responseText.includes('event: message_stop'))throw new Error('Claude did not receive a complete Messages stream');
  const capture={id,args:process.argv.slice(2),base,temp,env:{
-  OPENAI_API_KEY:process.env.OPENAI_API_KEY,ANTHROPIC_AUTH_TOKEN:process.env.ANTHROPIC_AUTH_TOKEN,
+  OPENAI_API_KEY:process.env.OPENAI_API_KEY,ANTHROPIC_API_KEY:process.env.ANTHROPIC_API_KEY,ANTHROPIC_AUTH_TOKEN:process.env.ANTHROPIC_AUTH_TOKEN,
   OPENCODE_CONFIG_CONTENT:process.env.OPENCODE_CONFIG_CONTENT,PI_CODING_AGENT_DIR:process.env.PI_CODING_AGENT_DIR,HERMES_HOME:process.env.HERMES_HOME,
   CLAWNEX_LITELLM_API_KEY:process.env.CLAWNEX_LITELLM_API_KEY,CLAWNEX_ROUTING_IDENTITY:process.env.CLAWNEX_ROUTING_IDENTITY,
- },responseText};fs.writeFileSync(process.env.CAPTURE,JSON.stringify(capture));
+ },settings,responseText};fs.writeFileSync(process.env.CAPTURE,JSON.stringify(capture));
 }).catch(e=>{console.error(e);process.exitCode=1});
 `;
 for (const id of ['codex', 'claude', 'opencode', 'pi', 'hermes']) fs.writeFileSync(path.join(bin, id), harnessSource, { mode: 0o755 });
@@ -72,6 +72,10 @@ for (const id of ['codex', 'claude', 'opencode', 'pi', 'hermes']) {
   assert.equal(capture.env.CLAWNEX_LITELLM_API_KEY, undefined);
   assert.equal(capture.env.CLAWNEX_ROUTING_IDENTITY, undefined);
   assert.ok(!JSON.stringify(capture).includes(proxyKey));
+  if (id === 'claude') {
+    assert.equal(capture.env.ANTHROPIC_API_KEY, 'clawnex-local-session');
+    assert.equal(capture.settings.env.ANTHROPIC_API_KEY, 'clawnex-local-session');
+  }
   if (id === 'opencode') {
     assert.equal(JSON.parse(capture.env.OPENCODE_CONFIG_CONTENT).model, 'clawnex/provider/model');
     assert.ok(capture.args.includes('--standalone'), 'OpenCode must not reuse a background server with stale configuration');

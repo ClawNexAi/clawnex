@@ -46,7 +46,7 @@ function parseArgs(argv) {
   if (/[\r\n]/.test(model)) fail('Model aliases cannot contain line breaks', 2);
   const forbidden = new Set([
     '--config', '--profile', '-m', '--model', '--model-provider', '--model_provider',
-    '--provider', '--api-key', '--dangerously-bypass-approvals-and-sandbox',
+    '--provider', '--api-key', '--settings', '--setting-sources', '--dangerously-bypass-approvals-and-sandbox',
     '--dangerously-skip-permissions', '--yolo', '--full-auto',
   ]);
   if (harnessId === 'codex') {
@@ -142,8 +142,10 @@ function anthropicSse(message) {
 }
 
 function startBridge({ proxyKey, proxyPort, identity, harnessId }) {
-  const blocked = new Set(['connection', 'proxy-connection', 'keep-alive', 'transfer-encoding', 'upgrade', 'host', 'authorization', 'x-clawnex-routing-identity']);
+  const blocked = new Set(['connection', 'proxy-connection', 'keep-alive', 'transfer-encoding', 'upgrade', 'host', 'authorization', 'x-api-key', 'x-clawnex-routing-identity']);
+  const stats = { requests: 0 };
   const server = http.createServer((request, response) => {
+    stats.requests += 1;
     const headers = {};
     for (const [name, value] of Object.entries(request.headers)) if (!blocked.has(name.toLowerCase()) && value !== undefined) headers[name] = value;
     headers.authorization = `Bearer ${proxyKey}`;
@@ -214,7 +216,7 @@ function startBridge({ proxyKey, proxyPort, identity, harnessId }) {
   });
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
+    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port, stats }));
   });
 }
 
@@ -240,12 +242,22 @@ function buildPlan(harnessId, model, bridgePort, binary, extraArgs) {
       '-c', 'model_providers.clawnex.supports_websockets=false', '--model', model,
     ];
   } else if (harnessId === 'claude') {
+    const claudeSettings = path.join(tempDir, 'claude-settings.json');
     Object.assign(env, {
-      ANTHROPIC_BASE_URL: root, ANTHROPIC_AUTH_TOKEN: 'clawnex-local-session', ANTHROPIC_MODEL: model,
+      ANTHROPIC_BASE_URL: root, ANTHROPIC_AUTH_TOKEN: 'clawnex-local-session', ANTHROPIC_API_KEY: 'clawnex-local-session', ANTHROPIC_MODEL: model,
       ANTHROPIC_DEFAULT_SONNET_MODEL: model, ANTHROPIC_DEFAULT_OPUS_MODEL: model, ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
       CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: '1',
     });
-    args = ['--model', model];
+    privateFile(claudeSettings, `${JSON.stringify({ env: {
+      ANTHROPIC_BASE_URL: root,
+      ANTHROPIC_AUTH_TOKEN: 'clawnex-local-session',
+      ANTHROPIC_API_KEY: 'clawnex-local-session',
+      ANTHROPIC_MODEL: model,
+      ANTHROPIC_DEFAULT_SONNET_MODEL: model,
+      ANTHROPIC_DEFAULT_OPUS_MODEL: model,
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
+    } }, null, 2)}\n`);
+    args = ['--settings', claudeSettings, '--model', model];
   } else if (harnessId === 'opencode') {
     env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
       $schema: 'https://opencode.ai/config.json',
@@ -289,7 +301,7 @@ async function main() {
     return;
   }
   const identity = routingIdentity(ingestSecret, harnessId, harness.sourceId);
-  const { server, port } = await startBridge({ proxyKey, proxyPort, identity, harnessId });
+  const { server, port, stats } = await startBridge({ proxyKey, proxyPort, identity, harnessId });
   let plan;
   let child;
   const stop = signal => { if (child && !child.killed) child.kill(signal); };
@@ -304,6 +316,10 @@ async function main() {
     });
     if (status.signal) process.exitCode = status.signal === 'SIGINT' ? 130 : 1;
     else process.exitCode = status.code ?? 1;
+    if (process.exitCode === 0 && stats.requests === 0) {
+      process.stderr.write(`  ✗ ${harness.label} exited without sending traffic through the ClawNex session bridge\n`);
+      process.exitCode = 1;
+    }
   } finally {
     await new Promise(resolve => server.close(resolve));
     if (plan?.tempDir) fs.rmSync(plan.tempDir, { recursive: true, force: true });
