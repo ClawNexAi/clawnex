@@ -173,7 +173,10 @@ function buildPlan(harnessId, model, bridgePort, binary, extraArgs) {
       model: `clawnex/${model}`,
       provider: { clawnex: { npm: '@ai-sdk/openai-compatible', name: 'ClawNex', options: { baseURL: v1, apiKey: 'clawnex-local-session' }, models: { [model]: { name: model } } } },
     });
-    args = [];
+    args = extraArgs[0] === 'run'
+      ? ['run', '--standalone', ...extraArgs.slice(1)]
+      : ['--standalone', ...extraArgs];
+    extraArgs = [];
   } else if (harnessId === 'pi') {
     const piDir = path.join(tempDir, 'pi');
     privateFile(path.join(piDir, 'models.json'), `${JSON.stringify({ providers: { clawnex: {

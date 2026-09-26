@@ -107,6 +107,31 @@ async def main():
         result = await callback.async_pre_call_hook(types.SimpleNamespace(metadata={}), None, native_data, protocol)
         assert result.startswith('Request blocked'), protocol
         assert rows[-1]['blocked'] and rows[-1]['routing_source_id'] == 'opencode:global'
+
+    value = {'v': 1, 'connector': 'claude', 'sourceId': 'claude:global', 'nonce': 'messages-stream'}
+    payload = base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip('=')
+    signature = base64.urlsafe_b64encode(hmac.new(os.environ['CLAWNEX_INGEST_SECRET'].encode(), ('clawnex-routing-v1:' + payload).encode(), hashlib.sha256).digest()).decode().rstrip('=')
+    stream_token = payload + '.' + signature
+    stream_data = {'model': 'shared-model', 'messages': [{'role': 'user', 'content': 'Native stream prompt'}],
+                   'litellm_metadata': {}, 'proxy_server_request': {'headers': {'x-clawnex-routing-identity': stream_token}}}
+    logger._scan = lambda text, direction: scanned.append((direction, text)) or {'verdict': 'ALLOW', 'score': 0, 'detections': []}
+    await callback.async_pre_call_hook(types.SimpleNamespace(metadata={}), None, stream_data, 'messages')
+    stream_callback_data = {**stream_data, 'litellm_params': {'metadata': stream_data.pop('litellm_metadata')}}
+    stream_callback_data.pop('litellm_metadata', None)
+    rows_before = len(rows)
+    for event in [
+        {'type': 'message_start', 'message': {'id': 'native-messages-stream', 'model': 'shared-model', 'usage': {'input_tokens': 10}}},
+        {'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'text', 'text': ''}},
+        {'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': 'Native stream reply'}},
+        {'type': 'content_block_stop', 'index': 0},
+        {'type': 'message_delta', 'delta': {'stop_reason': 'end_turn'}, 'usage': {'output_tokens': 4}},
+    ]:
+        await callback.async_log_stream_event(stream_callback_data, event, datetime.now(), datetime.now())
+    assert len(rows) == rows_before, 'Messages stream must not attest before message_stop'
+    await callback.async_log_stream_event(stream_callback_data, {'type': 'message_stop'}, datetime.now(), datetime.now())
+    assert rows[-1]['routing_connector'] == 'claude' and rows[-1]['routing_source_id'] == 'claude:global', rows[-1]
+    assert rows[-1]['total_tokens'] == 14 and ('outbound', 'Native stream reply') in scanned, rows[-1]
+    assert not logger._MESSAGE_STREAMS, 'completed Messages stream state must be removed'
     print('PASS: Responses and Messages scan native prompts/tool results/replies, count usage, attest completed exchanges, and block before upstream')
 
     logger._scan = lambda *args: {

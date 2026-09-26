@@ -37,6 +37,7 @@ _ON_SCAN_ERROR = os.environ.get("CLAWNEX_ON_SCAN_ERROR", "block").lower()
 _HERMES_MODEL_ALIASES = None
 _RECENT_EVENT_IDS = {}
 _ROUTING_IDENTITIES = {}
+_MESSAGE_STREAMS = {}
 _TRUSTED_CONTEXT_ROLES = {"system", "developer", "assistant"}
 
 
@@ -96,10 +97,14 @@ def _remember_routing_identity(auth, data):
     _ROUTING_IDENTITIES[handle] = (now, connector, source_id, data.get("model"), trusted.get('identity_hash'))
 
 
-def _consume_routing_identity(kwargs):
+def _routing_evidence_handle(kwargs):
     containers = [kwargs.get('litellm_metadata'), kwargs.get('metadata'), (kwargs.get('litellm_params') or {}).get('metadata')]
-    handle = next((value.get('clawnex_evidence_handle') for value in containers
-                   if isinstance(value, dict) and isinstance(value.get('clawnex_evidence_handle'), str)), None)
+    return next((value.get('clawnex_evidence_handle') for value in containers
+                 if isinstance(value, dict) and isinstance(value.get('clawnex_evidence_handle'), str)), None)
+
+
+def _consume_routing_identity(kwargs):
+    handle = _routing_evidence_handle(kwargs)
     entry = _ROUTING_IDENTITIES.pop(handle, None) if isinstance(handle, str) else None
     if not entry or time.monotonic() - entry[0] > 600:
         return None
@@ -136,6 +141,76 @@ def _response_text(response):
             parts.append(_field(item, 'arguments', '') or '')
     parts.append(_content_text(_field(response, 'content')))
     return '\n'.join(part for part in parts if part)
+
+
+def _assembled_message_stream(kwargs, event):
+    """Assemble native Anthropic SSE events that LiteLLM does not aggregate."""
+    event_type = _field(event, 'type')
+    handle = _routing_evidence_handle(kwargs)
+    key = handle or kwargs.get('litellm_call_id') or kwargs.get('litellm_trace_id')
+    if not isinstance(key, str) or not key:
+        return None
+    now = time.monotonic()
+    for stream_key, state in list(_MESSAGE_STREAMS.items()):
+        if now - state.get('updated_at', now) > 600:
+            _MESSAGE_STREAMS.pop(stream_key, None)
+    if event_type == 'message_start':
+        if len(_MESSAGE_STREAMS) >= 4096 and key not in _MESSAGE_STREAMS:
+            return None
+        message = _field(event, 'message', {}) or {}
+        state = _MESSAGE_STREAMS.setdefault(key, {
+            'id': _field(message, 'id') or key,
+            'model': _field(message, 'model'),
+            'text': '',
+            'tool_json': '',
+            'usage': dict(_field(message, 'usage', {}) or {}),
+            'stop_reason': None,
+        })
+        state['updated_at'] = now
+        return None
+    state = _MESSAGE_STREAMS.get(key)
+    if not state:
+        return None
+    state['updated_at'] = now
+    if event_type == 'content_block_delta':
+        delta = _field(event, 'delta', {}) or {}
+        text = _field(delta, 'text')
+        partial_json = _field(delta, 'partial_json')
+        if isinstance(text, str):
+            state['text'] = (state['text'] + text)[:1_000_000]
+        if isinstance(partial_json, str):
+            state['tool_json'] = (state['tool_json'] + partial_json)[:1_000_000]
+        return None
+    if event_type == 'message_delta':
+        delta = _field(event, 'delta', {}) or {}
+        state['stop_reason'] = _field(delta, 'stop_reason') or state['stop_reason']
+        usage = _field(event, 'usage', {}) or {}
+        if isinstance(usage, dict):
+            state['usage'].update(usage)
+        return None
+    if event_type == 'error':
+        _MESSAGE_STREAMS.pop(key, None)
+        return None
+    if event_type != 'message_stop':
+        return None
+    _MESSAGE_STREAMS.pop(key, None)
+    content = []
+    if state['text']:
+        content.append({'type': 'text', 'text': state['text']})
+    if state['tool_json']:
+        try:
+            tool_input = json.loads(state['tool_json'])
+        except (TypeError, ValueError):
+            tool_input = {'unparsed': state['tool_json']}
+        content.append({'type': 'tool_use', 'input': tool_input})
+    return {
+        'id': state['id'],
+        'type': 'message',
+        'model': state['model'],
+        'stop_reason': state['stop_reason'] or 'end_turn',
+        'content': content,
+        'usage': state['usage'],
+    }
 
 
 def _request_messages(data):
@@ -584,11 +659,20 @@ class ClawNexLogger(CustomLogger):
 
     async def async_log_stream_event(self, kwargs, response_obj, start_time, end_time):
         # The Messages adapter dispatches a terminal Responses object through
-        # the stream callback. Ignore deltas; only a completed response counts.
+        # the stream callback. Native Anthropic SSE events need assembly because
+        # LiteLLM 1.84 does not always provide async_complete_streaming_response.
+        assembled = _assembled_message_stream(kwargs, response_obj)
+        if assembled is not None:
+            self.log_success_event(kwargs, assembled, start_time, end_time)
+            return
         if _response_completed(response_obj):
             self.log_success_event(kwargs, response_obj, start_time, end_time)
 
     def log_stream_event(self, kwargs, response_obj, start_time, end_time):
+        assembled = _assembled_message_stream(kwargs, response_obj)
+        if assembled is not None:
+            self.log_success_event(kwargs, assembled, start_time, end_time)
+            return
         if _response_completed(response_obj):
             self.log_success_event(kwargs, response_obj, start_time, end_time)
 

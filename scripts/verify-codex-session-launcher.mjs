@@ -58,7 +58,9 @@ for (const id of ['codex', 'claude', 'opencode', 'pi', 'hermes']) fs.writeFileSy
 const baseEnv = { ...process.env, HOME: root, PATH: `${bin}:${process.env.PATH}` };
 for (const id of ['codex', 'claude', 'opencode', 'pi', 'hermes']) {
   const capturePath = path.join(root, `${id}.json`);
-  const run = spawnSync(path.join(root, 'clawnex'), ['run', id, '--model', 'provider/model'], {
+  const launcherArgs = ['run', id, '--model', 'provider/model'];
+  if (id === 'opencode') launcherArgs.push('--', 'run', 'fixture prompt');
+  const run = spawnSync(path.join(root, 'clawnex'), launcherArgs, {
     env: { ...baseEnv, CAPTURE: capturePath, OPENAI_API_KEY: 'must-not-reach-child', ANTHROPIC_API_KEY: 'must-not-reach-child' }, encoding: 'utf8',
   });
   assert.equal(run.status, 0, `${id}: ${run.stderr || run.stdout}`);
@@ -67,7 +69,11 @@ for (const id of ['codex', 'claude', 'opencode', 'pi', 'hermes']) {
   assert.equal(capture.env.CLAWNEX_LITELLM_API_KEY, undefined);
   assert.equal(capture.env.CLAWNEX_ROUTING_IDENTITY, undefined);
   assert.ok(!JSON.stringify(capture).includes(proxyKey));
-  if (id === 'opencode') assert.equal(JSON.parse(capture.env.OPENCODE_CONFIG_CONTENT).model, 'clawnex/provider/model');
+  if (id === 'opencode') {
+    assert.equal(JSON.parse(capture.env.OPENCODE_CONFIG_CONTENT).model, 'clawnex/provider/model');
+    assert.ok(capture.args.includes('--standalone'), 'OpenCode must not reuse a background server with stale configuration');
+    assert.deepEqual(capture.args.slice(0, 2), ['run', '--standalone']);
+  }
   if (capture.temp) assert.equal(fs.existsSync(path.dirname(capture.temp)), false);
 }
 
