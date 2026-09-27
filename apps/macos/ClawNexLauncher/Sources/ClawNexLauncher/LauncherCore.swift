@@ -4,8 +4,25 @@ import Foundation
 struct LauncherSnapshot: Decodable {
     let schemaVersion: Int
     let product: String
+    let homeDirectory: String?
     let models: [LauncherModel]
     let harnesses: [LauncherHarness]
+}
+
+enum LauncherTerminal: String, Identifiable {
+    case automatic
+    case ghostty
+    case appleTerminal
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .automatic: return "Automatic"
+        case .ghostty: return "Ghostty"
+        case .appleTerminal: return "Apple Terminal"
+        }
+    }
 }
 
 struct LauncherModel: Decodable, Identifiable, Hashable {
@@ -42,6 +59,26 @@ enum LauncherFailure: LocalizedError {
 }
 
 enum LauncherCore {
+    static func availableTerminals(fileManager: FileManager = .default) -> [LauncherTerminal] {
+        var result: [LauncherTerminal] = [.automatic]
+        let ghosttyPaths = [
+            "/Applications/Ghostty.app",
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications/Ghostty.app").path,
+        ]
+        if ghosttyPaths.contains(where: { fileManager.fileExists(atPath: $0) }) {
+            result.append(.ghostty)
+        }
+        result.append(.appleTerminal)
+        return result
+    }
+
+    static func resolvedTerminal(_ selected: LauncherTerminal, available: [LauncherTerminal]) -> LauncherTerminal {
+        if selected == .automatic {
+            return available.contains(.ghostty) ? .ghostty : .appleTerminal
+        }
+        return available.contains(selected) ? selected : .appleTerminal
+    }
+
     static func clawnexBinary(environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let pathCandidates = executionPath(environment: environment).split(separator: ":").map { String($0) + "/clawnex" }
@@ -88,12 +125,19 @@ enum LauncherCore {
         !value.isEmpty && value.range(of: #"^[A-Za-z0-9._@:-]+$"#, options: .regularExpression) != nil
     }
 
-    static func openTerminal(command: String) throws {
-        let escaped = command.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-        let script = "tell application \"Terminal\" to do script \"\(escaped)\"\ntell application \"Terminal\" to activate"
-        let result = try run("/usr/bin/osascript", ["-e", script])
+    static func openTerminal(command: String, terminal: LauncherTerminal, available: [LauncherTerminal]) throws {
+        let selected = resolvedTerminal(terminal, available: available)
+        let result: (status: Int32, output: Data, error: String)
+        switch selected {
+        case .ghostty:
+            result = try run("/usr/bin/open", ["-na", "Ghostty.app", "--args", "-e", "/bin/zsh", "-lc", command])
+        case .automatic, .appleTerminal:
+            let escaped = command.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+            let script = "tell application \"Terminal\" to do script \"\(escaped)\"\ntell application \"Terminal\" to activate"
+            result = try run("/usr/bin/osascript", ["-e", script])
+        }
         guard result.status == 0 else {
-            throw LauncherFailure.commandFailed(result.error.isEmpty ? "Terminal did not accept the launch command." : result.error)
+            throw LauncherFailure.commandFailed(result.error.isEmpty ? "\(selected.label) did not accept the launch command." : result.error)
         }
     }
 

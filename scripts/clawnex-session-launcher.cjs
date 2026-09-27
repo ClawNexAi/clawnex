@@ -140,6 +140,7 @@ async function printSnapshot(argv) {
   const payload = {
     schemaVersion: 1,
     product: 'ClawNex',
+    homeDirectory: os.homedir(),
     models: models.map(id => ({ id, name: id })),
     harnesses: Object.entries(harnesses).map(([id, harness]) => ({
       id,

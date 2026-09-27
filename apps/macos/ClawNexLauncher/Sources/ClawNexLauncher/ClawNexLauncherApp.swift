@@ -10,10 +10,26 @@ enum LauncherTarget: String, CaseIterable, Identifiable {
 @main
 struct ClawNexLauncherApp: App {
     var body: some Scene {
-        MenuBarExtra("ClawNex Launcher", systemImage: "shield.lefthalf.filled") {
+        MenuBarExtra {
             LauncherView()
+        } label: {
+            Image(nsImage: BrandImages.menuBarIcon)
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+enum BrandImages {
+    static let appIcon: NSImage = load("ClawNexIcon") ?? NSImage(systemSymbolName: "shield.lefthalf.filled", accessibilityDescription: "ClawNex")!
+    static let menuBarIcon: NSImage = {
+        let image = (load("ClawNexMenuBarIcon") ?? appIcon).copy() as! NSImage
+        image.isTemplate = true
+        return image
+    }()
+
+    private static func load(_ name: String) -> NSImage? {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "png") else { return nil }
+        return NSImage(contentsOf: url)
     }
 }
 
@@ -24,6 +40,8 @@ final class LauncherStore: ObservableObject {
     @Published var directory = FileManager.default.homeDirectoryForCurrentUser.path
     @Published var target = LauncherTarget.local
     @Published var remoteHost = ""
+    @Published var terminal = LauncherTerminal.automatic
+    @Published var availableTerminals = LauncherCore.availableTerminals()
     @Published var loading = false
     @Published var message = ""
     @Published var isError = false
@@ -31,12 +49,24 @@ final class LauncherStore: ObservableObject {
     private var binary: String?
 
     init() {
-        directory = UserDefaults.standard.string(forKey: "launcher.directory") ?? directory
         model = UserDefaults.standard.string(forKey: "launcher.model") ?? ""
         remoteHost = UserDefaults.standard.string(forKey: "launcher.remoteHost") ?? ""
         target = LauncherTarget(rawValue: UserDefaults.standard.string(forKey: "launcher.target") ?? "") ?? (remoteHost.isEmpty ? .local : .ssh)
-        if target == .ssh && UserDefaults.standard.string(forKey: "launcher.directory") == nil { directory = "." }
+        terminal = LauncherTerminal(rawValue: UserDefaults.standard.string(forKey: "launcher.terminal") ?? "") ?? .automatic
+        directory = savedDirectory(for: target)
         refresh()
+    }
+
+    private func directoryKey(for value: LauncherTarget) -> String { "launcher.directory.\(value.id)" }
+
+    private func savedDirectory(for value: LauncherTarget) -> String {
+        if let saved = UserDefaults.standard.string(forKey: directoryKey(for: value)), !saved.isEmpty, saved != "." { return saved }
+        return value == .local ? FileManager.default.homeDirectoryForCurrentUser.path : ""
+    }
+
+    func saveDirectory(_ value: String) {
+        directory = value
+        UserDefaults.standard.set(value, forKey: directoryKey(for: target))
     }
 
     func refresh() {
@@ -54,6 +84,12 @@ final class LauncherStore: ObservableObject {
                 }.value
                 binary = found
                 snapshot = value
+                availableTerminals = LauncherCore.availableTerminals()
+                if !availableTerminals.contains(terminal) { terminal = .automatic }
+                if selectedTarget == .ssh, directory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   let home = value.homeDirectory, !home.isEmpty {
+                    saveDirectory(home)
+                }
                 if !value.models.contains(where: { $0.id == model }) { model = value.models.first?.id ?? "" }
                 UserDefaults.standard.set(model, forKey: "launcher.model")
             } catch {
@@ -73,15 +109,14 @@ final class LauncherStore: ObservableObject {
         panel.directoryURL = URL(fileURLWithPath: directory)
         if panel.runModal() == .OK, let path = panel.url?.path {
             directory = path
-            UserDefaults.standard.set(path, forKey: "launcher.directory")
+            saveDirectory(path)
         }
     }
 
     func selectTarget(_ value: LauncherTarget) {
         target = value
-        directory = value == .local ? FileManager.default.homeDirectoryForCurrentUser.path : "."
+        directory = savedDirectory(for: value)
         UserDefaults.standard.set(value.rawValue, forKey: "launcher.target")
-        UserDefaults.standard.set(directory, forKey: "launcher.directory")
         snapshot = nil
         refresh()
     }
@@ -96,6 +131,11 @@ final class LauncherStore: ObservableObject {
         UserDefaults.standard.set(value, forKey: "launcher.model")
     }
 
+    func selectTerminal(_ value: LauncherTerminal) {
+        terminal = value
+        UserDefaults.standard.set(value.rawValue, forKey: "launcher.terminal")
+    }
+
     func launch(_ harness: LauncherHarness) {
         guard harness.installed, !model.isEmpty else { return }
         do {
@@ -106,8 +146,9 @@ final class LauncherStore: ObservableObject {
                 guard let binary else { throw LauncherFailure.clawnexMissing }
                 command = LauncherCore.launchCommand(binary: binary, harness: harness.id, model: model, directory: directory)
             }
-            try LauncherCore.openTerminal(command: command)
-            message = "Opened \(harness.label) in Terminal."
+            let resolvedTerminal = LauncherCore.resolvedTerminal(terminal, available: availableTerminals)
+            try LauncherCore.openTerminal(command: command, terminal: terminal, available: availableTerminals)
+            message = "Opened \(harness.label) in \(resolvedTerminal.label)."
             isError = false
         } catch {
             message = error.localizedDescription
@@ -118,11 +159,13 @@ final class LauncherStore: ObservableObject {
 
 struct LauncherView: View {
     @StateObject private var store = LauncherStore()
+    private let brand = Color(red: 0.0, green: 0.86, blue: 0.68)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Image(systemName: "shield.lefthalf.filled").font(.title)
+                Image(nsImage: BrandImages.appIcon)
+                    .resizable().scaledToFit().frame(width: 34, height: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("ClawNex Launcher").font(.title2.bold())
                     Text("Inspected coding sessions").foregroundStyle(.secondary)
@@ -154,8 +197,9 @@ struct LauncherView: View {
                 .labelsHidden()
                 .frame(maxWidth: .infinity)
             }
+            .background(RoundedRectangle(cornerRadius: 8).fill(brand.opacity(0.07)))
 
-            GroupBox("SESSION OPENS IN") {
+            GroupBox("SESSION STARTS IN") {
                 VStack(alignment: .leading, spacing: 10) {
                     if store.target == .local {
                         Button(action: store.chooseDirectory) {
@@ -166,11 +210,16 @@ struct LauncherView: View {
                             }
                         }
                     } else {
-                        TextField("Remote working directory", text: $store.directory)
+                        TextField(store.snapshot?.homeDirectory ?? "/home/operator", text: Binding(get: { store.directory }, set: store.saveDirectory))
                             .textFieldStyle(.roundedBorder)
                     }
-                    Picker("Terminal", selection: .constant("terminal")) {
-                        Text("Automatic (Terminal)").tag("terminal")
+                    Text("Working directory for the new coding session.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Picker("Terminal", selection: Binding(get: { store.terminal }, set: store.selectTerminal)) {
+                        ForEach(store.availableTerminals) { terminal in
+                            let resolved = LauncherCore.resolvedTerminal(terminal, available: store.availableTerminals)
+                            Text(terminal == .automatic ? "Automatic (\(resolved.label))" : terminal.label).tag(terminal)
+                        }
                     }
                     .labelsHidden()
                 }
@@ -178,7 +227,12 @@ struct LauncherView: View {
 
             GroupBox("CODING HARNESSES") {
                 VStack(spacing: 4) {
-                    ForEach(store.snapshot?.harnesses ?? []) { harness in
+                    let installedHarnesses = (store.snapshot?.harnesses ?? []).filter(\.installed)
+                    if installedHarnesses.isEmpty {
+                        Text("No supported coding harnesses were found on this target.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    ForEach(installedHarnesses) { harness in
                         Button { store.launch(harness) } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: "terminal")
@@ -214,5 +268,6 @@ struct LauncherView: View {
         }
         .padding(18)
         .frame(width: 420)
+        .tint(brand)
     }
 }

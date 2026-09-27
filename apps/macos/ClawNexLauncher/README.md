@@ -25,3 +25,5 @@ open "$HOME/Applications/ClawNex Launcher.app"
 ```
 
 The macOS package contains only UI and Terminal integration. A future Linux tray or Windows system-tray client can consume the same CLI snapshot and launch contract.
+
+The launcher discovers supported coding harnesses on the selected ClawNex target and shows only the ones that are installed. On macOS it discovers Ghostty when present and always offers Apple Terminal; Automatic prefers Ghostty and safely falls back to Apple Terminal. Remote targets are contacted on demand over SSH and do not require an already-open terminal session.

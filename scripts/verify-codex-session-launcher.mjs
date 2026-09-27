@@ -109,6 +109,7 @@ const snapshotRun = spawnSync(path.join(root, 'clawnex'), ['launcher', 'snapshot
 assert.equal(snapshotRun.status, 0, snapshotRun.stderr);
 const snapshot = JSON.parse(snapshotRun.stdout);
 assert.equal(snapshot.schemaVersion, 1);
+assert.equal(snapshot.homeDirectory, baseEnv.HOME);
 assert.deepEqual(snapshot.models, [{ id: 'provider/model', name: 'provider/model' }]);
 assert.deepEqual(snapshot.harnesses.map(item => item.id), ['codex', 'claude', 'opencode', 'pi', 'hermes']);
 assert.ok(snapshot.harnesses.every(item => item.installed));
