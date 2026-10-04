@@ -51,7 +51,8 @@ visit(file);
 
 for (const control of ["select", "input", "button"] as const) {
   const expectedCount = control === "input" ? 2 : 1;
-  const actualCount = layoutNeutralControls.filter(tag => tag === control).length;
+  const actualCount = layoutNeutralControls.filter(tag => tag === control
+    || (control === "input" && tag === "ProviderApiKeyInput")).length;
   assert.equal(
     actualCount,
     expectedCount,

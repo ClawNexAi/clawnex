@@ -11,6 +11,14 @@ process.env.NEXT_PUBLIC_RBAC_ENABLED = 'false';
 process.env.HOSTNAME = '127.0.0.1';
 const cwd = process.cwd();
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'clawnex-save-sync-'));
+const capturedLogs: string[] = [];
+const originalConsole = { log: console.log, warn: console.warn, error: console.error };
+for (const method of ['log', 'warn', 'error'] as const) {
+  console[method] = (...args: unknown[]) => {
+    capturedLogs.push(args.map(String).join(' '));
+    originalConsole[method](...args);
+  };
+}
 delete process.env.CLAWNEX_LITELLM_CONFIG;
 delete process.env.LITELLM_CONFIG_PATH;
 delete process.env.CLAWNEX_INSTALL_DIR;
@@ -19,7 +27,7 @@ async function main() {
   process.chdir(temp);
   fs.mkdirSync(path.join(temp, 'litellm', 'config.yaml'), { recursive: true });
   const { NextRequest } = await import('next/server');
-  const { POST } = await import('../src/app/api/config/providers/route');
+  const { GET, POST } = await import('../src/app/api/config/providers/route');
   const providerDetailRoute = await import('../src/app/api/config/providers/[id]/route');
   const providerTestRoute = await import('../src/app/api/config/providers/[id]/test/route');
   const { getProvider } = await import('../src/lib/services/config-service');
@@ -37,6 +45,10 @@ async function main() {
     assert.equal(body.provider?.id, 'save-sync-fixture');
     assert.ok(getProvider('save-sync-fixture'), 'Do not pretend the provider was not saved');
     assert.ok(!JSON.stringify(body).includes('fake-key-no-leak'));
+    const listed = await GET(new NextRequest('http://127.0.0.1:5001/api/config/providers'));
+    assert.equal(listed.status, 200);
+    assert.ok(!JSON.stringify(await listed.json()).includes('fake-key-no-leak'),
+      'Routine provider list responses never expose stored credentials');
     assert.match(body.error, /saved.*sync/i);
     console.log('PASS: provider save reports partial failure without leaking credentials');
     fs.rmdirSync(path.join(temp, 'litellm', 'config.yaml')); // Empty test-owned failure fixture.
@@ -65,6 +77,10 @@ async function main() {
       assert.equal(updateBody.updated, true);
       assert.equal(updateBody.configSynced, true);
       assert.ok(!JSON.stringify(updateBody).includes('rotated-key-no-leak'));
+      const relisted = await GET(new NextRequest('http://127.0.0.1:5001/api/config/providers'));
+      const relistedBody = JSON.stringify(await relisted.json());
+      assert.ok(!relistedBody.includes('rotated-key-no-leak') && !relistedBody.includes('fake-key-no-leak'),
+        'Listing after replacement keeps both old and new stored credentials redacted');
       const tested = await providerTestRoute.POST(new NextRequest('http://127.0.0.1:5001/api/config/providers/save-success-fixture/test', {
         method: 'POST', headers: { origin: 'http://127.0.0.1:5001' },
       }), { params: Promise.resolve({ id: 'save-success-fixture' }) });
@@ -137,9 +153,14 @@ async function main() {
     process.env.CLAWNEX_LITELLM_CONFIG = 'relative.yaml';
     assert.throws(resolveLiteLLMConfigPath, /absolute/i);
     console.log('PASS: explicit, legacy, conflict and installation-root path contracts');
+    for (const key of ['fake-key-no-leak', 'rotated-key-no-leak']) {
+      assert.ok(!capturedLogs.join('\n').includes(key), 'Routine provider operations never log stored credentials');
+    }
+    console.log('PASS: provider create, replace, list and failure logs remain credential-free');
   } finally { getDb().close(); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => {
   process.chdir(cwd);
+  Object.assign(console, originalConsole);
   fs.rmSync(temp, { recursive: true, force: true });
 });

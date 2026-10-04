@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { C, F } from "../constants";
 import { Badge, BadgeLegend, Dot, CollapsibleCard, CategorySection, LoadingSpinner, PaginationFooter, formatTimeAgo } from "../shared";
 import { Tooltip } from "../tooltip";
+import { ProviderApiKeyInput } from "../ProviderApiKeyInput";
 import { timeAgo } from "../utils";
 import type { TabId } from "../types";
 import { CORRELATION_STARTER_TEMPLATES } from "@/lib/correlation-templates";
@@ -4412,13 +4413,14 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
                     onChange={event => setEditingProvider(current => current ? { ...current, baseUrl: event.target.value } : current)}
                     style={inputStyle} />
                 </label>
-                <label style={{ display: 'grid', gap: 3, fontSize: 11, color: C.txT }}>
+                <div style={{ display: 'grid', gap: 3, fontSize: 11, color: C.txT }}>
                   REPLACEMENT API KEY
-                  <input aria-label={`Replacement API key for ${p.name}`} type="password" autoComplete="new-password"
+                  <ProviderApiKeyInput label={`Replacement API key for ${p.name}`}
                     value={editingProvider.apiKey} placeholder="Leave blank to keep the saved key"
-                    onChange={event => setEditingProvider(current => current ? { ...current, apiKey: event.target.value } : current)}
-                    style={inputStyle} />
-                </label>
+                    disabled={providerEditBusy}
+                    onChange={apiKey => setEditingProvider(current => current ? { ...current, apiKey } : current)}
+                    inputStyle={inputStyle} />
+                </div>
                 <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                   <button disabled={providerEditBusy} onClick={() => setEditingProvider(null)}
                     style={{ ...btnStyle, padding: '5px 12px', color: C.txS, background: 'transparent', border: `1px solid ${C.glassBorderSubtle}` }}>Cancel</button>
@@ -4628,14 +4630,23 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 11, color: C.txT, marginBottom: 3 }}>API KEY (optional)</div>
             <Tooltip as="div" placement="top" variant="detail" content={<span>The provider&apos;s API key — what ClawNex sends to authenticate each request. Stored encrypted. Leave blank for local servers (LM Studio, Ollama, vLLM) that don&apos;t require auth.</span>}>
-              <input value={newProviderKey} onChange={e => setNewProviderKey(e.target.value)} placeholder="Leave empty for local servers" type="password" style={inputStyle} />
+              <ProviderApiKeyInput label="API key for new provider" value={newProviderKey}
+                onChange={setNewProviderKey} placeholder="Leave empty for local servers" inputStyle={inputStyle} />
             </Tooltip>
           </div>
-          <Tooltip as="div" placement="top" variant="detail" content={<span>Save the provider, then immediately test connectivity by asking it for its model list. Any models it returns are added so you can pick one in Default AI Model right away.</span>}>
-            <button onClick={addProvider} disabled={!newProviderName.trim() || !newProviderUrl.trim()} style={{ ...btnStyle, background: !newProviderName.trim() || !newProviderUrl.trim() ? C.glassSurfTrans : C.cyan, color: "#fff", width: "100%" }}>
-              + Add Provider
-            </button>
-          </Tooltip>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+              <Tooltip as="div" placement="top" variant="detail" content={<span>Save the provider, then immediately test connectivity by asking it for its model list. Any models it returns are added so you can pick one in Default AI Model right away.</span>}>
+                <button onClick={addProvider} disabled={!newProviderName.trim() || !newProviderUrl.trim()} style={{ ...btnStyle, background: !newProviderName.trim() || !newProviderUrl.trim() ? C.glassSurfTrans : C.cyan, color: "#fff", width: "100%" }}>
+                  + Add Provider
+                </button>
+              </Tooltip>
+            </div>
+            <button type="button" onClick={() => {
+              setNewProviderName(''); setNewProviderUrl(''); setNewProviderKey('');
+            }} style={{ ...btnStyle, background: 'transparent', color: C.txS,
+              border: `1px solid ${C.glassBorderSubtle}` }}>Cancel new provider</button>
+          </div>
         </div>
       </CollapsibleCard>
   );
