@@ -14,6 +14,7 @@ struct ClawNexLauncherApp: App {
             LauncherView()
         } label: {
             Image(nsImage: BrandImages.menuBarIcon)
+                .accessibilityLabel("ClawNex")
         }
         .menuBarExtraStyle(.window)
     }
@@ -23,6 +24,7 @@ enum BrandImages {
     static let appIcon: NSImage = load("ClawNexIcon") ?? NSImage(systemSymbolName: "shield.lefthalf.filled", accessibilityDescription: "ClawNex")!
     static let menuBarIcon: NSImage = {
         let image = (load("ClawNexMenuBarIcon") ?? appIcon).copy() as! NSImage
+        image.size = NSSize(width: 16, height: 16)
         image.isTemplate = true
         return image
     }()
