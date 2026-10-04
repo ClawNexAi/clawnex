@@ -139,5 +139,52 @@ async function main() {
   await call({ action: 'execute-plan', planId: claudeRestore.id, approved: true });
   assert.deepEqual(JSON.parse(fs.readFileSync(claudeFile, 'utf8')), { permissions: { defaultMode: 'default' } });
   console.log('PASS: Claude explicit model slots, native Messages base URL, signed custom header, and permission-preserving restoration');
+  const existingClaude = {
+    model: 'openai/chosen-model',
+    permissions: { defaultMode: 'default' },
+    env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:20128', ANTHROPIC_AUTH_TOKEN: 'original-claude-token', ANTHROPIC_MODEL: 'openai/chosen-model', CLAUDE_CODE_SUBAGENT_MODEL: 'openai/chosen-model' },
+  };
+  fs.writeFileSync(claudeFile, JSON.stringify(existingClaude));
+  const existingInventory = await call({ action: 'sync' });
+  await call({ action: 'select', connector: 'claude', itemIds: existingInventory.claude.items.filter((i: any) => i.present).map((i: any) => i.id), desiredRoute: 'routed' });
+  const existingPlan = (await call({ action: 'prepare', connector: 'claude', sourceId: 'claude:global', operation: 'apply' })).plan;
+  assert.deepEqual(existingPlan.prerequisites, [], 'existing Claude Messages base must match the uniquely tested OpenAI-compatible /v1 provider');
+  await call({ action: 'execute-plan', planId: existingPlan.id, approved: true });
+  const existingRouted = JSON.parse(fs.readFileSync(claudeFile, 'utf8'));
+  assert.equal(existingRouted.env.ANTHROPIC_BASE_URL, 'http://127.0.0.1:4001');
+  assert.equal(existingRouted.env.ANTHROPIC_AUTH_TOKEN, 'fixture-proxy-secret');
+  assert.match(existingRouted.env.ANTHROPIC_CUSTOM_HEADERS, /^x-clawnex-routing-identity: /);
+  const existingRestore = (await call({ action: 'prepare', connector: 'claude', sourceId: 'claude:global', operation: 'restore' })).plan;
+  await call({ action: 'execute-plan', planId: existingRestore.id, approved: true });
+  assert.deepEqual(JSON.parse(fs.readFileSync(claudeFile, 'utf8')), existingClaude, 'Restore returns the original Messages base, credential, slots and permissions');
+  console.log('PASS: Existing Claude Messages endpoint uses a uniquely tested /v1 provider and restores original settings');
+  await config.addProvider({ id: 'ambiguous', name: 'Second endpoint owner', type: 'openai', baseUrl: 'http://127.0.0.1:20128/v1/', apiKey: 'second-fixture-key' });
+  config.addModel('ambiguous', 'openai/chosen-model');
+  const ambiguousInventory = await call({ action: 'sync' });
+  await call({ action: 'select', connector: 'claude', itemIds: ambiguousInventory.claude.items.filter((i: any) => i.present).map((i: any) => i.id), desiredRoute: 'routed' });
+  const ambiguousPlan = (await call({ action: 'prepare', connector: 'claude', sourceId: 'claude:global', operation: 'apply' })).plan;
+  assert.equal(ambiguousPlan.prerequisites.length, 1, 'equivalent endpoints with the same alias must not pick a provider arbitrarily');
+  assert.equal((await api.POST(request({ action: 'execute-plan', planId: ambiguousPlan.id, approved: true }))).status, 400);
+  assert.deepEqual(JSON.parse(fs.readFileSync(claudeFile, 'utf8')), existingClaude, 'ambiguous mapping cannot write settings');
+  console.log('PASS: Ambiguous Claude endpoint ownership fails closed without writing settings');
+  const unrelatedClaude = { ...existingClaude, env: { ...existingClaude.env, ANTHROPIC_BASE_URL: 'http://127.0.0.1:20129' } };
+  fs.writeFileSync(claudeFile, JSON.stringify(unrelatedClaude));
+  const unrelatedInventory = await call({ action: 'sync' });
+  await call({ action: 'select', connector: 'claude', itemIds: unrelatedInventory.claude.items.filter((i: any) => i.present).map((i: any) => i.id), desiredRoute: 'routed' });
+  const unrelatedPlan = (await call({ action: 'prepare', connector: 'claude', sourceId: 'claude:global', operation: 'apply' })).plan;
+  assert.equal(unrelatedPlan.prerequisites.length, 1, 'same alias at an unrelated endpoint is not sufficient');
+  assert.equal((await api.POST(request({ action: 'execute-plan', planId: unrelatedPlan.id, approved: true }))).status, 400);
+  assert.deepEqual(JSON.parse(fs.readFileSync(claudeFile, 'utf8')), unrelatedClaude);
+  console.log('PASS: Unrelated Claude endpoint cannot reuse another provider readiness receipt');
+  await config.updateProvider('ambiguous', { isActive: false });
+  const unmatchedCodex = { model: 'openai/chosen-model', model_provider: 'external', model_providers: { external: { base_url: 'http://127.0.0.1:20128', wire_api: 'responses' } } };
+  fs.writeFileSync(codexFile, TOML.stringify(unmatchedCodex));
+  const unchangedInventory = await call({ action: 'sync' });
+  await call({ action: 'select', connector: 'codex', itemIds: unchangedInventory.codex.items.filter((i: any) => i.present).map((i: any) => i.id), desiredRoute: 'routed' });
+  const unchangedPlan = (await call({ action: 'prepare', connector: 'codex', sourceId: 'codex:global', operation: 'apply' })).plan;
+  assert.equal(unchangedPlan.prerequisites.length, 1, 'Messages endpoint equivalence must not change Codex matching');
+  assert.equal((await api.POST(request({ action: 'execute-plan', planId: unchangedPlan.id, approved: true }))).status, 400);
+  assert.deepEqual(TOML.parse(fs.readFileSync(codexFile, 'utf8')), unmatchedCodex);
+  console.log('PASS: Other connector endpoint matching remains strict');
 }
 main().finally(() => fs.rmSync(root, { recursive: true, force: true }));

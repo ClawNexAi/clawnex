@@ -15,6 +15,7 @@ export function configuredRoutingModel(item: ConnectorRoutingSummary['items'][nu
   return resolveConfiguredProxyModel(recordedAlias || item.modelId, {
     providerId: item.providerId,
     baseUrl: item.baseUrl,
+    protocol: item.connector === 'claude' ? 'messages' : undefined,
   });
 }
 

@@ -62,7 +62,7 @@ export function discoverNativeItems(type: NativeAgent): { status: ConnectorRouti
       for (const model of p.models) {
         const saved = owner?.models.find(m => JSON.stringify(m.path) === JSON.stringify(model.path));
         const originalId = saved?.originalId || model.id;
-        const alias = saved?.alias || resolveConfiguredProxyModel(originalId, { providerId: p.id, baseUrl: p.baseUrl })?.modelAlias || originalId;
+        const alias = saved?.alias || resolveConfiguredProxyModel(originalId, { providerId: p.id, baseUrl: p.baseUrl, protocol: type === 'claude' ? 'messages' : undefined })?.modelAlias || originalId;
         items.push({ connector: type, sourceId, itemType: 'model', providerId: p.id, modelId: originalId, displayName: model.name,
           baseUrl: p.baseUrl, capability: capability === 'provider-routing' ? 'model-inventory' : 'unsupported', currentRoute,
           defaultDesiredRoute: currentRoute === 'routed' ? 'routed' : 'direct', metadata: { ...metadata, proxyModelAlias: alias, enforcedAt: 'provider' } });
@@ -139,7 +139,7 @@ export function applyNativeRouting(type: NativeAgent, scope: RoutingApplyScope =
     if (existingHeaders && Object.keys(existingHeaders).some(k => k.toLowerCase() === ROUTING_IDENTITY_HEADER)) throw new Error('The routing identity header is already operator-owned.');
     const record: OwnedProvider = { providerId: p.id, baseUrl: p.baseUrl, identityHash: identity.hash, fields: [], models: [] };
     for (const m of p.models) {
-      const configured = resolveConfiguredProxyModel(m.id, { providerId: p.id, baseUrl: p.baseUrl });
+      const configured = resolveConfiguredProxyModel(m.id, { providerId: p.id, baseUrl: p.baseUrl, protocol: type === 'claude' ? 'messages' : undefined });
       if (!configured) throw new Error('A model has no unique configured ClawNex alias. Configure and test the exact upstream model first.');
       record.models.push({ originalId: m.id, alias: configured.modelAlias, path: m.path });
       capture(type, record, primary, m.path, configured.modelAlias);
