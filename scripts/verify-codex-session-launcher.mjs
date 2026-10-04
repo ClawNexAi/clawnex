@@ -64,7 +64,7 @@ for (const id of ['codex', 'claude', 'opencode', 'pi', 'hermes']) {
   const launcherArgs = ['run', id, '--model', 'provider/model'];
   if (id === 'opencode') launcherArgs.push('--', 'run', 'fixture prompt');
   const run = spawnSync(path.join(root, 'clawnex'), launcherArgs, {
-    env: { ...baseEnv, CAPTURE: capturePath, OPENAI_API_KEY: 'must-not-reach-child', ANTHROPIC_API_KEY: 'must-not-reach-child' }, encoding: 'utf8',
+    env: { ...baseEnv, CAPTURE: capturePath, OPENAI_API_KEY: 'must-not-reach-child', ANTHROPIC_API_KEY: 'must-not-reach-child', ANTHROPIC_AUTH_TOKEN: 'must-not-reach-child' }, encoding: 'utf8',
   });
   assert.equal(run.status, 0, `${id}: ${run.stderr || run.stdout}`);
   const capture = JSON.parse(fs.readFileSync(capturePath, 'utf8'));
@@ -73,8 +73,11 @@ for (const id of ['codex', 'claude', 'opencode', 'pi', 'hermes']) {
   assert.equal(capture.env.CLAWNEX_ROUTING_IDENTITY, undefined);
   assert.ok(!JSON.stringify(capture).includes(proxyKey));
   if (id === 'claude') {
-    assert.equal(capture.env.ANTHROPIC_API_KEY, 'clawnex-local-session');
-    assert.equal(capture.settings.env.ANTHROPIC_API_KEY, 'clawnex-local-session');
+    assert.equal(capture.env.ANTHROPIC_AUTH_TOKEN, 'clawnex-local-session');
+    assert.equal(capture.settings.env.ANTHROPIC_AUTH_TOKEN, 'clawnex-local-session');
+    assert.equal(capture.env.ANTHROPIC_API_KEY, undefined, 'inherited API key must not reach Claude');
+    assert.equal(capture.settings.env.ANTHROPIC_API_KEY, '', 'saved API key must be cleared for this session');
+    assert.ok(!capture.args.includes('--setting-sources'), 'normal Claude settings and safety controls remain enabled');
   }
   if (id === 'opencode') {
     assert.equal(JSON.parse(capture.env.OPENCODE_CONFIG_CONTENT).model, 'clawnex/provider/model');

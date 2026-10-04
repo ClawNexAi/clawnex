@@ -281,14 +281,15 @@ function buildPlan(harnessId, model, bridgePort, binary, extraArgs) {
   } else if (harnessId === 'claude') {
     const claudeSettings = path.join(tempDir, 'claude-settings.json');
     Object.assign(env, {
-      ANTHROPIC_BASE_URL: root, ANTHROPIC_AUTH_TOKEN: 'clawnex-local-session', ANTHROPIC_API_KEY: 'clawnex-local-session', ANTHROPIC_MODEL: model,
+      ANTHROPIC_BASE_URL: root, ANTHROPIC_AUTH_TOKEN: 'clawnex-local-session', ANTHROPIC_MODEL: model,
       ANTHROPIC_DEFAULT_SONNET_MODEL: model, ANTHROPIC_DEFAULT_OPUS_MODEL: model, ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
       CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: '1',
     });
     privateFile(claudeSettings, `${JSON.stringify({ env: {
       ANTHROPIC_BASE_URL: root,
       ANTHROPIC_AUTH_TOKEN: 'clawnex-local-session',
-      ANTHROPIC_API_KEY: 'clawnex-local-session',
+      // Override an API key from saved settings without enabling a second credential.
+      ANTHROPIC_API_KEY: '',
       ANTHROPIC_MODEL: model,
       ANTHROPIC_DEFAULT_SONNET_MODEL: model,
       ANTHROPIC_DEFAULT_OPUS_MODEL: model,
