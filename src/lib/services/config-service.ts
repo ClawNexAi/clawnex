@@ -7,14 +7,12 @@
  * through API routes.
  *
  * Key responsibilities:
- * - Provider CRUD (config_providers table): LM Studio, OpenRouter, Anthropic, OpenAI, NVIDIA NIM, etc.
- * - Model CRUD (config_models table): models per provider, with auto-seeding for known types
+ * - Provider CRUD (config_providers table): tested onboarding catalog; legacy records retained
+ * - Model CRUD (config_models table): explicit operator-selected models per provider
  * - Gateway CRUD (config_gateways table): OpenClaw gateway instances
  * - Settings (config_defaults table): key-value store for runtime configuration
  *
- * Auto-seeding: when addProvider() is called with a known type (openrouter, anthropic, openai, nvidia-nim),
- * popular models are automatically inserted into config_models. This populates the model
- * dropdown in the Configuration UI without requiring manual model entry.
+ * Discovery never authorizes a model route or inference readiness by itself.
  *
  * @module services/config-service
  */
@@ -22,6 +20,8 @@
 import { queryAll, queryOne, run, transaction } from '../db/index';
 import { isIP } from 'node:net';
 import { promises as dnsPromises } from 'node:dns';
+import { testedProviderCapability, UnsupportedProviderTypeError, discoveryModelIds } from '../provider-catalog';
+export { UnsupportedProviderTypeError } from '../provider-catalog';
 
 // ---------------------------------------------------------------------------
 // Security: warn when sending credentials over plain HTTP to non-local hosts
@@ -394,6 +394,7 @@ export function providerEndpointUrl(baseUrl: string, endpointPath: string): stri
 }
 
 export async function addProvider(data: { id?: string; name: string; type: string; baseUrl: string; apiKey?: string; apiKeyEnv?: string }): Promise<ProviderWithModels> {
+  testedProviderCapability(data.type);
   const safety = await rejectIfWriteTargetUnsafe(data.baseUrl);
   if (safety.blocked) {
     throw new ProviderEndpointValidationError('add', safety.reason || 'unsafe endpoint');
@@ -412,6 +413,8 @@ export async function addProvider(data: { id?: string; name: string; type: strin
 export async function updateProvider(id: string, data: Partial<{ name: string; type: string; baseUrl: string; apiKey: string; apiKeyEnv: string; isActive: boolean }>): Promise<ProviderWithModels | undefined> {
   const existing = getProvider(id);
   if (!existing) return undefined;
+
+  if (data.type !== undefined && data.type !== existing.type) testedProviderCapability(data.type);
 
   if (data.baseUrl !== undefined) {
     const safety = await rejectIfWriteTargetUnsafe(data.baseUrl);
@@ -446,7 +449,14 @@ export async function testProvider(id: string): Promise<{ status: string; models
   const p = queryOne<ConfigProvider>('SELECT * FROM config_providers WHERE id = ?', [id]);
   if (!p) return { status: 'error', error: 'Provider not found' };
 
+  let capability: ReturnType<typeof testedProviderCapability>;
+  try { capability = testedProviderCapability(p.type); }
+  catch (err) { return { status: 'error', error: err instanceof UnsupportedProviderTypeError ? err.message : 'Unsupported provider type' }; }
+
   const configuredApiKey = p.api_key || (p.api_key_env ? process.env[p.api_key_env] || '' : '');
+  if (capability.auth === 'required-bearer' && !configuredApiKey) {
+    return { status: 'error', error: 'Provider authentication requires an API key or a readable key environment variable. Configure it before testing.' };
+  }
 
   // For openclaw type, test via HTTP health endpoint (no auth — gateway uses WebSocket auth)
   const baseUrl = p.type === 'openclaw'
@@ -461,7 +471,7 @@ export async function testProvider(id: string): Promise<{ status: string; models
     // OpenClaw gateway authenticates via WebSocket challenge-response, not Bearer token
     if (configuredApiKey && p.type !== 'openclaw') headers['Authorization'] = `Bearer ${configuredApiKey}`;
 
-    const modelsUrl = providerEndpointUrl(baseUrl, p.type === 'openclaw' ? 'health' : 'models');
+    const modelsUrl = providerEndpointUrl(baseUrl, capability.discoveryPath);
     if (headers['Authorization']) warnIfInsecure(modelsUrl, `testProvider(${p.name})`);
     // OpenRouter's catalog is public. Verify the resolved credential first;
     // catalog discovery alone cannot establish authentication or inference.
@@ -505,14 +515,13 @@ export async function testProvider(id: string): Promise<{ status: string; models
     clearTimeout(timeout);
 
     if (res.ok) {
-      const data = await res.json();
+      let models: string[];
+      try { models = discoveryModelIds(await res.json()); }
+      catch { return { status: 'error', error: 'Invalid model catalog: expected an array of exact model IDs. Check the provider API root and adapter.' }; }
       // OpenClaw health endpoint returns {ok, status} not a model list
       if (p.type === 'openclaw') {
         return { status: 'connected', models: [] };
       }
-      let models = (data.data || data || [])
-        .map((m: { id?: string }) => m.id)
-        .filter(Boolean) as string[];
       const totalCount = models.length;
 
       // OpenRouter-specific normalization 2026-05-09:

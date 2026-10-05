@@ -1,0 +1,116 @@
+{
+  "baseCommit": "cb669381c8c7c75316c59edc122db2f9d4123396",
+  "status": "verified source snapshot; QA deployment pending",
+  "files": [
+    {
+      "path": "package.json",
+      "sha256": "cd59112790064d5e0641b8c4f9ede8c5530b6c2965b19cc1ecb038ae844f061a"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "f53d3d29a398385c009c439f852c8a8b1a9591fcd160f4e9985f00bef0f49081"
+    },
+    {
+      "path": "src/components/dashboard/panels/RoutingWorkflowPanel.tsx",
+      "sha256": "43b54be350476d1ed47e10fac6aa9c176672444b46c98eaadfebc11b6618fd18"
+    },
+    {
+      "path": "src/components/dashboard/panels/ConfigurationPanel.tsx",
+      "sha256": "49d8e03f835915637b96fc401c796c3dd4c4d945cefcef44a1115dc8582d2818"
+    },
+    {
+      "path": "src/lib/provider-catalog.ts",
+      "sha256": "4fa5bc1632208aeca41fdd802c94af21ed3dfdce356903c096aef2db8ef4ff19"
+    },
+    {
+      "path": "src/lib/services/config-service.ts",
+      "sha256": "62a12b8590396fc02b82bded387c19bbc6c414f915607fde0bfb533af4d660db"
+    },
+    {
+      "path": "src/lib/services/provider-routing-readiness.ts",
+      "sha256": "9cf0d654e54cddd3bc230c53362eb836d004421d11b851be1673f5f566d4b79d"
+    },
+    {
+      "path": "src/lib/services/configured-proxy-model.ts",
+      "sha256": "f1b38717056df48c46c14a6d220fa189440c8666325a38c3b259b6342d50472d"
+    },
+    {
+      "path": "src/lib/litellm/sync.ts",
+      "sha256": "67e8fdea70042f14144afeba9935f0a8690fb6e97fd7389fd916236e4b892ffa"
+    },
+    {
+      "path": "src/app/api/config/providers/route.ts",
+      "sha256": "fad2c843c123afda75fb6bc9ac094a594fd0d4e7782b4307d1d39819414b23ef"
+    },
+    {
+      "path": "src/app/api/config/providers/[id]/route.ts",
+      "sha256": "e75a617e21a4e153160b0d7aa060240eea046e0cdaa5e0decc9b4eabcfb49628"
+    },
+    {
+      "path": "src/app/api/config/providers/[id]/test/route.ts",
+      "sha256": "dbff5d12dbc25f524e641ec9d515db728651e57e8674378b2c3a3924b7c71ed3"
+    },
+    {
+      "path": "src/lib/events.ts",
+      "sha256": "10bd36f600677536592ac1d31905f5b1a74f91ba45327437123cf4d81a2e33e3"
+    },
+    {
+      "path": "src/lib/services/hermes-watcher.ts",
+      "sha256": "2d34c271acb93a4cd93229ea4de0f0583b629db65af6a45c08389d45e7d57db5"
+    },
+    {
+      "path": "src/lib/services/hermes-db.ts",
+      "sha256": "072ea358ac0c6e92c2a860a7e56bdcc3fd2520d19db8154add4228313956fb5a"
+    },
+    {
+      "path": "src/lib/services/hermes-watcher-runner.ts",
+      "sha256": "ae7d6511e2c36dbb965b43496bd2050558e4d90cd9fbc93535a9a13d6ba15f2f"
+    },
+    {
+      "path": "src/lib/services/health-tick.ts",
+      "sha256": "7faf49420ab9d26bc21d4721391d006c778c2cd362efd8716319c14ae759207d"
+    },
+    {
+      "path": "src/app/api/infrastructure/route.ts",
+      "sha256": "74fa6e62689f528626f4735e3b03158e61aa2a31659c182c867a5f0978d88020"
+    },
+    {
+      "path": "scripts/verify-provider-onboarding-contract.ts",
+      "sha256": "3feac572c797630dab292910bc4e7046373008ec4eeda0f5e8ada4b2e91fe5bc"
+    },
+    {
+      "path": "scripts/verify-provider-ssrf-write.ts",
+      "sha256": "3d31a0cb296b1509f6bfb6d99c18d93f157a8e668b7df94dc5a1e22c51ba565b"
+    },
+    {
+      "path": "scripts/verify-provider-save-sync.ts",
+      "sha256": "5aa7814f85786f913f4f45dda57408abab0f10cf70adf8d46b8e36af47bad542"
+    },
+    {
+      "path": "scripts/verify-native-agent-routing.ts",
+      "sha256": "1991c4206e2a1d14d44ba8f59f2c2dc9bac62d2c9fa75698ba0e8ce929f53d34"
+    },
+    {
+      "path": "scripts/verify-anythingllm-routing.ts",
+      "sha256": "51aafc8a7817a26e7b52564930688ba6500d396ca5afc829036d3e076eeaee9b"
+    },
+    {
+      "path": "scripts/verify-openclaw-routing-actions.ts",
+      "sha256": "bbe41992bf034a04f9d728ffc9e637699f936001487d26c11869d9ac14bb5072"
+    },
+    {
+      "path": "scripts/verify-hermes-ingestion-recovery.ts",
+      "sha256": "b40e49ef26ba0381401fc4bdb5a14a5c7475cea2ada1ca6a23a1fa8a1f97574e"
+    },
+    {
+      "path": "scripts/verify-provider-catalog-browser.mjs",
+      "sha256": "4d31e6a6392b623e0b8d6d860fc25662114e8b97dadcd38996b5e66f47ed3179"
+    },
+    {
+      "path": "scripts/verify-routing-ui-browser.mjs",
+      "sha256": "0f9eed422f94ef52e083ed8a06855b182d95830d504722c07599900f6c1446c4"
+    }
+  ],
+  "productionBuildId": "0AHcLBss21I5TuvpaiRpA",
+  "verifiedAt": "2026-10-05T03:22:26Z"
+}

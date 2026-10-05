@@ -59,7 +59,7 @@ async function main() {
   const { addProvider, addModel } = await import('../src/lib/services/config-service');
   const { deploymentRevision } = await import('../src/lib/litellm/deployment-revision');
   try {
-    await addProvider({ id: 'fixture', name: 'Fixture', type: 'openai', baseUrl: base }); addModel('fixture', 'fixture-model');
+    await addProvider({ id: 'fixture', name: 'Fixture', type: 'openai-compatible', baseUrl: base }); addModel('fixture', 'fixture-model');
     const params = { model: 'openai/fixture-model', api_base: base, api_key: 'not-needed' };
     const revision = deploymentRevision(process.env.CLAWNEX_LITELLM_CONFIG!, 'fixture-model', params);
     info = [{ model_name: 'fixture-model', litellm_params: params, model_info: { x_clawnex_revision: revision } }];

@@ -8,6 +8,7 @@ import { isRbacEnabled, requireSession, requirePermission } from '@/lib/rbac/gua
 import { requireLocalhost } from "@/lib/middleware/localhost-guard";
 import { testConfiguredProxyModel } from '@/lib/services/provider-routing-readiness';
 import { logEvent } from '@/lib/services/audit-logger';
+import { testedProviderCapability } from '@/lib/provider-catalog';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -37,6 +38,9 @@ export async function POST(
         body = parsed;
       }
     } catch { return NextResponse.json({ error: 'Body must be a JSON object' }, { status: 400 }); }
+    const provider = configService.getProvider(id);
+    if (!provider) return NextResponse.json({ error: 'Provider not found' }, { status: 404 });
+    testedProviderCapability(provider.type);
     if (body.action === 'inference') {
       if (typeof body.modelAlias !== 'string' || !body.modelAlias.trim()) {
         return NextResponse.json({ error: 'Select a configured model first.' }, { status: 400 });
@@ -55,6 +59,9 @@ export async function POST(
 
     return NextResponse.json(result);
   } catch (err) {
+    if (err instanceof configService.UnsupportedProviderTypeError) {
+      return NextResponse.json({ error: err.message, code: 'unsupported-provider-type' }, { status: 400 });
+    }
     console.error('[Config API] Error testing provider:', err);
     return NextResponse.json({ error: 'Failed to test provider' }, { status: 500 });
   }

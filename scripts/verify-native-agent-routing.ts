@@ -38,7 +38,7 @@ async function main() {
   const call = async (body: unknown) => { const r = await api.POST(request(body)); const d = await r.json(); assert.equal(r.status, 200, JSON.stringify(d)); return d; };
   const added = await registry.POST(request({ type: 'pi', name: 'Pi Fixture' }, '/api/config/coding-agent-connectors'));
   assert.equal(added.status, 201); const connector = (await added.json()).connector;
-  await config.addProvider({ id: 'fixture', name: 'Operator provider', type: 'openai', baseUrl: 'http://127.0.0.1:20128/v1', apiKey: 'fixture-upstream' });
+  await config.addProvider({ id: 'fixture', name: 'Operator provider', type: 'openai-compatible', baseUrl: 'http://127.0.0.1:20128/v1', apiKey: 'fixture-upstream' });
   config.addModel('fixture', 'openai/chosen-model');
   syncProvidersToYaml({ db: getDb(), configPath: process.env.CLAWNEX_LITELLM_CONFIG! });
   globalThis.fetch = async input => String(input).endsWith('/model/info') ? Response.json({ data: YAML.parse(fs.readFileSync(process.env.CLAWNEX_LITELLM_CONFIG!, 'utf8')).model_list }) : String(input).endsWith('/responses') ? Response.json({ id: 'fixture', output: [{ type: 'message', content: [{ type: 'output_text', text: 'OK' }] }] }) : String(input).endsWith('/messages') ? Response.json({ id: 'fixture', type: 'message', content: [{ type: 'text', text: 'OK' }] }) : Response.json({ id: 'fixture', choices: [{ message: { role: 'assistant', content: 'OK' }, finish_reason: 'stop' }] });
@@ -158,7 +158,7 @@ async function main() {
   await call({ action: 'execute-plan', planId: existingRestore.id, approved: true });
   assert.deepEqual(JSON.parse(fs.readFileSync(claudeFile, 'utf8')), existingClaude, 'Restore returns the original Messages base, credential, slots and permissions');
   console.log('PASS: Existing Claude Messages endpoint uses a uniquely tested /v1 provider and restores original settings');
-  await config.addProvider({ id: 'ambiguous', name: 'Second endpoint owner', type: 'openai', baseUrl: 'http://127.0.0.1:20128/v1/', apiKey: 'second-fixture-key' });
+  await config.addProvider({ id: 'ambiguous', name: 'Second endpoint owner', type: 'openai-compatible', baseUrl: 'http://127.0.0.1:20128/v1/', apiKey: 'second-fixture-key' });
   config.addModel('ambiguous', 'openai/chosen-model');
   const ambiguousInventory = await call({ action: 'sync' });
   await call({ action: 'select', connector: 'claude', itemIds: ambiguousInventory.claude.items.filter((i: any) => i.present).map((i: any) => i.id), desiredRoute: 'routed' });

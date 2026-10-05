@@ -200,6 +200,7 @@ export function readDetailedHealth() {
       messagesScanned: hermesStatus.messagesScanned,
       lastScanTime: hermesStatus.lastScanTime,
       errors: hermesStatus.errors,
+      lastError: hermesStatus.lastError,
       hermesAvailable: hermesStatus.hermesAvailable,
       pollIntervalMs: hermesStatus.pollIntervalMs,
       sourceId: hermesStatus.sourceId,

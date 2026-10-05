@@ -9,6 +9,7 @@ import { checkProxyModelReadiness } from '../litellm/model-readiness';
 import type { ConnectorRoutingSummary as Summary, RoutingConnectorId } from './connector-routing-inventory';
 type ConnectorRoutingSummary = Summary<RoutingConnectorId>;
 import { resolveConfiguredProxyModel } from './configured-proxy-model';
+import { testedProviderCapability } from '../provider-catalog';
 
 export function configuredRoutingModel(item: ConnectorRoutingSummary['items'][number]) {
   const recordedAlias = typeof item.metadata.proxyModelAlias === 'string' ? item.metadata.proxyModelAlias : null;
@@ -23,6 +24,7 @@ function expected(providerId: string, modelAlias: string) {
   const provider = getProvider(providerId);
   if (!provider?.is_active || provider.type === 'openclaw' ||
       !listModels(providerId).some(model => model.model_id === modelAlias)) throw new Error('not configured');
+  testedProviderCapability(provider.type);
   const configPath = resolveLiteLLMConfigPath();
   const revision = deploymentRevision(configPath, modelAlias, {
     model: litellmModelForConfiguredModel(provider.type, modelAlias),

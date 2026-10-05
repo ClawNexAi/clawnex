@@ -1,4 +1,5 @@
 import { getProvider, listModels } from './config-service';
+import { PROVIDER_CATALOG } from '../provider-catalog';
 
 /** Resolve an agent's provider-scoped model id to the exact alias exposed by LiteLLM. */
 export function resolveConfiguredProxyModel(
@@ -29,7 +30,9 @@ export function resolveConfiguredProxyModel(
   for (const candidate of candidates) {
     const qualified = eligible.filter(model => {
       const provider = getProvider(model.provider_id);
-      return provider != null && model.model_id === `${provider.type}/${candidate}`;
+      if (!provider) return false;
+      const capability = PROVIDER_CATALOG.find(item => item.type === provider.type && item.enabled);
+      return model.model_id === `${capability?.liteLLMPrefix || provider.type}/${candidate}`;
     });
     if (qualified.length === 1) return { providerId: qualified[0].provider_id, modelAlias: qualified[0].model_id };
   }

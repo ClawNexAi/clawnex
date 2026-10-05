@@ -19,8 +19,8 @@ import path from 'node:path';
 import { v4 as uuid } from 'uuid';
 import { getHermesDb, getHermesHome, isHermesAvailable } from './hermes-db';
 import { shieldScan, outboundScan, getPersistedWhitelist } from '../shield/scanner';
-import { queryOne, run } from '../db/index';
-import { broadcast } from '../events';
+import { queryOne, run, transaction } from '../db/index';
+import { broadcast, bufferBroadcastsUntilCommit } from '../events';
 import { createAlert } from './alert-manager';
 import { recordShieldEvidence } from './shield-evidence';
 import { ingestEvent } from './correlation-engine';
@@ -49,6 +49,7 @@ export interface HermesWatcherStats {
   messagesScanned: number;
   lastScanTime: string | null;
   errors: number;
+  lastError: string | null;
   hermesAvailable: boolean;
   lastProcessedId: number;
   sourceId: string;
@@ -62,6 +63,8 @@ let lastProcessedMessageId = 0;
 let messagesScanned = 0;
 let lastScanTime: string | null = null;
 let errorCount = 0;
+let lastError: string | null = null;
+let initialized = false;
 
 function hermesSourceId(): string {
   const homeHash = crypto.createHash('sha256').update(getHermesHome()).digest('hex').slice(0, 12);
@@ -113,13 +116,18 @@ function coerceHermesTimestamp(value: string | number | null | undefined): strin
 
 function readPersistedCursor(): number | null {
   try {
-    const row = queryOne<{ last_message_id: number }>(
-      "SELECT last_message_id FROM hermes_ingest_cursors WHERE source_id = ?",
+    const row = queryOne<{ last_message_id: number; last_error: string | null }>(
+      "SELECT last_message_id, last_error FROM hermes_ingest_cursors WHERE source_id = ?",
       [hermesSourceId()],
     );
-    if (row && Number.isFinite(row.last_message_id)) return Number(row.last_message_id);
+    if (row) {
+      if (!Number.isSafeInteger(row.last_message_id) || row.last_message_id < 0) throw new Error('Invalid Hermes ingestion cursor');
+      lastError = row.last_error ? 'Hermes ingestion failed. Check the database/schema and retry.' : null;
+      return Number(row.last_message_id);
+    }
   } catch (err) {
     console.warn('[HermesWatcher] Failed to read persisted cursor:', err instanceof Error ? err.message : err);
+    throw err;
   }
   return null;
 }
@@ -140,7 +148,7 @@ function updatePersistedCursor(messageId: number, messageTimestamp: string | nul
     );
   } catch (err) {
     console.error('[HermesWatcher] Failed to persist cursor:', err);
-    errorCount++;
+    throw err;
   }
 }
 
@@ -177,7 +185,7 @@ function persistHermesEvent(row: HermesMessageRow, opts: {
     );
   } catch (err) {
     console.error('[HermesWatcher] Failed to persist normalized Hermes event:', err);
-    errorCount++;
+    throw err;
   }
 }
 
@@ -201,8 +209,9 @@ function detectProvider(model: string | null): string {
 // Process a single Hermes message
 // ---------------------------------------------------------------------------
 
-function processMessage(row: HermesMessageRow): void {
+function processMessage(row: HermesMessageRow): (() => void) | undefined {
   const content = row.content;
+  if (typeof content !== 'string') throw new Error('Hermes message content must be text');
   if (!content || content.trim().length === 0) return;
 
   const direction = row.role === 'user' ? 'inbound' : 'outbound';
@@ -218,8 +227,7 @@ function processMessage(row: HermesMessageRow): void {
       : outboundScan(content);
   } catch (err) {
     console.error('[HermesWatcher] Shield scan error:', err);
-    errorCount++;
-    return;
+    throw err;
   }
 
   messagesScanned++;
@@ -228,7 +236,7 @@ function processMessage(row: HermesMessageRow): void {
   const promptHash = crypto.createHash('sha256').update(content).digest('hex').slice(0, 16);
   const trafficId = uuid();
 
-  // Log to proxy_traffic (fire-and-forget)
+  // Critical writes participate in the poller's per-message transaction.
   try {
     run(
       `INSERT INTO proxy_traffic (id, timestamp, direction, model, provider, upstream_url, prompt_hash, messages_count, input_tokens, output_tokens, total_tokens, cost_usd, latency_ms, shield_verdict, shield_score, shield_detections, blocked, block_reason, session_id, status_code, error, source)
@@ -259,7 +267,7 @@ function processMessage(row: HermesMessageRow): void {
     );
   } catch (err) {
     console.error('[HermesWatcher] DB write error:', err);
-    errorCount++;
+    throw err;
   }
 
   // Broadcast via SSE (fire-and-forget)
@@ -311,6 +319,12 @@ function processMessage(row: HermesMessageRow): void {
       }).alertMetadata
     : undefined;
 
+  // The general audit logger is best-effort. Hermes must not commit an
+  // incident whose evidence backlink was never persisted.
+  if (alertEvidence && !queryOne('SELECT id FROM audit_log WHERE id = ?', [alertEvidence.audit_event_id])) {
+    throw new Error('Hermes audit evidence could not be persisted');
+  }
+
   // Generate alerts for BLOCK/REVIEW verdicts
   if (scanResult.verdict === 'BLOCK') {
     const alertSeverity = scanResult.score >= 80 ? 'CRITICAL' : scanResult.score >= 60 ? 'HIGH' : 'MEDIUM';
@@ -334,7 +348,7 @@ function processMessage(row: HermesMessageRow): void {
 
   // Feed into correlation engine for non-ALLOW verdicts
   if (scanResult.verdict !== 'ALLOW') {
-    ingestEvent({
+    return () => ingestEvent({
       source: 'hermes-watcher',
       eventType: scanResult.verdict.toLowerCase(),
       sessionId,
@@ -361,24 +375,35 @@ function processMessage(row: HermesMessageRow): void {
  * Initialize the watcher — find the highest existing message ID to start from.
  */
 export function initializeHermesWatcher(): void {
+  initialized = false;
   const db = getHermesDb();
-  if (!db) return;
+  if (!db) {
+    lastError = 'Hermes state.db is unavailable or unsupported. Check its path, permissions and schema.';
+    errorCount++;
+    console.warn('[HermesWatcher]', lastError);
+    return;
+  }
 
   try {
     const persistedCursor = readPersistedCursor();
     if (persistedCursor !== null) {
       lastProcessedMessageId = persistedCursor;
+      initialized = true;
       console.log(`[HermesWatcher] Initialized — restored persisted cursor at message ID ${lastProcessedMessageId}`);
       return;
     }
 
     const row = db.prepare("SELECT MAX(id) as maxId, MAX(timestamp) as maxTimestamp FROM messages").get() as { maxId: number | null; maxTimestamp: string | null } | undefined;
-    lastProcessedMessageId = row?.maxId ?? 0;
-    updatePersistedCursor(lastProcessedMessageId, coerceHermesTimestamp(row?.maxTimestamp ?? null));
+    const baseline = row?.maxId ?? 0;
+    updatePersistedCursor(baseline, coerceHermesTimestamp(row?.maxTimestamp ?? null));
+    lastProcessedMessageId = baseline;
+    initialized = true;
+    lastError = null;
     console.log(`[HermesWatcher] Initialized — starting from message ID ${lastProcessedMessageId}`);
   } catch (err) {
     console.error('[HermesWatcher] Failed to initialize:', err);
     errorCount++;
+    lastError = 'Hermes initialization failed. Check the database/schema and cursor before retrying.';
   }
 }
 
@@ -386,8 +411,17 @@ export function initializeHermesWatcher(): void {
  * Poll for new messages since lastProcessedMessageId.
  */
 export function pollHermesMessages(): void {
+  if (!initialized) {
+    initializeHermesWatcher();
+    if (!initialized) return;
+  }
   const db = getHermesDb();
-  if (!db) return;
+  if (!db) {
+    lastError = 'Hermes state.db is unavailable or unsupported. Check its path, permissions and schema.';
+    errorCount++;
+    console.warn('[HermesWatcher]', lastError);
+    return;
+  }
 
   try {
     const rows = db.prepare(
@@ -395,7 +429,7 @@ export function pollHermesMessages(): void {
               m.timestamp, m.finish_reason,
               s.model, s.source AS platform, s.title, s.billing_provider
        FROM messages m
-       JOIN sessions s ON m.session_id = s.id
+       LEFT JOIN sessions s ON m.session_id = s.id
        WHERE m.id > ?
          AND m.role IN ('user', 'assistant')
          AND m.content IS NOT NULL AND LENGTH(m.content) > 0
@@ -404,14 +438,30 @@ export function pollHermesMessages(): void {
     ).all(lastProcessedMessageId) as HermesMessageRow[];
 
     for (const row of rows) {
-      processMessage(row);
+      const previousScanned = messagesScanned;
+      const previousScanTime = lastScanTime;
+      let afterCommit: (() => void) | undefined;
+      try {
+        afterCommit = bufferBroadcastsUntilCommit(() => transaction(() => {
+          const publishCorrelation = processMessage(row);
+          updatePersistedCursor(row.id, coerceHermesTimestamp(row.timestamp));
+          return publishCorrelation;
+        }));
+      } catch (err) {
+        messagesScanned = previousScanned;
+        lastScanTime = previousScanTime;
+        throw err;
+      }
       lastProcessedMessageId = row.id;
-      updatePersistedCursor(row.id, coerceHermesTimestamp(row.timestamp));
+      lastError = null;
+      afterCommit?.();
     }
   } catch (err) {
     console.error('[HermesWatcher] Poll error:', err);
     errorCount++;
-    updatePersistedCursor(lastProcessedMessageId, null, err instanceof Error ? err.message : 'Hermes poll error');
+    lastError = 'Hermes ingestion failed. Check the database/schema and retry.';
+    try { updatePersistedCursor(lastProcessedMessageId, null, lastError); }
+    catch { /* The failed store must not advance either cursor. */ }
   }
 }
 
@@ -425,6 +475,7 @@ export function getHermesWatcherStats(): HermesWatcherStats {
     messagesScanned,
     lastScanTime,
     errors: errorCount,
+    lastError,
     hermesAvailable: isHermesAvailable(),
     lastProcessedId: lastProcessedMessageId,
     sourceId: hermesSourceId(),
@@ -439,4 +490,6 @@ export function resetHermesWatcher(): void {
   messagesScanned = 0;
   lastScanTime = null;
   errorCount = 0;
+  lastError = null;
+  initialized = false;
 }

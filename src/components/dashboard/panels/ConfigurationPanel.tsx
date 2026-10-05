@@ -6,6 +6,7 @@ import { C, F } from "../constants";
 import { Badge, BadgeLegend, Dot, CollapsibleCard, CategorySection, LoadingSpinner, PaginationFooter, formatTimeAgo } from "../shared";
 import { Tooltip } from "../tooltip";
 import { ProviderApiKeyInput } from "../ProviderApiKeyInput";
+import { PROVIDER_CATALOG } from '@/lib/provider-catalog';
 import { timeAgo } from "../utils";
 import type { TabId } from "../types";
 import { CORRELATION_STARTER_TEMPLATES } from "@/lib/correlation-templates";
@@ -4571,54 +4572,21 @@ export function ConfigurationPanel({ focusCard, onNavigate, incomingFromMissionC
                 const val = e.target.value;
                 setNewProviderType(val as string);
                 // Auto-fill base URL and name based on provider type
-                const providerDefaults: Record<string, { url: string; name: string }> = {
-                  "lmstudio": { url: "http://localhost:1234/v1", name: "LM Studio" },
-                  "openai-compatible": { url: "http://localhost:8080/v1", name: "" },
-                  "openrouter": { url: "https://openrouter.ai/api/v1", name: "OpenRouter" },
-                  "anthropic": { url: "https://api.anthropic.com/v1", name: "Anthropic (Claude)" },
-                  "openai": { url: "https://api.openai.com/v1", name: "OpenAI (GPT)" },
-                  "google-gemini": { url: "https://generativelanguage.googleapis.com/v1beta", name: "Google Gemini" },
-                  "azure-openai": { url: "https://YOUR_RESOURCE.openai.azure.com", name: "Azure OpenAI" },
-                  "groq": { url: "https://api.groq.com/openai/v1", name: "Groq" },
-                  "together": { url: "https://api.together.xyz/v1", name: "Together AI" },
-                  "mistral": { url: "https://api.mistral.ai/v1", name: "Mistral AI" },
-                  "cohere": { url: "https://api.cohere.ai/v1", name: "Cohere" },
-                  "nvidia-nim": { url: "https://integrate.api.nvidia.com/v1", name: "NVIDIA NIM" },
-                  "ollama": { url: "http://localhost:11434/v1", name: "Ollama" },
-                  "fireworks": { url: "https://api.fireworks.ai/inference/v1", name: "Fireworks AI" },
-                  "deepseek": { url: "https://api.deepseek.com/v1", name: "DeepSeek" },
-                  "perplexity": { url: "https://api.perplexity.ai", name: "Perplexity" },
-                };
-                const defaults = providerDefaults[val];
+                const defaults = PROVIDER_CATALOG.find(provider => provider.type === val && provider.enabled);
                 if (defaults) {
-                  setNewProviderUrl(defaults.url);
+                  setNewProviderUrl(defaults.defaultUrl);
                   if (defaults.name && !newProviderName) setNewProviderName(defaults.name);
                 }
               }} style={{ ...inputStyle, cursor: "pointer" }}>
-                <optgroup label="Local">
-                  <option value="lmstudio">LM Studio</option>
-                  <option value="ollama">Ollama</option>
+                <optgroup label="Tested onboarding adapters">
+                  {PROVIDER_CATALOG.filter(provider => provider.enabled).map(provider => <option key={provider.type} value={provider.type}>{provider.name}</option>)}
                 </optgroup>
-                <optgroup label="Cloud APIs">
-                  <option value="openrouter">OpenRouter</option>
-                  <option value="anthropic">Anthropic (Claude)</option>
-                  <option value="openai">OpenAI (GPT)</option>
-                  <option value="google-gemini">Google Gemini</option>
-                  <option value="azure-openai">Azure OpenAI</option>
-                  <option value="groq">Groq</option>
-                  <option value="together">Together AI</option>
-                  <option value="mistral">Mistral AI</option>
-                  <option value="cohere">Cohere</option>
-                  <option value="nvidia-nim">NVIDIA NIM</option>
-                  <option value="fireworks">Fireworks AI</option>
-                  <option value="deepseek">DeepSeek</option>
-                  <option value="perplexity">Perplexity</option>
-                </optgroup>
-                <optgroup label="Other">
-                  <option value="openai-compatible">OpenAI Compatible</option>
+                <optgroup label="Unavailable — adapter not tested">
+                  {PROVIDER_CATALOG.filter(provider => !provider.enabled).map(provider => <option key={provider.type} value={provider.type} disabled>{provider.name} — adapter not tested</option>)}
                 </optgroup>
               </select>
               </Tooltip>
+              <div style={{ fontSize: 11, color: C.txT, marginTop: 4 }}>Only tested onboarding adapters can be added. Existing providers are preserved; discovery is not inference readiness.</div>
             </div>
           </div>
           <div style={{ marginBottom: 8 }}>

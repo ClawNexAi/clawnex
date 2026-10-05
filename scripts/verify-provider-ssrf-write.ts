@@ -23,6 +23,7 @@
 
 process.env.DATABASE_PATH = ":memory:";
 process.env.CLAWNEX_AUDIT_STDOUT = "false";
+process.env.CLAWNEX_TEST_SKIP_DB_SEED = '1';
 
 import {
   addProvider,
@@ -53,7 +54,7 @@ async function expectReject(baseUrl: string, label: string) {
   let threw = false;
   let msg = "";
   try {
-    await addProvider({ name: `ssrf-test-${Date.now()}`, type: "anthropic", baseUrl, apiKey: "sk-test" });
+    await addProvider({ name: `ssrf-test-${Date.now()}`, type: "openai-compatible", baseUrl, apiKey: "sk-test" });
   } catch (err) {
     threw = true;
     msg = err instanceof Error ? err.message : String(err);
@@ -65,7 +66,7 @@ async function expectAllow(baseUrl: string, label: string) {
   let threw = false;
   let msg = "";
   try {
-    await addProvider({ id: `ssrf-test-${Math.random()}`, name: `ssrf-test-${Date.now()}`, type: "anthropic", baseUrl, apiKey: "sk-test" });
+    await addProvider({ id: `ssrf-test-${Math.random()}`, name: `ssrf-test-${Date.now()}`, type: "openai-compatible", baseUrl, apiKey: "sk-test" });
   } catch (err) {
     threw = true;
     msg = err instanceof Error ? err.message : String(err);
@@ -105,7 +106,7 @@ async function main() {
   // Reject still gives the helpful "TRUSTED_PROVIDER_HOSTS" pointer.
   let pointerOk = false;
   try {
-    await addProvider({ name: "ptest", type: "anthropic", baseUrl: "https://example.com", apiKey: "" });
+    await addProvider({ name: "ptest", type: "openai-compatible", baseUrl: "https://example.com", apiKey: "" });
   } catch (err) {
     pointerOk = String(err).includes("TRUSTED_PROVIDER_HOSTS");
   }
@@ -122,7 +123,7 @@ async function main() {
   // reject downstream. So we expect rejection but for a different reason.
   let allowlistPassed = false;
   try {
-    await addProvider({ name: "ptest", type: "anthropic", baseUrl: "https://self-hosted.example", apiKey: "" });
+    await addProvider({ name: "ptest", type: "openai-compatible", baseUrl: "https://self-hosted.example", apiKey: "" });
   } catch (err) {
     const msg = String(err);
     // If the error mentions "not on the trusted-provider allowlist", the
@@ -143,7 +144,7 @@ async function main() {
   delete process.env.TRUSTED_PROVIDER_HOSTS;
 
   section("Promise signature on write APIs (forces await)");
-  const addRes = addProvider({ name: "sig-probe", type: "anthropic", baseUrl: "http://127.0.0.1:1", apiKey: "" });
+  const addRes = addProvider({ name: "sig-probe", type: "openai-compatible", baseUrl: "http://127.0.0.1:1", apiKey: "" });
   assert(typeof (addRes as unknown as Promise<unknown>).then === "function", "addProvider returns a Promise");
   // Drain it without crashing the verifier even though the address is unreachable.
   try { await addRes; } catch { /* expected for this probe */ }

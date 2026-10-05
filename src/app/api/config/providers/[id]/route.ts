@@ -140,7 +140,7 @@ export async function PATCH(
     return NextResponse.json({ provider: configService.redactProvider(provider), updated: true, configSynced: true });
   } catch (err) {
     console.error('[Config API] Error updating provider:', err);
-    if (err instanceof configService.ProviderEndpointValidationError) {
+    if (err instanceof configService.ProviderEndpointValidationError || err instanceof configService.UnsupportedProviderTypeError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     return NextResponse.json({ error: 'Failed to update provider' }, { status: 500 });

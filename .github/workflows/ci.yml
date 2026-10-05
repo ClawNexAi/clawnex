@@ -35,6 +35,9 @@ jobs:
       - name: Verify provider onboarding contract
         run: npm run verify:provider-onboarding
 
+      - name: Verify Hermes ingestion recovery
+        run: npm run verify:hermes-ingestion-recovery
+
       - name: Build
         run: npm run build
         env:

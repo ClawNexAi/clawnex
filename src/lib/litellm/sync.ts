@@ -24,6 +24,7 @@ import * as fs from "node:fs";
 import { randomUUID } from 'node:crypto';
 import { deploymentRevision } from './deployment-revision';
 import type Database from "better-sqlite3";
+import { PROVIDER_CATALOG } from '../provider-catalog';
 
 /**
  * Canonical placeholder model name. Matches litellm/config.template.yaml
@@ -84,6 +85,10 @@ function assertSafeYamlValue(s: unknown, field: string): string {
 }
 
 function modelPrefixForProviderType(providerType: string): string {
+  const tested = PROVIDER_CATALOG.find(provider => provider.type === providerType && provider.enabled);
+  if (tested) return tested.liteLLMPrefix;
+  // Preserve existing legacy YAML adapters; new onboarding and readiness are
+  // gated by the tested catalog. Do not silently migrate stored providers.
   const t = providerType.toLowerCase();
   if (t.includes("openrouter")) return "openrouter";
   if (t.includes("anthropic") || t.includes("claude")) return "anthropic";

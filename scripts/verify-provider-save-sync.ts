@@ -35,7 +35,7 @@ async function main() {
   try {
     const response = await POST(new NextRequest('http://127.0.0.1:5001/api/config/providers', {
       method: 'POST', headers: { origin: 'http://127.0.0.1:5001', 'content-type': 'application/json' },
-      body: JSON.stringify({ id: 'save-sync-fixture', name: 'Fixture', type: 'openai',
+      body: JSON.stringify({ id: 'save-sync-fixture', name: 'Fixture', type: 'openai-compatible',
         baseUrl: 'http://127.0.0.1:19999/v1', apiKey: 'fake-key-no-leak' }),
     }));
     const body = await response.json();
@@ -90,7 +90,7 @@ async function main() {
     } finally { globalThis.fetch = originalFetch; }
     const refused = await POST(new NextRequest('http://127.0.0.1:5001/api/config/providers', {
       method: 'POST', headers: { origin: 'http://127.0.0.1:5001', 'content-type': 'application/json' },
-      body: JSON.stringify({ id: 'metadata-fixture', name: 'Unsafe fixture', type: 'openai',
+      body: JSON.stringify({ id: 'metadata-fixture', name: 'Unsafe fixture', type: 'openai-compatible',
         baseUrl: 'http://169.254.169.254/latest/meta-data', apiKey: 'fake-key-no-leak' }),
     }));
     const refusal = await refused.json();

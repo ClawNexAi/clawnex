@@ -34,11 +34,54 @@ async function main() {
   const { NextRequest } = await import('next/server');
   const providerRoutes = await import('../src/app/api/config/providers/route');
   const providerTestRoutes = await import('../src/app/api/config/providers/[id]/test/route');
+  const providerDetailRoutes = await import('../src/app/api/config/providers/[id]/route');
   const modelRoutes = await import('../src/app/api/config/models/route');
   const { getDb } = await import('../src/lib/db');
+  const { PROVIDER_CATALOG } = await import('../src/lib/provider-catalog');
   const originalFetch = globalThis.fetch;
 
   try {
+    assert.deepEqual(PROVIDER_CATALOG.filter(provider => provider.enabled).map(provider => provider.type).sort(), cases.map(provider => provider.type).sort(), 'every enabled family has the complete public onboarding fixture');
+    const yamlBefore = fs.readFileSync(configPath, 'utf8');
+    const unsupported = await providerRoutes.POST(new NextRequest('http://127.0.0.1:5001/api/config/providers', {
+      method: 'POST', headers: { origin: 'http://127.0.0.1:5001', 'content-type': 'application/json' },
+      body: JSON.stringify({ id: 'unsupported-fixture', name: 'Unsupported', type: 'anthropic', baseUrl: 'http://127.0.0.1:19105/v1' }),
+    }));
+    assert.equal(unsupported.status, 400, 'untested native families cannot be added');
+    assert.match((await unsupported.json()).error, /not supported.*tested|tested.*not supported/i);
+    assert.equal(getDb().prepare('SELECT id FROM config_providers WHERE id = ?').get('unsupported-fixture'), undefined);
+    assert.equal(fs.readFileSync(configPath, 'utf8'), yamlBefore, 'refused onboarding leaves working YAML untouched');
+    for (const type of [...PROVIDER_CATALOG.filter(provider => !provider.enabled).map(provider => provider.type), 'unknown-provider', 'openrouter-extra', 42]) {
+      const refused = await providerRoutes.POST(new NextRequest('http://127.0.0.1:5001/api/config/providers', {
+        method: 'POST', headers: { origin: 'http://127.0.0.1:5001', 'content-type': 'application/json' },
+        body: JSON.stringify({ id: 'refused-fixture', name: 'Untested family', type, baseUrl: 'http://127.0.0.1:19105/v1' }),
+      }));
+      assert.equal(refused.status, 400, `${String(type)} is not silently treated as OpenAI-compatible`);
+      assert.equal((await refused.json()).code, 'unsupported-provider-type');
+    }
+    const providerCount = getDb().prepare('SELECT COUNT(*) AS count FROM config_providers').get() as { count: number };
+    assert.equal(providerCount.count, 0, 'all refused families leave the provider table unchanged');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), yamlBefore);
+    getDb().prepare('INSERT INTO config_providers (id, name, type, base_url, api_key, is_active) VALUES (?, ?, ?, ?, ?, 1)')
+      .run('legacy-fixture', 'Legacy native provider', 'anthropic', 'http://127.0.0.1:19105/v1', 'legacy-secret');
+    let unsupportedRequests = 0;
+    globalThis.fetch = async () => { unsupportedRequests++; return Response.json({ data: [] }); };
+    for (const body of [undefined, { action: 'inference', modelAlias: 'legacy-model', approved: true }]) {
+      const tested = await providerTestRoutes.POST(new NextRequest('http://127.0.0.1:5001/api/config/providers/legacy-fixture/test', {
+        method: 'POST', headers: { origin: 'http://127.0.0.1:5001' }, ...(body ? { body: JSON.stringify(body) } : {}),
+      }), { params: Promise.resolve({ id: 'legacy-fixture' }) });
+      assert.equal(tested.status, 400, 'legacy unsupported discovery/readiness is refused before sending credentials');
+      assert.equal((await tested.json()).code, 'unsupported-provider-type');
+    }
+    assert.equal(unsupportedRequests, 0);
+    assert.ok(getDb().prepare('SELECT id FROM config_providers WHERE id = ?').get('legacy-fixture'), 'legacy record is preserved');
+    const editedLegacy = await providerDetailRoutes.PATCH(new NextRequest('http://127.0.0.1:5001/api/config/providers/legacy-fixture', {
+      method: 'PATCH', headers: { origin: 'http://127.0.0.1:5001' }, body: JSON.stringify({ name: 'Renamed legacy provider' }),
+    }), { params: Promise.resolve({ id: 'legacy-fixture' }) });
+    assert.equal(editedLegacy.status, 200, 'legacy records remain editable');
+    const legacyBody = await editedLegacy.json();
+    assert.equal(legacyBody.provider.type, 'anthropic');
+    assert.ok(!JSON.stringify(legacyBody).includes('legacy-secret'));
     for (const provider of cases) {
       const baseUrl = `http://127.0.0.1:${provider.port}/v1/`;
       const created = await providerRoutes.POST(new NextRequest('http://127.0.0.1:5001/api/config/providers', {
@@ -97,6 +140,22 @@ async function main() {
       assert.equal(tested.status, 200, `${provider.type} proxy test succeeds`);
       assert.equal((await tested.json()).ready, true);
     }
+    globalThis.fetch = async () => Response.json({ data: [{ id: { credential: 'must-not-leak' } }] });
+    const malformed = await providerTestRoutes.POST(new NextRequest('http://127.0.0.1:5001/api/config/providers/lmstudio-fixture/test', {
+      method: 'POST', headers: { origin: 'http://127.0.0.1:5001' },
+    }), { params: Promise.resolve({ id: 'lmstudio-fixture' }) });
+    const malformedResult = await malformed.json();
+    assert.equal(malformedResult.status, 'error', 'malformed discovery is not a connected provider');
+    assert.match(malformedResult.error, /invalid model catalog/i);
+    assert.ok(!JSON.stringify(malformedResult).includes('must-not-leak'));
+    getDb().prepare("UPDATE config_providers SET api_key = '' WHERE id = 'nvidia-fixture'").run();
+    let unauthenticatedRequests = 0;
+    globalThis.fetch = async () => { unauthenticatedRequests++; return Response.json({ data: [] }); };
+    const unauthenticated = await providerTestRoutes.POST(new NextRequest('http://127.0.0.1:5001/api/config/providers/nvidia-fixture/test', {
+      method: 'POST', headers: { origin: 'http://127.0.0.1:5001' },
+    }), { params: Promise.resolve({ id: 'nvidia-fixture' }) });
+    assert.equal((await unauthenticated.json()).status, 'error', 'required provider authentication is not optional');
+    assert.equal(unauthenticatedRequests, 0, 'missing required credential is refused before any request');
     console.log('PASS: validated provider families satisfy add -> discover -> sync -> proxy-test contract');
   } finally {
     globalThis.fetch = originalFetch;

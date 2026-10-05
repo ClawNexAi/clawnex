@@ -41,6 +41,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   connector: ConnectorId; data: ConnectorRoutingResponse; refresh: () => Promise<void>; focusedCard?: string | null;
 }) {
   const summary = data[connector];
+  const configurationUnavailable = summary.status !== 'ok';
   const sources = [...new Set(summary.items.filter(item => item.present).map(item => item.sourceId))];
   const native = ['pi', 'codex', 'claude'].includes(connector);
   if (!sources.length && summary.status === 'ok') sources.push(summary.sourceId);
@@ -59,7 +60,9 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
   const providers = new Map<string, ConnectorRoutingItem[]>();
   for (const item of items) providers.set(item.providerId, [...(providers.get(item.providerId) || []), item]);
   const groups = [...providers.entries()];
-  const currentKey = JSON.stringify(items.map(item => [item.id, item.fingerprint, item.desiredRoute]));
+  const currentKey = JSON.stringify([sourceId, items.map(item => [item.id, item.fingerprint,
+    item.desiredRoute, item.currentRoute, item.capability,
+    item.metadata.identityHash, item.metadata.identityIntact])]);
   const currentVerification = verification?.key === currentKey ? verification.result : null;
   const routed = groups.filter(([, rows]) => rows.some(row => row.currentRoute === 'routed')).length;
   const recoveryOwned = native && items.some(item => typeof item.metadata.identityHash === 'string');
@@ -129,7 +132,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
       {connector === 'claude' && <p style={{ color: C.txS, fontSize: 12 }}>The chosen model will fill the default, Sonnet, Opus, Haiku, fast and subagent slots. Claude Code requires a working Messages API route.</p>}
     </div>}
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-      <strong style={{ color: C.tx }}>{currentVerification?.status === 'verified' ? 'Routed models verified' : routed ? 'Configured · verification required' : 'Direct connection'}</strong>
+      <strong style={{ color: C.tx }}>{configurationUnavailable ? summary.status === 'read-only' ? 'Read-only configuration' : 'Configuration unavailable' : currentVerification?.status === 'verified' ? 'Routed models verified' : routed ? 'Configured · verification required' : 'Direct connection'}</strong>
       <GlobalFilterSelect ariaLabel={`${title} instance`} variant="form" minWidth={0} disabled={busy || sources.length === 0} value={sourceId}
         onChange={value => { setSelectedSource(value); setMessage(''); setPlan(null); setPrerequisites([]); }}
         options={sources.length ? sources.map(source => ({ value: source, label: source === 'default' ? 'Local instance' : summary.items.find(item => item.sourceId === source)?.metadata.profileName as string || (native || connector === 'opencode' ? `${title} global configuration` : source) })) : [{ value: '', label: 'No local instance found' }]} />
@@ -137,27 +140,28 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
     <p style={{ color: C.txS, fontSize: 12, lineHeight: 1.6 }}>Prepare → Review → Apply → Verify<br />
       {routed} of {groups.length} provider routes configured through ClawNex. {excluded ? `${excluded} unsupported route(s) remain unchanged. Coverage is partial.` : ''}
       {' '}Connection status does not change your existing blocking, observe-only, or emergency-bypass policy.</p>
+    {configurationUnavailable && <p role="alert" style={{ color: C.warn }}>{summary.detail} Refresh configuration before reviewing, restarting or verifying this instance. No connection status has been confirmed.</p>}
     <p style={{ color: C.txS, fontSize: 12 }}>Configure and test your upstream models first. Select provider routes below, then review the changes. Selecting a provider affects all of its models.</p>
     {['pi', 'codex', 'claude'].includes(connector) && <p style={{ color: C.txS, fontSize: 12 }}>{summary.detail}</p>}
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-      <button aria-label={`Review ${title} connection changes`} style={pending ? primaryButton : button} disabled={busy || !sourceId || !pending} onClick={() => void review('apply')}>Review connection changes</button>
+      <button aria-label={`Review ${title} connection changes`} style={pending ? primaryButton : button} disabled={busy || configurationUnavailable || !sourceId || !pending} onClick={() => void review('apply')}>Review connection changes</button>
       <button aria-label={`Refresh ${title} configuration`} style={button} disabled={busy} onClick={() => void run(refresh)}>Refresh configuration</button>
       {connector === 'openclaw' && <button aria-label="Restart OpenClaw instance" style={button}
-        disabled={busy || !sourceId || pending} onClick={restartOpenClaw}>Restart OpenClaw instance</button>}
-      <button aria-label={`Verify ${title} connection`} style={{ ...(verificationPending ? primaryButton : button), opacity: busy || !sourceId || !routed || pending ? 0.45 : 1 }} disabled={busy || !sourceId || routed === 0 || pending} onClick={() => void run(async () => {
+        disabled={busy || configurationUnavailable || !sourceId || pending} onClick={restartOpenClaw}>Restart OpenClaw instance</button>}
+      <button aria-label={`Verify ${title} connection`} style={{ ...(verificationPending ? primaryButton : button), opacity: busy || configurationUnavailable || !sourceId || !routed || pending ? 0.45 : 1 }} disabled={busy || configurationUnavailable || !sourceId || routed === 0 || pending} onClick={() => void run(async () => {
         const result = await command({ action: 'verify', connector, sourceId });
         setVerification({ key: currentKey, result: result.verification });
       })}>Verify connection</button>
       <button aria-label={`Restore ${title} direct connection`}
         title={restoreAvailable ? 'Restore ClawNex-managed routes to their saved direct connection' : 'No ClawNex-managed route is available to restore'}
         style={{ ...button, color: C.warn, borderColor: `${C.warn}66`,
-          opacity: busy || !sourceId || !restoreAvailable ? 0.45 : 1,
-          cursor: busy || !sourceId || !restoreAvailable ? 'not-allowed' : 'pointer' }}
-        disabled={busy || !sourceId || !restoreAvailable} onClick={() => void review('restore')}>Restore direct connection</button>
+          opacity: busy || configurationUnavailable || !sourceId || !restoreAvailable ? 0.45 : 1,
+          cursor: busy || configurationUnavailable || !sourceId || !restoreAvailable ? 'not-allowed' : 'pointer' }}
+        disabled={busy || configurationUnavailable || !sourceId || !restoreAvailable} onClick={() => void review('restore')}>Restore direct connection</button>
     </div>
     {busy && <p role="status" style={{ color: C.txS }}>Working…</p>}
     {message && <p role="status" style={{ color: C.tx, fontSize: 12, lineHeight: 1.6 }}>{message}</p>}
-    {currentVerification && <p role="status" style={{ color: C.txS, fontSize: 12 }}>{currentVerification.detail}</p>}
+    {!configurationUnavailable && currentVerification && <p role="status" style={{ color: C.txS, fontSize: 12 }}>{currentVerification.detail}</p>}
     {prerequisites.length > 0 && <details open><summary style={{ color: C.warn }}>Connection prerequisites ({prerequisites.length})</summary>
       <ul style={{ color: C.txS, fontSize: 12 }}>{prerequisites.map(reason => <li key={reason}>{reason}</li>)}</ul></details>}
     <details open style={{ marginTop: 12 }}><summary style={{ cursor: 'pointer', color: C.tx, marginBottom: 8 }}>Providers and affected models</summary>
@@ -167,7 +171,7 @@ function InstanceRouting({ connector, data, refresh, focusedCard }: {
         const providerDisplayName = rows.find(row => row.itemType === 'provider')?.displayName || providerId;
         return <div key={providerId} style={{ padding: '10px 12px', border: `1px solid ${C.brd}`, borderRadius: 6, marginBottom: 8 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, color: C.tx }}>
-            <input type="checkbox" aria-label={`Route ${providerId} through ClawNex for ${title} ${sourceId}`} disabled={busy || !writable.length} checked={writable.some(row => row.desiredRoute === 'routed')}
+            <input type="checkbox" aria-label={`Route ${providerId} through ClawNex for ${title} ${sourceId}`} disabled={busy || configurationUnavailable || !writable.length} checked={writable.some(row => row.desiredRoute === 'routed')}
               onChange={event => { const checked = event.target.checked; void run(async () => {
                 await command({ action: 'select', connector, itemIds: writable.map(row => row.id), desiredRoute: checked ? 'routed' : 'direct' });
                 await refresh();
@@ -218,10 +222,16 @@ export function RoutingWorkflowPanel({ focusedCard, connectors = ['openclaw', 'h
   const [data, setData] = useState<ConnectorRoutingResponse | null>(null);
   const [error, setError] = useState('');
   const refresh = useCallback(async () => {
-    const response = await fetch('/api/connector-routing');
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Unable to read routing configuration.');
-    setData(result); setError('');
+    try {
+      const response = await fetch('/api/connector-routing');
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to read routing configuration.');
+      setData(result); setError('');
+    } catch (reason) {
+      setData(null);
+      setError(reason instanceof Error ? reason.message : 'Unable to read routing configuration.');
+      throw reason;
+    }
   }, []);
   useEffect(() => { void refresh().catch(reason => setError(String(reason.message || reason))); }, [refresh, refreshToken]);
   return <>{error && <p role="alert" style={{ color: C.warn }}>{error}</p>}

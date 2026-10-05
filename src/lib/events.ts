@@ -28,6 +28,27 @@ const MAX_SSE_CLIENTS = 100;
 
 /** In-memory map of connected SSE clients. Cleaned up on broadcast errors. */
 const clients = new Map<string, SSEClient>();
+let pendingBroadcasts: Uint8Array[] | null = null;
+
+/** Buffer synchronous publication until the caller's database commit succeeds. */
+export function bufferBroadcastsUntilCommit<T>(commit: () => T): T {
+  const parent = pendingBroadcasts;
+  const buffered: Uint8Array[] = [];
+  pendingBroadcasts = buffered;
+  let result: T;
+  try { result = commit(); }
+  finally { pendingBroadcasts = parent; }
+  if (parent) parent.push(...buffered);
+  else buffered.forEach(deliverBroadcast);
+  return result;
+}
+
+function deliverBroadcast(bytes: Uint8Array): void {
+  Array.from(clients.entries()).forEach(([id, client]) => {
+    try { client.controller.enqueue(bytes); }
+    catch { clients.delete(id); }
+  });
+}
 
 /**
  * Register a new SSE client.
@@ -67,14 +88,8 @@ export function broadcast(event: string, data: unknown): void {
   const encoder = new TextEncoder();
   const bytes = encoder.encode(payload);
 
-  Array.from(clients.entries()).forEach(([id, client]) => {
-    try {
-      client.controller.enqueue(bytes);
-    } catch {
-      // Client disconnected — remove from map
-      clients.delete(id);
-    }
-  });
+  if (pendingBroadcasts) pendingBroadcasts.push(bytes);
+  else deliverBroadcast(bytes);
 }
 
 /**

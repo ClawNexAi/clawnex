@@ -107,6 +107,7 @@ export function getHermesWatcherStatus(): {
   messagesScanned: number;
   lastScanTime: string | null;
   errors: number;
+  lastError: string | null;
   pollIntervalMs: number;
   hermesAvailable: boolean;
   sourceId: string;
@@ -121,6 +122,7 @@ export function getHermesWatcherStatus(): {
     messagesScanned: stats.messagesScanned,
     lastScanTime: stats.lastScanTime,
     errors: stats.errors,
+    lastError: stats.lastError,
     pollIntervalMs: config.hermes.pollIntervalMs,
     hermesAvailable: stats.hermesAvailable,
     sourceId: stats.sourceId,

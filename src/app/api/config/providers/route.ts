@@ -121,6 +121,9 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({ provider: configService.redactProvider(provider), saved: true, configSynced: true }, { status: 201 });
   } catch (err) {
+    if (err instanceof configService.UnsupportedProviderTypeError) {
+      return NextResponse.json({ error: err.message, code: 'unsupported-provider-type' }, { status: 400 });
+    }
     console.error('[Config API] Error adding provider:', err);
     if (err instanceof configService.ProviderEndpointValidationError) {
       return NextResponse.json({ error: err.message }, { status: 400 });

@@ -19,12 +19,11 @@ const HERMES_HOME = process.env.HERMES_HOME || path.join(os.homedir(), ".hermes"
 const STATE_DB_PATH = path.join(HERMES_HOME, "state.db");
 
 let cachedDb: Database.Database | null = null;
-let openAttempted = false;
 
 export function getHermesDb(): Database.Database | null {
   if (cachedDb) return cachedDb;
-  if (openAttempted) return null;
-  openAttempted = true;
+  // A missing/unreadable source can recover while ClawNex remains running.
+  // Cache successful read-only handles, not failed open attempts.
   if (!fs.existsSync(STATE_DB_PATH)) return null;
   try {
     const db = new Database(STATE_DB_PATH, { readonly: true, fileMustExist: true });
@@ -48,6 +47,6 @@ export function getHermesDb(): Database.Database | null {
 export function isHermesAvailable(): boolean { return getHermesDb() !== null; }
 export function getHermesHome(): string { return HERMES_HOME; }
 export function closeHermesDb(): void {
-  if (cachedDb) { try { cachedDb.close(); } catch {} cachedDb = null; openAttempted = false; }
+  if (cachedDb) { try { cachedDb.close(); } catch {} cachedDb = null; }
 }
-export function resetHermesDb(): void { closeHermesDb(); openAttempted = false; }
+export function resetHermesDb(): void { closeHermesDb(); }

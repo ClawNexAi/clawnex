@@ -17,6 +17,7 @@ import { queryAll, run } from "@/lib/db/index";
 import { checkLiteLLM as checkLiteLLMImpl } from "@/lib/health/litellm-check";
 import { assertSafeProviderHttpFetchTarget, providerEndpointUrl } from "@/lib/services/config-service";
 import { diagnoseHermes } from "@/lib/services/hermes-diagnostics";
+import { getHermesWatcherStatus } from '@/lib/services/hermes-watcher-runner';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -247,16 +248,17 @@ export async function GET(request: NextRequest) {
     });
 
     const hermesDiagnostics = diagnoseHermes();
+    const hermesWatcher = getHermesWatcherStatus();
     services.push({
       name: "Hermes Agent",
       url: hermesDiagnostics.stateDbPath,
-      status: hermesDiagnostics.available
+      status: hermesWatcher.lastError ? 'degraded' : hermesDiagnostics.available
         ? hermesDiagnostics.status === "live" ? "online" : "degraded"
         : "not_configured",
       latency: 0,
-      error: hermesDiagnostics.available ? undefined : hermesDiagnostics.statusDetail || undefined,
+      error: hermesWatcher.lastError || (hermesDiagnostics.available ? undefined : hermesDiagnostics.statusDetail || undefined),
       detail: hermesDiagnostics.statusDetail || undefined,
-      ingestion_summary: `${hermesDiagnostics.messages.last24h.toLocaleString()} messages observed · ${hermesDiagnostics.messages.lastId.toLocaleString()} cursor`,
+      ingestion_summary: `${hermesWatcher.messagesScanned.toLocaleString()} events ingested this process · ${hermesWatcher.lastProcessedId.toLocaleString()} cursor · ${hermesWatcher.errors.toLocaleString()} errors`,
     });
 
     // Only include Paperclip/Autensa connector data if explicitly configured
