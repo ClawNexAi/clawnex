@@ -20,7 +20,8 @@ process.env.CLAWNEX_LEGACY_ROUTING_SIDECAR = path.join(temp, 'legacy-managed.jso
 process.env.CLAWNEX_HERMES_ROUTING_SIDECAR = path.join(temp, 'hermes-managed.json');
 fs.mkdirSync(process.env.OPENCLAW_HOME);
 const agentConfig = path.join(process.env.OPENCLAW_HOME, 'openclaw.json');
-fs.writeFileSync(agentConfig, JSON.stringify({ models: { providers: { fixture: {
+const originalAgents = { defaults: { model: { primary: 'fixture/fixture-model' }, modelPolicy: { allow: ['fixture/*'] } } };
+fs.writeFileSync(agentConfig, JSON.stringify({ meta: {}, agents: originalAgents, models: { providers: { fixture: {
   baseUrl: 'http://127.0.0.1:19999/v1', models: [{ id: 'fixture-model' }],
 } } } }));
 fs.writeFileSync(configPath, 'model_list: []\n');
@@ -92,6 +93,8 @@ async function main() {
     const applied = await workflow.executeRoutingPlan(plan.id, true, 'fixture');
     assert.equal(applied.ok, true);
     const wiredConfig = JSON.parse(fs.readFileSync(agentConfig, 'utf8'));
+    assert.deepEqual(wiredConfig.meta, {}, 'Reviewed Apply preserves OpenClaw metadata without adding schema-incompatible fields');
+    assert.deepEqual(wiredConfig.agents, originalAgents, 'Reviewed Apply leaves the configured default and model allowlist unchanged');
     const identityToken = wiredConfig.models.providers.fixture.headers['x-clawnex-routing-identity'];
     assert.equal(typeof identityToken, 'string');
     assert.equal(fs.readFileSync(process.env.CLAWNEX_SELECTIVE_ROUTING_SIDECAR!, 'utf8').includes(identityToken), false, 'Journal stores a fingerprint, never the identity token');
@@ -108,7 +111,26 @@ async function main() {
     assert.equal((await workflow.executeRoutingPlan(restore.id, true, 'fixture')).ok, true);
     assert.equal(JSON.parse(fs.readFileSync(agentConfig, 'utf8')).models.providers.fixture.baseUrl, 'http://127.0.0.1:19999/v1');
     assert.equal(JSON.parse(fs.readFileSync(agentConfig, 'utf8')).models.providers.fixture.headers, undefined, 'Restoration removes only the managed identity header');
+    assert.deepEqual(JSON.parse(fs.readFileSync(agentConfig, 'utf8')).meta, {}, 'Reviewed Restore preserves the original OpenClaw metadata');
+    assert.deepEqual(JSON.parse(fs.readFileSync(agentConfig, 'utf8')).agents, originalAgents, 'Reviewed Restore leaves the configured default and model allowlist unchanged');
     console.log('PASS: reviewed plans enforce approval, reject stale files, replay repeats, and restore direct routing');
+    const restoredConfig = JSON.parse(fs.readFileSync(agentConfig, 'utf8'));
+    for (const metadata of [undefined, { lastTouchedVersion: '2026.6.11', lastTouchedAt: '2026-07-02T00:00:00.000Z' }]) {
+      const original = { ...restoredConfig, meta: metadata };
+      fs.writeFileSync(agentConfig, JSON.stringify(original));
+      routing.syncConnectorRoutingInventory();
+      routing.setConnectorRoutingSelections('openclaw', [model.id], 'routed');
+      const metadataPlan = workflow.prepareRoutingPlan('openclaw', 'default', 'apply');
+      assert.equal(metadataPlan.prerequisites.length, 0);
+      assert.equal((await workflow.executeRoutingPlan(metadataPlan.id, true, 'fixture')).ok, true);
+      assert.deepEqual(JSON.parse(fs.readFileSync(agentConfig, 'utf8')).meta, metadata,
+        'Reviewed Apply neither creates missing metadata nor updates legacy metadata');
+      const metadataRestore = workflow.prepareRoutingPlan('openclaw', 'default', 'restore');
+      assert.equal((await workflow.executeRoutingPlan(metadataRestore.id, true, 'fixture')).ok, true);
+      assert.deepEqual(JSON.parse(fs.readFileSync(agentConfig, 'utf8')), JSON.parse(JSON.stringify(original)),
+        'Reviewed Apply/Restore returns every original setting value, including legacy metadata and model policy');
+    }
+    console.log('PASS: reviewed OpenClaw Apply/Restore preserves empty, absent and legacy metadata, defaults and model policy');
     fs.appendFileSync(configPath, '# changed after approval\n');
     assert.equal(hasCurrentProviderReadiness('fixture', 'fixture-model'), false);
     console.log('PASS: approved inference API records readiness and invalidates it on configuration changes');

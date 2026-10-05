@@ -1466,9 +1466,8 @@ export function applyOpenClawDesiredRouting(scope: RoutingApplyScope = {}): Appl
     };
   }
 
-  if (cfg.meta && typeof cfg.meta === "object") {
-    (cfg.meta as Record<string, unknown>).lastTouchedAt = nowIso();
-  }
+  // OpenClaw owns its metadata schema. Routing changes must not add or update
+  // version-dependent fields; ClawNex timestamps belong in the recovery journal.
   const recoveryRecords = new Map(sidecar.providers.map(record => [record.providerId, record]));
   for (const [key, record] of records) recoveryRecords.set(key, record);
   commitRoutingFile({ configPath, expectedRaw: expectedRaw!, updatedRaw: JSON.stringify(cfg, null, 2),
