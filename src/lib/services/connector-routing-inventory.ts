@@ -194,6 +194,7 @@ interface HermesProviderRecord extends RoutingIdentityOwnership {
   scope?: "custom-provider" | "primary-model";
   originalProvider?: string | null;
   createdProxyProvider?: boolean;
+  hadCustomProviders?: boolean;
   keyEnvKey?: 'key_env' | 'keyEnv';
   apiModeKey?: 'api_mode' | 'apiMode';
   primaryModelId?: string;
@@ -1268,7 +1269,7 @@ function ensureHermesProxyProvider(doc: YAML.Document.Parsed, target: string): b
   return true;
 }
 
-function removeHermesProxyProvider(doc: YAML.Document.Parsed): boolean {
+function removeHermesProxyProvider(doc: YAML.Document.Parsed, removeOwnedEmptyList = false): boolean {
   const seq = doc.get("custom_providers", true);
   if (!YAML.isSeq(seq)) return false;
   const index = seq.items.findIndex((item) => YAML.isMap(item) && getYamlString(item, "name") === HERMES_LITELLM_PROVIDER_NAME);
@@ -1292,6 +1293,9 @@ function removeHermesProxyProvider(doc: YAML.Document.Parsed): boolean {
     throw new Error('The Hermes proxy bridge was edited or remains referenced. Configuration and recovery ownership were preserved for review.');
   }
   seq.items.splice(index, 1);
+  // Remove only the container introduced by this operation. Pre-existing lists
+  // and older records without absence ownership must remain operator-owned.
+  if (removeOwnedEmptyList && seq.items.length === 0) doc.delete('custom_providers');
   return true;
 }
 
@@ -1712,6 +1716,7 @@ export function applyHermesDesiredRouting(scope: RoutingApplyScope = {}): ApplyH
         if (currentProvider && currentProvider !== HERMES_LITELLM_PROVIDER_NAME) {
           selectedProviders.add(currentProvider);
         }
+        const hadCustomProviders = parsed.doc.has('custom_providers');
         const createdProxyProvider = ensureHermesProxyProvider(parsed.doc, target);
         if (!primaryRecord) {
           records.set(primaryKey, {
@@ -1731,6 +1736,7 @@ export function applyHermesDesiredRouting(scope: RoutingApplyScope = {}): ApplyH
             scope: "primary-model",
             originalProvider: currentProvider,
             createdProxyProvider,
+            hadCustomProviders,
             primaryModelId,
             primaryModelKey,
             routedModelId: proxyModel.modelAlias,
@@ -1774,7 +1780,7 @@ export function applyHermesDesiredRouting(scope: RoutingApplyScope = {}): ApplyH
           removeHermesIdentity(hermesProviderMaps(parsed.doc).find(provider => provider.providerId === HERMES_LITELLM_PROVIDER_NAME)?.map, primaryRecord);
           records.delete(primaryKey);
           const hasOtherManagedProvider = [...records.values()].some((record) => normalizePathKey(record.configPath) === normalizePathKey(home.configPath));
-          if (primaryRecord.createdProxyProvider && !hasOtherManagedProvider) removeHermesProxyProvider(parsed.doc);
+          if (primaryRecord.createdProxyProvider && !hasOtherManagedProvider) removeHermesProxyProvider(parsed.doc, primaryRecord.hadCustomProviders === false);
           homeChanged = true;
           changed = true;
           restoredProviders.push("__primary_model__");
@@ -2001,7 +2007,7 @@ export function revertHermesRouting(scope: RoutingApplyScope = {}): RevertHermes
 
     const hasRemainingManagedProvider = remainingRecords.some((record) => normalizePathKey(record.configPath) === configPath);
     if (primaryRecord?.scope === "primary-model" && primaryRecord.createdProxyProvider && !hasRemainingManagedProvider) {
-      if (removeHermesProxyProvider(parsed.doc)) homeChanged = true;
+      if (removeHermesProxyProvider(parsed.doc, primaryRecord.hadCustomProviders === false)) homeChanged = true;
     }
 
     if (homeChanged) commitRoutingFile({ configPath, expectedRaw: parsed.raw, updatedRaw: parsed.doc.toString(),

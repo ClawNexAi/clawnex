@@ -1,6 +1,6 @@
 /**
  * Central OpenClaw path resolution.
- * Priority: OPENCLAW_HOME env var → ~/.openclaw → scan /home/*\/.openclaw → /root/.openclaw
+ * OPENCLAW_HOME is authoritative. Without it, discover the default installation.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,8 +11,15 @@ let cached: { home: string | null; configPath: string | null } | null = null;
 export function resolveOpenClawPaths(): { home: string | null; configPath: string | null } {
   if (cached) return cached;
 
+  // An explicit instance must never fall back to another user's installation.
+  if (process.env.OPENCLAW_HOME) {
+    const home = path.resolve(process.env.OPENCLAW_HOME);
+    const configPath = path.join(home, 'openclaw.json');
+    cached = fs.existsSync(configPath) ? { home, configPath } : { home: null, configPath: null };
+    return cached;
+  }
+
   const candidates: string[] = [];
-  if (process.env.OPENCLAW_HOME) candidates.push(process.env.OPENCLAW_HOME);
   candidates.push(path.join(os.homedir(), '.openclaw'));
   candidates.push(path.join(os.homedir(), '.config', 'openclaw'));
 
