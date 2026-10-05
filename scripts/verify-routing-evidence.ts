@@ -10,23 +10,23 @@ async function main() {
   const { verifyRouting, recordRoutingSnapshot, listUnresolvedRoutingEvents, recordRoutingOperation } = await import('../src/lib/services/routing-reconciliation');
   const item: ConnectorRoutingItem = { id: 'a', connector: 'hermes', sourceId: 'instance-a', itemType: 'model', providerId: 'upstream',
     modelId: 'shared-model', displayName: 'Shared model', baseUrl: 'http://127.0.0.1:4001/v1', capability: 'model-inventory',
-    currentRoute: 'routed', desiredRoute: 'routed', present: true, fingerprint: 'fixture', metadata: { proxyModelAlias: 'proxy/shared-model' },
+    currentRoute: 'routed', desiredRoute: 'routed', present: true, fingerprint: 'fixture', metadata: { proxyModelAlias: 'proxy/shared-model', identityHash: 'b'.repeat(64), identityIntact: true },
     firstSeenAt: '', lastSeenAt: '', lastChangedAt: null, updatedAt: '' };
   const secondItem: ConnectorRoutingItem = { ...item, id: 'b', modelId: 'second-model', displayName: 'Second model',
-    metadata: { proxyModelAlias: 'proxy/second-model' } };
+    metadata: { ...item.metadata, proxyModelAlias: 'proxy/second-model' } };
   const summary = { connector: 'hermes', sourceId: 'instance-a', items: [item, secondItem,
     { ...item, id: 'provider', itemType: 'provider', modelId: '' }] } as ConnectorRoutingSummary;
   try {
     const first = recordRoutingSnapshot('hermes', summary, 'apply');
     assert.equal(recordRoutingSnapshot('hermes', summary, 'refresh').snapshotId, first.snapshotId);
-    const operation = recordRoutingOperation({ connector: 'hermes', sourceId: 'instance-a', operation: 'apply', outcome: 'applied', detail: 'fixture' });
+    const operation = recordRoutingOperation({ connector: 'hermes', sourceId: 'instance-a', operation: 'apply', outcome: 'applied', detail: 'fixture', afterSnapshotId: first.snapshotId });
     run("UPDATE connector_routing_operations SET created_at = '2026-09-08T12:00:00.000Z' WHERE id = ?", [operation]);
     const since = '2026-09-08T12:00:00.000Z';
     const insert = (source: string, status = 200, blocked = 0, trusted = 1, timestamp = '2026-09-08T12:00:01.000Z', error: string | null = null, model = 'proxy/shared-model') => run(
       `INSERT INTO proxy_traffic (id, timestamp, direction, model, source, routing_connector, routing_source_id,
-        routing_identity_verified, proxy_request_id, status_code, blocked, error, total_tokens, shield_verdict)
-       VALUES (?, ?, 'outbound', ?, 'hermes', 'hermes', ?, ?, ?, ?, ?, ?, 10, 'ALLOW')`,
-      [randomUUID(), timestamp, model, source, trusted, randomUUID(), status, blocked, error]);
+        routing_identity_verified, proxy_request_id, status_code, blocked, error, total_tokens, shield_verdict, routing_identity_hash)
+       VALUES (?, ?, 'outbound', ?, 'hermes', 'hermes', ?, ?, ?, ?, ?, ?, 10, 'ALLOW', ?)`,
+      [randomUUID(), timestamp, model, source, trusted, randomUUID(), status, blocked, error, 'b'.repeat(64)]);
     insert('instance-b'); insert('instance-a', 500); insert('instance-a', 200, 1); insert('instance-a', 200, 0, 0);
     insert('instance-a', 200, 0, 1, '2026-09-08T11:59:59.000Z');
     insert('instance-a', 200, 0, 1, '2026-09-08T12:00:01.000Z', 'upstream failed');

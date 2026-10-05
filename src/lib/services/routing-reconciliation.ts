@@ -316,31 +316,61 @@ export function verifyRouting(summary: ConnectorRoutingSummary, options: { since
   const routedRouteCount = routes.filter(rows => rows.some(item => item.currentRoute === 'routed')).length;
   const directRouteCount = routes.filter(rows => rows.every(item => item.currentRoute === 'direct')).length;
   const routedModels = routed.filter(item => item.itemType === 'model' && Boolean(item.modelId));
+  const approval = queryOne<{ state_json: string | null }>(
+    `SELECT snapshots.state_json FROM connector_routing_operations AS operations
+     LEFT JOIN connector_routing_snapshots AS snapshots ON snapshots.id = operations.after_snapshot_id
+       AND snapshots.connector = operations.connector AND snapshots.source_id = operations.source_id
+     WHERE operations.connector = ? AND operations.source_id = ? AND operations.operation = 'apply'
+       AND operations.outcome IN ('applied', 'noop')
+     ORDER BY operations.created_at DESC, operations.rowid DESC LIMIT 1`,
+    [summary.connector, summary.sourceId],
+  );
+  const approvedStates = new Map(parseState(approval?.state_json).map(item => [item.key, stableRoutingFingerprint(item)]));
+  const approved = (item: ConnectorRoutingItem): boolean => {
+    const current = normalizeRoutingItem(item);
+    return approvedStates.get(current.key) === stableRoutingFingerprint(current);
+  };
+  const reviewRequired = routedModels.some(item => !approved(item));
+  const ownershipMissing = routedModels.some(item => typeof item.metadata.identityHash !== 'string' || item.metadata.identityIntact === false);
+  const nextVerificationAction = ownershipMissing
+    ? 'Current routing ownership or its signed identity is unavailable or changed. Review the retained recovery journal and configuration before attempting verification; additional traffic alone cannot prove this route.'
+    : reviewRequired
+      ? 'Configuration changed since approved Apply; review and Apply the current configuration before sending new verification traffic.'
+      : null;
   const evidenceModel = (item: ConnectorRoutingItem): string =>
     typeof item.metadata.proxyModelAlias === 'string' ? item.metadata.proxyModelAlias : item.modelId;
   const modelIds = [...new Set(routed.filter(item => item.metadata.identityIntact !== false).map(evidenceModel).filter(Boolean))];
-  const hashes = [...new Set(routed.map(item => item.metadata.identityHash).filter((hash): hash is string => typeof hash === 'string'))];
-  const identityClause = hashes.length ? `AND routing_identity_hash IN (${hashes.map(() => '?').join(',')})` : '';
+  const bindings = routed.flatMap(item => {
+    const model = evidenceModel(item), identity = item.metadata.identityHash;
+    return approved(item) && item.metadata.identityIntact !== false && model && typeof identity === 'string' ? [[model, identity] as const] : [];
+  });
+  // A model and a route identity are one evidence binding, not two independent
+  // allowlists: another provider on this instance cannot attest this model.
+  const identities = [...new Map(bindings.map(pair => [JSON.stringify(pair), pair])).values()];
+  const identityClause = identities.length ? `AND (model, routing_identity_hash) IN (${identities.map(() => '(?, ?)').join(',')})` : '';
+  const identityParams = identities.flat();
   let observedThroughClawNex = 0;
   let observedTokens = 0;
   let observedCostUsd: number | null = null;
   let costStatus: RoutingVerification["costStatus"] = "unavailable";
   let lastObservedAt: string | null = null;
-  const observedModels = new Set<string>();
-  if (modelIds.length > 0 && verificationSince) {
+  const observedBindings = new Set<string>();
+  const observed = (item: ConnectorRoutingItem) => approved(item) && item.metadata.identityIntact !== false &&
+    typeof item.metadata.identityHash === 'string' && observedBindings.has(JSON.stringify([evidenceModel(item), item.metadata.identityHash]));
+  if (modelIds.length > 0 && verificationSince && identities.length > 0) {
     const placeholders = modelIds.map(() => "?").join(",");
     const sinceClause = verificationSince ? "AND julianday(timestamp) >= julianday(?)" : "";
     const sinceParams = verificationSince ? [verificationSince] : [];
-    const observedRows = queryAll<{ model: string | null }>(
-      `SELECT DISTINCT model FROM proxy_traffic
+    const observedRows = queryAll<{ model: string; routing_identity_hash: string }>(
+      `SELECT DISTINCT model, routing_identity_hash FROM proxy_traffic
        WHERE routing_connector = ? AND routing_source_id = ? AND routing_identity_verified = 1
          AND proxy_request_id IS NOT NULL AND direction = 'outbound'
          AND status_code BETWEEN 200 AND 299 AND blocked = 0 AND (error IS NULL OR error = '')
          AND shield_verdict != 'BYPASSED' AND model IN (${placeholders})
          ${sinceClause} ${identityClause}`,
-      [summary.connector, summary.sourceId, ...modelIds, ...sinceParams, ...hashes],
+      [summary.connector, summary.sourceId, ...modelIds, ...sinceParams, ...identityParams],
     );
-    observedRows.forEach((row) => { if (row.model) observedModels.add(row.model); });
+    observedRows.forEach(row => observedBindings.add(JSON.stringify([row.model, row.routing_identity_hash])));
     const row = queryOne<{ count: number; tokens: number | null; cost: number | null; priced: number; last_observed_at: string | null }>(
       `SELECT COUNT(*) AS count,
          COALESCE(SUM(total_tokens), 0) AS tokens,
@@ -353,7 +383,7 @@ export function verifyRouting(summary: ConnectorRoutingSummary, options: { since
          AND status_code BETWEEN 200 AND 299 AND blocked = 0 AND (error IS NULL OR error = '')
          AND shield_verdict != 'BYPASSED' AND model IN (${placeholders})
          ${sinceClause} ${identityClause}`,
-      [summary.connector, summary.sourceId, ...modelIds, ...sinceParams, ...hashes],
+      [summary.connector, summary.sourceId, ...modelIds, ...sinceParams, ...identityParams],
     );
     observedThroughClawNex = Number(row?.count || 0);
     observedTokens = Number(row?.tokens || 0);
@@ -368,16 +398,19 @@ export function verifyRouting(summary: ConnectorRoutingSummary, options: { since
     return { connector: summary.connector, configured: configuredRouteCount, routed: 0, direct: directRouteCount, observedThroughClawNex: 0, observedTokens, observedCostUsd, costStatus, verificationSince, lastObservedAt, checkedAt, routingState: directRouteCount > 0 ? "intentionally-direct" : "selection-required", status: "not-routed", detail: "No writable routes currently point at ClawNex. Traffic may bypass real-time scanning." };
   }
   if (observedThroughClawNex === 0) {
-  return { connector: summary.connector, configured: configuredRouteCount, routed: routedRouteCount, direct: directRouteCount, observedThroughClawNex: 0, observedTokens, observedCostUsd, costStatus, verificationSince, lastObservedAt, checkedAt, routingState: "verification-pending", status: "pending-traffic", detail: `Configuration points ${routedRouteCount} route(s) at ClawNex, but no matching traffic was observed after the latest routing operation. Restart the connector if required, send a new test request, then verify again. Historical traffic is not counted as proof.` };
+  return { connector: summary.connector, configured: configuredRouteCount, routed: routedRouteCount, direct: directRouteCount, observedThroughClawNex: 0, observedTokens, observedCostUsd, costStatus, verificationSince, lastObservedAt, checkedAt, routingState: "verification-pending", status: "pending-traffic", detail: nextVerificationAction
+    || `Configuration points ${routedRouteCount} route(s) at ClawNex, but no matching traffic was observed after the latest routing operation. Restart the connector if required, send a new test request, then verify again. Historical traffic is not counted as proof.` };
   }
   // Promote only the routes for which matching traffic was actually observed.
   // Other routed rows remain pending and continue to require review. A single
   // observed model must never make a multi-model route look fully protected.
-  const unobservedRouted = routedModels.filter((item) => !observedModels.has(evidenceModel(item)));
+  const unobservedRouted = routedModels.filter(item => !observed(item));
   for (const event of listUnresolvedRoutingEvents(200)) {
     if (event.connector !== summary.connector || event.sourceId !== summary.sourceId || event.current?.effectiveRoute !== "routed") continue;
     const eventModel = event.current.proxyModelAlias || event.current.modelId;
-    if (!eventModel || !observedModels.has(eventModel)) continue;
+    const eventItems = routedModels.filter(item => item.providerId === event.current!.providerId && evidenceModel(item) === eventModel &&
+      (!event.current!.identityFingerprint || item.metadata.identityFingerprint === event.current!.identityFingerprint));
+    if (!eventModel || !eventItems.length || eventItems.some(item => !observed(item))) continue;
     run(
       `UPDATE connector_routing_events
       SET protection_state = 'protected-and-verified', action_required = 0, resolved_at = ?
@@ -400,7 +433,7 @@ export function verifyRouting(summary: ConnectorRoutingSummary, options: { since
       checkedAt,
       routingState: "verification-pending",
       status: "partial-traffic",
-      detail: `Observed ${observedModels.size} of ${routedModels.length} routed model(s) through ClawNex. ${unobservedRouted.length} routed model(s) still have no correlated traffic, so full protection is not verified. Send traffic for the remaining model(s) and verify again.`,
+      detail: `Observed ${routedModels.length - unobservedRouted.length} of ${routedModels.length} routed model(s) through ClawNex. ${unobservedRouted.length} routed model(s) still have no correlated traffic, so full protection is not verified. ${nextVerificationAction || 'Send traffic for the remaining model(s) and verify again.'}`,
     };
   }
   return { connector: summary.connector, configured: configuredRouteCount, routed: routedRouteCount, direct: directRouteCount, observedThroughClawNex, observedTokens, observedCostUsd, costStatus, verificationSince, lastObservedAt, checkedAt, routingState: "protected-and-verified", status: "verified", detail: `Verified all ${routedModels.length} routed model(s) across ${routedRouteCount} provider route(s) with ${observedThroughClawNex} matching ClawNex traffic event(s) after the latest routing operation (${observedTokens.toLocaleString()} tokens; cost ${observedCostUsd === null ? "unavailable" : `$${observedCostUsd.toFixed(4)}`}).` };

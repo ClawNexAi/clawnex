@@ -6,7 +6,7 @@ import { queryOne, run } from '../db';
 import { getRoutingModule } from './routing-modules';
 import { inspectLitellmRouting } from './openclaw-routing-wire';
 import { selectedRoutingPrerequisites, assertSelectedLiveDeployments } from './provider-routing-readiness';
-import { stableRoutingFingerprint, recordRoutingOperation } from './routing-reconciliation';
+import { stableRoutingFingerprint, recordRoutingOperation, recordRoutingSnapshot } from './routing-reconciliation';
 import { routingOwnershipFingerprint, syncConnectorRoutingInventory, withConnectorRoutingLock, type ConnectorId, type ConnectorRoutingSummary } from './connector-routing-inventory';
 
 export interface RoutingPlan {
@@ -107,15 +107,36 @@ async function executeLockedRoutingPlan(id: string, approved: boolean, actor: st
     if (prerequisites.length) throw new Error(prerequisites.join(' '));
     await assertSelectedLiveDeployments(summary);
     await assertNativeProtocolReadiness(summary);
+    // Readiness checks yield to other requests. A concurrent selection or
+    // configuration change cannot inherit the approval we checked before them.
+    if (Date.parse(plan.expiresAt) <= Date.now()) throw new Error('Review expired. Refresh and approve a new plan.');
+    const current = module.inspect(plan.sourceId);
+    if (state(current).fingerprint !== plan.fingerprint) throw new Error('Configuration or selections changed since review. Review the changes again.');
+    const currentPrerequisites = selectedRoutingPrerequisites(current);
+    if (currentPrerequisites.length) throw new Error(currentPrerequisites.join(' '));
   }
   const claimed = run("UPDATE routing_change_plans SET status = 'applying' WHERE id = ? AND status = 'prepared'", [id]);
   if (claimed.changes !== 1) throw new Error('This routing plan is already being applied.');
   try {
     const scope = { sourceId: plan.sourceId, expectedFiles: plan.files };
-    const result = plan.operation === 'apply' ? module.apply(scope) : module.restore(scope);
+    let result = plan.operation === 'apply' ? module.apply(scope) : module.restore(scope);
     const inventory = syncConnectorRoutingInventory(plan.operation);
+    if (plan.operation === 'restore' && result.ok) {
+      const remaining = [...new Set(inventory[plan.connector].items.filter(item =>
+        item.present && item.sourceId === plan.sourceId && item.currentRoute === 'routed' &&
+        (plan.providers.includes(item.providerId) || item.metadata.primaryModel === true || typeof item.metadata.identityHash === 'string'),
+      ).map(item => item.providerId))];
+      if (remaining.length) result = { ...result, ok: false, status: 'error',
+        detail: 'Direct restoration is incomplete. Some routes still point at ClawNex without restorable ownership. Recover the original recovery journal or review the preserved configuration; no original settings were guessed.',
+        skippedProviders: remaining.map(providerId => ({ providerId, reason: 'The route remains proxied; its original recovery ownership is unavailable.' })),
+      };
+    }
+    // The inventory also contains other instances. Approval must retain only
+    // this instance's immutable resulting configuration, not the first source.
+    const snapshot = recordRoutingSnapshot(plan.connector, { ...inventory[plan.connector], sourceId: plan.sourceId,
+      items: inventory[plan.connector].items.filter(item => item.sourceId === plan.sourceId) }, plan.operation);
     const operationId = recordRoutingOperation({ connector: plan.connector, operation: plan.operation === 'restore' ? 'revert' : 'apply',
-      sourceId: plan.sourceId, actor, outcome: result.status, detail: result.detail, afterSnapshotId: inventory.reconciliation.lastSnapshotIds[plan.connector] });
+      sourceId: plan.sourceId, actor, outcome: result.status, detail: result.detail, afterSnapshotId: snapshot.snapshotId });
     const response = { ...result, operationId, sourceId: plan.sourceId };
     run("UPDATE routing_change_plans SET status = 'completed', result_json = ? WHERE id = ?", [JSON.stringify(response), id]);
     return response;
