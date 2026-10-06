@@ -4,5 +4,5 @@
 # SECURITY: 1.84.10 is the verified patched 1.84.x line for the 2026 LiteLLM
 # proxy advisories tracked by Dependabot.
 
-litellm[proxy]==1.84.10
+litellm[proxy]==1.93.2
 httpx==0.28.1
